@@ -1,0 +1,10 @@
+# Local database (regenerated via install.php)
+api/tahfidzku.sqlite
+
+# Test scripts
+api_test/
+
+# OS / editor
+.DS_Store
+*.log
+.vscode/
