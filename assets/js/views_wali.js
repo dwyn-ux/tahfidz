@@ -32,8 +32,11 @@ const Wali = (() => {
     const h = Store.totalHafalanSantri(s.id);
     const bulan = Store.todayStr().slice(0, 7);
     const kehadiran = Store.kehadiranBulan(s.id, bulan);
-    const hadir = kehadiran.filter(k => k.status === 'Hadir').length;
-    const pct = kehadiran.length ? Math.round((hadir / kehadiran.length) * 100) : 0;
+    const hadirSubuh = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Subuh').length;
+    const hadirMaghrib = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Maghrib').length;
+    const hadirIsya = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Isya').length;
+    const totalHadir = hadirSubuh + hadirMaghrib + hadirIsya;
+    const pct = kehadiran.length ? Math.round((totalHadir / kehadiran.length) * 100) : 0;
     const lastCat = db.catatan.filter(c => c.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
     const ustadz = db.ustadz.find(u => u.halaqah === s.halaqah);
 
@@ -50,7 +53,10 @@ const Wali = (() => {
         <div class="clay-card">
           <div class="section-title">📊 Ringkasan</div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span>Total Hafalan</span><b>${h ? formatHafalan(h) : '-'}</b></div>
-          <div class="row" style="justify-content:space-between;padding:6px 0"><span>Kehadiran Bulan Ini</span><b>${hadir}/${kehadiran.length || 0} (${pct}%)</b></div>
+          <div class="row" style="justify-content:space-between;padding:6px 0"><span>Kehadiran Bulan Ini</span><b>${totalHadir}/${kehadiran.length || 0} (${pct}%)</b></div>
+          <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span>🌅 Subuh</span><b>${hadirSubuh}</b></div>
+          <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span>🌇 Maghrib</span><b>${hadirMaghrib}</b></div>
+          <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span>🌙 Isya</span><b>${hadirIsya}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span>Rata-rata Nilai</span><b>${Store.avgNilai(s.id) || '-'}</b></div>
         </div>
       </div>
@@ -125,7 +131,7 @@ const Wali = (() => {
       </div>`;
   }
 
-  /* ---------------- Absensi ---------------- */
+  /* ---------------- Absensi (multi-sesi) ---------------- */
   function absensi() {
     Shared.shell('wali', nav('wali_absensi'), '');
     const s = mySantri();
@@ -135,7 +141,7 @@ const Wali = (() => {
     const kehadiran = db.kehadiran.filter(k => k.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal));
     const counts = { Hadir: 0, Izin: 0, Sakit: 0, Alfa: 0 };
     kehadiran.forEach(k => counts[k.status]++);
-    const rows = kehadiran.slice(0, 30).map(k => `<tr><td>${UI.fmtDate(k.tanggal)}</td><td><span class="badge ${k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : 'danger'}">${k.status}</span></td></tr>`).join('');
+    const rows = kehadiran.slice(0, 30).map(k => `<tr><td>${UI.fmtDate(k.tanggal)}</td><td>${k.sesi ? '<span class="pill sm" style="font-size:11px;padding:2px 8px">' + k.sesi + '</span>' : ''}</td><td><span class="badge ${k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : 'danger'}">${k.status}</span></td></tr>`).join('');
     document.getElementById('view-content').innerHTML = `
       <div class="grid kpi">
         ${Shared.statCard('🟢', counts.Hadir, 'Hadir', '#22C55E')}
@@ -145,7 +151,7 @@ const Wali = (() => {
       </div>
       <div class="clay-card mt">
         <div class="section-title">📅 Riwayat Kehadiran</div>
-        <div class="table-wrap"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="2"><div class="empty">Belum ada.</div></td></tr>'}</tbody></table></div>
+        <div class="table-wrap"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Sesi</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="3"><div class="empty">Belum ada.</div></td></tr>'}</tbody></table></div>
       </div>`;
   }
 

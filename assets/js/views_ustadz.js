@@ -57,15 +57,16 @@ const Ustadz = (() => {
     const db = Store.get();
     const santri = mySantri();
     const t = Store.todayStr();
-    const hadir = db.kehadiran.filter(k => k.tanggal === t && santri.some(s => s.id === k.santriId) && k.status === 'Hadir').length;
-    const izin = db.kehadiran.filter(k => k.tanggal === t && santri.some(s => s.id === k.santriId) && k.status === 'Izin').length;
-    const belum = santri.length - (db.kehadiran.filter(k => k.tanggal === t && santri.some(s => s.id === k.santriId)).length);
+    const sesiStats = SESI.map(s => {
+      const h = db.kehadiran.filter(k => k.tanggal === t && k.sesi === s && santri.some(x => x.id === k.santriId) && k.status === 'Hadir').length;
+      const i = db.kehadiran.filter(k => k.tanggal === t && k.sesi === s && santri.some(x => x.id === k.santriId) && k.status === 'Izin').length;
+      const b = santri.length - (db.kehadiran.filter(k => k.tanggal === t && k.sesi === s && santri.some(x => x.id === k.santriId)).length);
+      return { s, h, i, b };
+    });
     document.getElementById('view-content').innerHTML = `
       <div class="grid kpi">
         ${Shared.statCard('🏫', santri.length, 'Santri Diampu', '#16A34A')}
-        ${Shared.statCard('✅', hadir, 'Hadir Hari Ini', '#22C55E')}
-        ${Shared.statCard('🟡', izin, 'Izin', '#FACC15')}
-        ${Shared.statCard('⚠️', Math.max(0, belum), 'Belum Input', '#EF4444')}
+        ${sesiStats.map(st => Shared.statCard(st.s === 'Subuh' ? '🌅' : st.s === 'Maghrib' ? '🌇' : '🌙', st.h + '/' + santri.length + ' Hadir', st.s, '#22C55E')).join('')}
       </div>
       <div class="grid cols-2 mt">
         <div class="clay-card">
@@ -86,7 +87,9 @@ const Ustadz = (() => {
     document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => App.navigate(b.dataset.go));
   }
 
-  /* ---------------- Absensi ---------------- */
+  /* ---------------- Absensi (multi-sesi) ---------------- */
+  const SESI = ['Subuh', 'Maghrib', 'Isya'];
+
   function absensi() {
     const c = ctx(); _scope = c.scope;
     const navItems = (c.role === 'admin') ? Admin.nav('ustadz_absensi') : nav('ustadz_absensi');
@@ -95,76 +98,88 @@ const Ustadz = (() => {
     const db = Store.get();
     const santri = mySantri();
     const t = Store.todayStr();
-    // existing
-    const existing = {};
-    db.kehadiran.filter(k => k.tanggal === t && santri.some(s => s.id === k.santriId)).forEach(k => existing[k.santriId] = k.status);
+    let sesiAktif = 'Subuh';
 
-    const rows = santri.map(s => {
-      const cur = existing[s.id] || 'Hadir';
-      return `<tr data-id="${s.id}">
-        <td><b>${UI.esc(s.nama)}</b></td>
-        <td>
-          <div class="row" style="gap:6px">
-            <button class="clay-btn sm ${cur === 'Hadir' ? 'primary' : 'ghost'}" data-st="Hadir">🟢 Hadir</button>
-            <button class="clay-btn sm ${cur === 'Izin' ? '' : 'ghost'}" data-st="Izin" style="${cur === 'Izin' ? 'background:#FACC15;color:#000' : ''}">🟡 Izin</button>
-            <button class="clay-btn sm ${cur === 'Sakit' ? 'secondary' : 'ghost'}" data-st="Sakit">🔵 Sakit</button>
-            <button class="clay-btn sm ${cur === 'Alfa' ? 'danger' : 'ghost'}" data-st="Alfa">🔴 Alfa</button>
+    function renderAbsensi() {
+      const existing = {};
+      db.kehadiran.filter(k => k.tanggal === t && k.sesi === sesiAktif && santri.some(s => s.id === k.santriId)).forEach(k => existing[k.santriId] = k.status);
+
+      const rows = santri.map(s => {
+        const cur = existing[s.id] || 'Hadir';
+        return `<tr data-id="${s.id}">
+          <td><b>${UI.esc(s.nama)}</b></td>
+          <td>
+            <div class="row" style="gap:6px">
+              <button class="clay-btn sm ${cur === 'Hadir' ? 'primary' : 'ghost'}" data-st="Hadir">🟢 Hadir</button>
+              <button class="clay-btn sm ${cur === 'Izin' ? '' : 'ghost'}" data-st="Izin" style="${cur === 'Izin' ? 'background:#FACC15;color:#000' : ''}">🟡 Izin</button>
+              <button class="clay-btn sm ${cur === 'Sakit' ? 'secondary' : 'ghost'}" data-st="Sakit">🔵 Sakit</button>
+              <button class="clay-btn sm ${cur === 'Alfa' ? 'danger' : 'ghost'}" data-st="Alfa">🔴 Alfa</button>
+            </div>
+          </td>
+          <td><span class="badge ${cur === 'Hadir' ? 'green' : cur === 'Izin' ? 'warn' : cur === 'Sakit' ? 'blue' : 'danger'}">${cur}</span></td>
+        </tr>`;
+      }).join('');
+
+      document.getElementById('view-content').innerHTML = `
+        <div class="clay-card">
+          <div class="row" style="justify-content:space-between">
+            <div class="section-title" style="margin:0">Absensi ${UI.fmtDate(t)}</div>
+            <button class="clay-btn primary" id="btn-save">💾 Simpan Absensi</button>
           </div>
-        </td>
-        <td><span class="badge ${cur === 'Hadir' ? 'green' : cur === 'Izin' ? 'warn' : cur === 'Sakit' ? 'blue' : 'danger'}">${cur}</span></td>
-      </tr>`;
-    }).join('');
+          <div class="row mb" style="margin-top:12px">
+            <span class="muted" style="font-size:13px">Sesi:</span>
+            ${SESI.map(s => `<button class="pill ${s === sesiAktif ? 'active' : ''}" data-sesi="${s}">${s === 'Subuh' ? '🌅' : s === 'Maghrib' ? '🌇' : '🌙'} ${s}</button>`).join('')}
+          </div>
+          <div class="table-wrap mt"><table class="clay-table">
+            <thead><tr><th>Santri</th><th>Status</th><th></th></tr></thead>
+            <tbody id="abs-body">${rows || `<tr><td colspan="3"><div class="empty">Tidak ada santri di halaqah Anda.</div></td></tr>`}</tbody>
+          </table></div>
+        </div>`;
 
-    document.getElementById('view-content').innerHTML = `
-      <div class="clay-card">
-        <div class="row" style="justify-content:space-between">
-          <div class="section-title" style="margin:0">Absensi ${UI.fmtDate(t)}</div>
-          <button class="clay-btn primary" id="btn-save">💾 Simpan Absensi</button>
-        </div>
-        <div class="table-wrap mt"><table class="clay-table">
-          <thead><tr><th>Santri</th><th>Status</th><th></th></tr></thead>
-          <tbody id="abs-body">${rows || `<tr><td colspan="3"><div class="empty">Tidak ada santri di halaqah Anda.</div></td></tr>`}</tbody>
-        </table></div>
-      </div>`;
-
-    const state = {};
-    santri.forEach(s => state[s.id] = existing[s.id] || 'Hadir');
-    document.querySelectorAll('#abs-body tr[data-id]').forEach(tr => {
-      const id = tr.dataset.id;
-      tr.querySelectorAll('button[data-st]').forEach(btn => {
-        btn.onclick = () => {
-          state[id] = btn.dataset.st;
-          tr.querySelectorAll('button[data-st]').forEach(b => {
-            b.className = 'clay-btn sm ghost';
-            if (b.dataset.st === 'Izin') b.style = '';
-          });
-          if (btn.dataset.st === 'Hadir') btn.className = 'clay-btn sm primary';
-          if (btn.dataset.st === 'Izin') { btn.className = 'clay-btn sm'; btn.style = 'background:#FACC15;color:#000'; }
-          if (btn.dataset.st === 'Sakit') btn.className = 'clay-btn sm secondary';
-          if (btn.dataset.st === 'Alfa') btn.className = 'clay-btn sm danger';
-          const badge = tr.querySelector('td:last-child span');
-          badge.className = 'badge ' + (btn.dataset.st === 'Hadir' ? 'green' : btn.dataset.st === 'Izin' ? 'warn' : btn.dataset.st === 'Sakit' ? 'blue' : 'danger');
-          badge.textContent = btn.dataset.st;
-        };
+      document.querySelectorAll('[data-sesi]').forEach(b => b.onclick = () => {
+        sesiAktif = b.dataset.sesi;
+        renderAbsensi();
       });
-    });
 
-    document.getElementById('btn-save').onclick = () => {
-      const db = Store.get();
-      const t = Store.todayStr();
-      // remove existing today for these santri
-      db.kehadiran = db.kehadiran.filter(k => !(k.tanggal === t && santri.some(s => s.id === k.santriId)));
-      Object.keys(state).forEach(sid => {
-        const sObj = Store.findSantri(sid);
-        const hObj = sObj ? Store.findHalaqahByName(sObj.halaqah) : null;
-        db.kehadiran.push({ id: Store.uid('k'), santriId: sid, halaqahId: hObj ? hObj.id : (myHalaqah() || ''), tanggal: t, status: state[sid] });
-        if (state[sid] !== 'Hadir') {
-          const s = Store.findSantri(sid);
-          if (s) { const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId); if (wUser) Store.addNotif(wUser.id, 'wali', s.nama + ' tidak hadir (' + state[sid] + ')'); }
-        }
+      const state = {};
+      santri.forEach(s => state[s.id] = existing[s.id] || 'Hadir');
+      document.querySelectorAll('#abs-body tr[data-id]').forEach(tr => {
+        const id = tr.dataset.id;
+        tr.querySelectorAll('button[data-st]').forEach(btn => {
+          btn.onclick = () => {
+            state[id] = btn.dataset.st;
+            tr.querySelectorAll('button[data-st]').forEach(b => {
+              b.className = 'clay-btn sm ghost';
+              if (b.dataset.st === 'Izin') b.style = '';
+            });
+            if (btn.dataset.st === 'Hadir') btn.className = 'clay-btn sm primary';
+            if (btn.dataset.st === 'Izin') { btn.className = 'clay-btn sm'; btn.style = 'background:#FACC15;color:#000'; }
+            if (btn.dataset.st === 'Sakit') btn.className = 'clay-btn sm secondary';
+            if (btn.dataset.st === 'Alfa') btn.className = 'clay-btn sm danger';
+            const badge = tr.querySelector('td:last-child span');
+            badge.className = 'badge ' + (btn.dataset.st === 'Hadir' ? 'green' : btn.dataset.st === 'Izin' ? 'warn' : btn.dataset.st === 'Sakit' ? 'blue' : 'danger');
+            badge.textContent = btn.dataset.st;
+          };
+        });
       });
-      Store.save(); Store.log('Input absensi'); UI.toast('Absensi tersimpan', 'success');
-    };
+
+      document.getElementById('btn-save').onclick = () => {
+        const db = Store.get();
+        const t = Store.todayStr();
+        db.kehadiran = db.kehadiran.filter(k => !(k.tanggal === t && k.sesi === sesiAktif && santri.some(s => s.id === k.santriId)));
+        Object.keys(state).forEach(sid => {
+          const sObj = Store.findSantri(sid);
+          const hObj = sObj ? Store.findHalaqahByName(sObj.halaqah) : null;
+          db.kehadiran.push({ id: Store.uid('k'), santriId: sid, halaqahId: hObj ? hObj.id : (myHalaqah() || ''), tanggal: t, sesi: sesiAktif, status: state[sid] });
+          if (state[sid] !== 'Hadir') {
+            const s = Store.findSantri(sid);
+            if (s) { const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId); if (wUser) Store.addNotif(wUser.id, 'wali', s.nama + ' ' + sesiAktif + ' (' + state[sid] + ')'); }
+          }
+        });
+        Store.save(); Store.log('Input absensi ' + sesiAktif); UI.toast('Absensi ' + sesiAktif + ' tersimpan', 'success');
+      };
+    }
+    renderAbsensi();
   }
 
   /* ---------------- Pembelajaran ---------------- */
