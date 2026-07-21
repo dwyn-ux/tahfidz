@@ -209,7 +209,7 @@ const Ustadz = (() => {
   /* ----- Tahsin ----- */
   function renderTahsin() {
     const db = Store.get();
-    const santri = mySantri();
+    const santri = mySantri().filter(s => s.level === 'Tahsin');
     const rows = santri.map(s => {
       const rec = db.tahsin.filter(t => t.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
       return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${rec ? 'Hal ' + rec.halAwal + '-' + rec.halAkhir : '<span class="muted">-</span>'}</td><td>${rec ? rec.nilai : '-'}</td><td><button class="clay-btn sm primary" data-input="${s.id}">+ Input</button></td></tr>`;
@@ -255,7 +255,7 @@ const Ustadz = (() => {
   /* ----- Ziyadah (Bacaan + Hafalan) ----- */
   function renderZiyadah() {
     const db = Store.get();
-    const santri = mySantri();
+    const santri = mySantri().filter(s => s.level === 'Ziyadah');
     const t = Store.todayStr();
     const rows = santri.map(s => {
       const last = Store.lastZiyadah(s.id);
@@ -375,7 +375,7 @@ const Ustadz = (() => {
   /* ----- Mutqin ----- */
   function renderMutqin() {
     const db = Store.get();
-    const santri = mySantri();
+    const santri = mySantri().filter(s => s.level === 'Mutqin');
     const rows = santri.map(s => {
       const rec = db.mutqin.filter(m => m.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
       return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${rec ? getSurah(rec.sAkhir).latin + ':' + rec.aAkhir : '<span class="muted">-</span>'}</td><td>${rec ? rec.totalHafalan + ' hlm' : '-'}</td><td><button class="clay-btn sm primary" data-input="${s.id}">+ Murajaah</button></td></tr>`;
