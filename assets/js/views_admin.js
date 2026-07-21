@@ -374,16 +374,14 @@ const Admin = (() => {
             if (user) {
               user.username = uname;
             }
-            Store.log('Edit ustadz'); 
           }
           else {
             const nid = Store.uid('u'); const nu = { id: nid, ...data };
             db.ustadz.push(nu);
             const pass = m.querySelector('#f-pass').value.trim() || '12345678';
             db.users.push({ id: Store.uid('usr'), username: uname, password: pass, role: 'ustadz', refId: nid });
-            Store.log('Tambah ustadz');
           }
-          Store.save(); c(); UI.toast('Tersimpan', 'success'); ustadz();
+          Store.save().then(() => { Store.log(id ? 'Edit ustadz' : 'Tambah ustadz'); }); c(); UI.toast('Tersimpan', 'success'); ustadz();
         } }
       ]
     });
