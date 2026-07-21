@@ -70,5 +70,9 @@ const App = (() => {
   return { start, navigate };
 })();
 
-// Boot
-window.addEventListener('DOMContentLoaded', () => App.start());
+// Init datalist & boot
+function initDatalist() {
+  const dl = document.getElementById('dl-surah');
+  if (dl) dl.innerHTML = SURAHS.map(s => `<option value="${s.n}">${s.n}. ${UI.esc(s.latin)} (${s.arab})</option>`).join('');
+}
+window.addEventListener('DOMContentLoaded', () => { initDatalist(); App.start(); });

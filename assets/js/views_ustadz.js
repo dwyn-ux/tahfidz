@@ -293,27 +293,27 @@ const Ustadz = (() => {
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
       ${UI.field('Tanggal', `<input class="clay-input" value="${Store.todayStr()}" disabled>`)}
       <div class="row">
-        <div style="flex:1">${UI.surahField('Awal Surat', 'b-sa', defSA)}</div>
+        <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="b-sa" list="dl-surah" type="text" value="${defSA}" autocomplete="off">`)}</div>
         <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="b-aa" type="number" min="1" value="${defAA}">`)}</div>
       </div>
       <div class="row">
-        <div style="flex:1">${UI.surahField('Akhir Surat', 'b-sk', defSA)}</div>
+        <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="b-sk" list="dl-surah" type="text" value="${defSA}" autocomplete="off">`)}</div>
         <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="b-ak" type="number" min="1" value="${defAA + 4}">`)}</div>
       </div>`;
-    const modal = UI.openModal({
+    UI.openModal({
       title: 'Setoran Bacaan Ziyadah', sub: 'Setelah bacaan disimpan, form hafalan akan terbuka',
       bodyHTML: body,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
         { label: 'Simpan Bacaan', cls: 'primary', onClick: (m, c) => {
           const db = Store.get();
-          db.ziyadahBacaan.push({ id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: UI.surahVal(m, 'b-sa'), aAwal: +m.querySelector('#b-aa').value, sAkhir: UI.surahVal(m, 'b-sk'), aAkhir: +m.querySelector('#b-ak').value });
+          const sA = parseInt(m.querySelector('#b-sa').value) || defSA;
+          const sK = parseInt(m.querySelector('#b-sk').value) || defSA;
+          db.ziyadahBacaan.push({ id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: +m.querySelector('#b-aa').value, sAkhir: sK, aAkhir: +m.querySelector('#b-ak').value });
           Store.save(); Store.log('Setor ziyadah bacaan ' + s.nama); c(); UI.toast('Setoran bacaan tersimpan', 'success'); renderZiyadah();
         } }
       ]
     });
-    UI.bindSurahPicker(modal.modal, 'b-sa');
-    UI.bindSurahPicker(modal.modal, 'b-sk');
   }
 
   function ziyadahHafalanForm(santriId) {
@@ -330,11 +330,11 @@ const Ustadz = (() => {
       ${UI.field('Tanggal', `<input class="clay-input" value="${t}" disabled>`)}
       <div class="clay-card pad-sm mb" style="background:var(--bg)"><b>📖 Bacaan hari ini:</b> ${bacaan ? getSurah(bacaan.sAwal).latin + ':' + bacaan.aAwal + ' — ' + getSurah(bacaan.sAkhir).latin + ':' + bacaan.aAkhir : '-'}</div>
       <div class="row">
-        <div style="flex:1">${UI.surahField('Awal Surat', 'h-sa', defSA)}</div>
+        <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="h-sa" list="dl-surah" type="text" value="${defSA}" autocomplete="off">`)}</div>
         <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="h-aa" type="number" min="1" value="${defAA}">`)}</div>
       </div>
       <div class="row">
-        <div style="flex:1">${UI.surahField('Akhir Surat', 'h-sk', defSK)}</div>
+        <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="h-sk" list="dl-surah" type="text" value="${defSK}" autocomplete="off">`)}</div>
         <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="h-ak" type="number" min="1" value="${defAK}">`)}</div>
       </div>
       <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg)"></div>
@@ -347,8 +347,8 @@ const Ustadz = (() => {
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
         { label: 'Simpan Hafalan', cls: 'primary', onClick: (m, c) => {
           const db = Store.get();
-          const sA = UI.surahVal(m, 'h-sa'), aA = +m.querySelector('#h-aa').value;
-          const sK = UI.surahVal(m, 'h-sk'), aK = +m.querySelector('#h-ak').value;
+          const sA = parseInt(m.querySelector('#h-sa').value) || defSA, aA = +m.querySelector('#h-aa').value;
+          const sK = parseInt(m.querySelector('#h-sk').value) || defSK, aK = +m.querySelector('#h-ak').value;
           const h = computeHafalan(sA, aA, sK, aK);
           if (!h) { UI.toast('Range ayat tidak valid', 'error'); return; }
           db.ziyadahHafalan.push({ id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: aA, sAkhir: sK, aAkhir: aK, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim() });
@@ -359,16 +359,16 @@ const Ustadz = (() => {
       ]
     });
     const calc = () => {
-      const sA = UI.surahVal(modal.modal, 'h-sa'), aA = +modal.modal.querySelector('#h-aa').value;
-      const sK = UI.surahVal(modal.modal, 'h-sk'), aK = +modal.modal.querySelector('#h-ak').value;
+      const sA = parseInt(modal.modal.querySelector('#h-sa').value) || 0;
+      const aA = +modal.modal.querySelector('#h-aa').value;
+      const sK = parseInt(modal.modal.querySelector('#h-sk').value) || 0;
+      const aK = +modal.modal.querySelector('#h-ak').value;
       const h = computeHafalan(sA, aA, sK, aK);
       modal.modal.querySelector('#calc-preview').innerHTML = h
         ? `<b>📐 Auto Hitung:</b> ${h.ayahs} ayat · ${h.pages} halaman · Juz ${h.juzStart}${h.juzRange > 1 ? '-' + h.juzEnd : ''}`
         : '<span class="muted">Range belum valid.</span>';
     };
-    UI.bindSurahPicker(modal.modal, 'h-sa', calc);
-    UI.bindSurahPicker(modal.modal, 'h-sk', calc);
-    modal.modal.querySelectorAll('#h-aa,#h-ak').forEach(i => i.onchange = i.oninput = calc);
+    modal.modal.querySelectorAll('#h-sa,#h-aa,#h-sk,#h-ak').forEach(i => i.oninput = calc);
     calc();
   }
 
@@ -396,31 +396,31 @@ const Ustadz = (() => {
     const body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
       <div class="row">
-        <div style="flex:1">${UI.surahField('Awal Surat', 'm-sa', 2)}</div>
+        <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="m-sa" list="dl-surah" type="text" value="2" autocomplete="off">`)}</div>
         <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="m-aa" type="number" min="1" value="1">`)}</div>
       </div>
       <div class="row">
-        <div style="flex:1">${UI.surahField('Akhir Surat', 'm-sk', 2)}</div>
+        <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="m-sk" list="dl-surah" type="text" value="2" autocomplete="off">`)}</div>
         <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="m-ak" type="number" min="1" value="5">`)}</div>
       </div>
       ${UI.field('Total Hafalan Mutqin (manual, halaman)', `<input class="clay-input" id="m-total" type="number" min="0" value="0">`)}
       ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80">`)}
       ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat"></textarea>`)}`;
-    const modal = UI.openModal({
+    UI.openModal({
       title: 'Murajaah Mutqin', bodyHTML: body,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
         { label: 'Simpan', cls: 'primary', onClick: (m, c) => {
           const db = Store.get();
-          db.mutqin.push({ id: Store.uid('m'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: UI.surahVal(m, 'm-sa'), aAwal: +m.querySelector('#m-aa').value, sAkhir: UI.surahVal(m, 'm-sk'), aAkhir: +m.querySelector('#m-ak').value, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(), totalHafalan: +m.querySelector('#m-total').value });
+          const sA = parseInt(m.querySelector('#m-sa').value) || 2;
+          const sK = parseInt(m.querySelector('#m-sk').value) || 2;
+          db.mutqin.push({ id: Store.uid('m'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: +m.querySelector('#m-aa').value, sAkhir: sK, aAkhir: +m.querySelector('#m-ak').value, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(), totalHafalan: +m.querySelector('#m-total').value });
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (wUser) Store.addNotif(wUser.id, 'wali', 'Murajaah Mutqin: ' + s.nama);
           Store.save(); Store.log('Input mutqin ' + s.nama); c(); UI.toast('Tersimpan', 'success'); renderMutqin();
         } }
       ]
     });
-    UI.bindSurahPicker(modal.modal, 'm-sa');
-    UI.bindSurahPicker(modal.modal, 'm-sk');
   }
 
   /* ---------------- Riwayat ---------------- */

@@ -73,64 +73,10 @@ const UI = (() => {
     return SURAHS.map(s => `<option value="${s.n}" ${Number(s.n) === Number(selected) ? 'selected' : ''}>${s.n}. ${esc(s.latin)}</option>`).join('');
   }
 
-  /* Searchable surah picker field — replaces <select> for 114 surahs */
-  function surahField(label, fieldId, selected) {
-    const s = SURAHS.find(x => x.n === Number(selected));
-    return `<label class="field-label">${esc(label)}</label>
-      <div class="surah-picker" id="${fieldId}-picker">
-        <input class="clay-input surah-input" id="${fieldId}" type="text" autocomplete="off"
-          value="${s ? s.n + '. ' + esc(s.latin) : ''}" data-val="${selected || ''}"
-          placeholder="Ketik nama/No surat…" />
-        <div class="surah-drop" id="${fieldId}-drop" style="display:none"></div>
-      </div>`;
-  }
+  function surahDatalistId() { return 'dl-surah'; }
 
-  /* Bind search behavior to a surah picker input */
-  function bindSurahPicker(modal, fieldId, onChange) {
-    const input = modal.querySelector('#' + fieldId);
-    const drop = modal.querySelector('#' + fieldId + '-drop');
-    if (!input) return;
-    let timer = null;
-    input.oninput = () => {
-      clearTimeout(timer);
-      const q = input.value.trim().toLowerCase();
-      if (q.length < 1) { drop.style.display = 'none'; if (onChange) onChange(''); return; }
-      timer = setTimeout(() => {
-        const qn = parseInt(q);
-        const match = SURAHS.filter(s =>
-          s.latin.toLowerCase().includes(q) || s.arab.toLowerCase().includes(q) || s.n === qn
-        ).slice(0, 10);
-        if (!match.length) { drop.innerHTML = '<div class="search-empty">Tidak ditemukan</div>'; drop.style.display = 'block'; return; }
-        drop.innerHTML = match.map(s =>
-          `<div class="search-item" data-val="${s.n}">${s.n}. <b>${esc(s.latin)}</b> <span class="muted">${s.arab}</span></div>`
-        ).join('');
-        drop.style.display = 'block';
-        drop.querySelectorAll('.search-item').forEach(el => {
-          el.onclick = () => {
-            const v = el.dataset.val;
-            const s = SURAHS.find(x => x.n === Number(v));
-            input.value = s ? s.n + '. ' + s.latin : v;
-            input.dataset.val = v;
-            drop.style.display = 'none';
-            if (onChange) onChange(v);
-          };
-        });
-      }, 100);
-    };
-    input.onblur = () => setTimeout(() => { drop.style.display = 'none'; }, 200);
-    input.onfocus = () => { if (input.value.trim()) input.oninput(); };
-    input.dataset.val = input.dataset.val || '';
-  }
-
-  /* Get surah number from a surah picker input */
-  function surahVal(modal, fieldId) {
-    const input = modal.querySelector('#' + fieldId);
-    if (!input) return 0;
-    const v = input.dataset.val;
-    if (v) return Number(v);
-    const q = input.value.trim().toLowerCase();
-    const s = SURAHS.find(x => x.latin.toLowerCase().includes(q) || x.arab.toLowerCase().includes(q));
-    return s ? s.n : 0;
+  function surahDatalistHTML() {
+    return `<datalist id="dl-surah">${SURAHS.map(s => `<option value="${s.n}. ${esc(s.latin)}">${s.arab}</option>`).join('')}</datalist>`;
   }
 
   /* Search bar — real-time, cross-entity */
