@@ -296,17 +296,22 @@ const Admin = (() => {
     Shared.shell('admin', nav('admin_ustadz'), '');
     Shared.setHeader('Manajemen Ustadz', 'Kelola pengajar');
     const db = Store.get();
-    const rows = db.ustadz.map(u => `<tr>
-      <td><b>${UI.esc(u.nama)}</b></td>
-      <td>${UI.esc(u.noHp)}</td>
-      <td>${UI.esc(u.email)}</td>
-      <td>${UI.esc(u.halaqah)}</td>
-      <td><span class="badge ${u.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(u.status)}</span></td>
-      <td>
-        <button class="clay-btn sm" data-edit="${u.id}">✏️</button>
-        <button class="clay-btn sm danger" data-del="${u.id}">🗑</button>
-      </td>
-    </tr>`).join('');
+    const rows = db.ustadz.map(u => {
+      const acc = db.users.find(usr => usr.role === 'ustadz' && usr.refId === u.id);
+      const uname = acc ? acc.username : '-';
+      return `<tr>
+        <td><b>${UI.esc(u.nama)}</b></td>
+        <td><code>${UI.esc(uname)}</code></td>
+        <td>${UI.esc(u.noHp)}</td>
+        <td>${UI.esc(u.email)}</td>
+        <td>${UI.esc(u.halaqah)}</td>
+        <td><span class="badge ${u.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(u.status)}</span></td>
+        <td>
+          <button class="clay-btn sm" data-edit="${u.id}">✏️</button>
+          <button class="clay-btn sm danger" data-del="${u.id}">🗑</button>
+        </td>
+      </tr>`;
+    }).join('');
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card">
         <div class="row" style="justify-content:space-between">
@@ -317,8 +322,8 @@ const Admin = (() => {
           </div>
         </div>
         <div class="table-wrap mt"><table class="clay-table">
-          <thead><tr><th>Nama</th><th>No HP</th><th>Email</th><th>Halaqah</th><th>Status</th><th>Aksi</th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="6"><div class="empty">Belum ada ustadz.</div></td></tr>`}</tbody>
+          <thead><tr><th>Nama</th><th>Username Login</th><th>No HP</th><th>Email</th><th>Halaqah</th><th>Status</th><th>Aksi</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="7"><div class="empty">Belum ada ustadz.</div></td></tr>`}</tbody>
         </table></div>
       </div>`;
     document.getElementById('btn-add').onclick = () => ustadzForm();

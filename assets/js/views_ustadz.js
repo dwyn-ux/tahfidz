@@ -291,12 +291,12 @@ const Ustadz = (() => {
       </div>
       <div class="section-title mt">B. Setoran Hafalan</div>
       <div class="row">
-        <div style="flex:1">${UI.field('Awal Surat', `<select class="clay-select" id="h-sa">${UI.surahOptions(defSA)}</select>`)}</div>
-        <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="h-aa" type="number" min="1" value="${defAA}">`)}</div>
+        <div style="flex:1">${UI.field('Awal Surat', `<select class="clay-select" id="h-sa" disabled>${UI.surahOptions(defSA)}</select>`)}</div>
+        <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="h-aa" type="number" min="1" value="${defAA}" disabled>`)}</div>
       </div>
       <div class="row">
-        <div style="flex:1">${UI.field('Akhir Surat', `<select class="clay-select" id="h-sk">${UI.surahOptions(defSA)}</select>`)}</div>
-        <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="h-ak" type="number" min="1" value="${defAA + 4}">`)}</div>
+        <div style="flex:1">${UI.field('Akhir Surat', `<select class="clay-select" id="h-sk" disabled>${UI.surahOptions(defSA)}</select>`)}</div>
+        <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="h-ak" type="number" min="1" value="${defAA + 4}" disabled>`)}</div>
       </div>
       <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg)"></div>
       ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80" disabled>`)}
@@ -334,7 +334,7 @@ const Ustadz = (() => {
       ]
     });
     
-    // Enable hafalan when bacaan is changed
+    // Enable hafalan when bacaan is filled
     const checkBacaan = () => {
         const bsa = modal.modal.querySelector('#b-sa').value;
         const bsk = modal.modal.querySelector('#b-sk').value;
@@ -343,7 +343,20 @@ const Ustadz = (() => {
         const hasBacaan = (bsa && bsk && baa && bak);
         
         modal.modal.querySelector('#f-nilai').disabled = !hasBacaan;
-        modal.modal.querySelectorAll('#h-sa, #h-aa, #h-sk, #h-ak').forEach(el => el.disabled = !hasBacaan);
+        const hEls = modal.modal.querySelectorAll('#h-sa, #h-aa, #h-sk, #h-ak');
+        hEls.forEach(el => {
+          el.disabled = !hasBacaan;
+        });
+
+        // Auto-fill hafalan sama dengan bacaan ketika baru terbuka
+        if (hasBacaan && hEls[0].disabled === false && !hEls[0].dataset.filled) {
+           modal.modal.querySelector('#h-sa').value = bsa;
+           modal.modal.querySelector('#h-sk').value = bsk;
+           modal.modal.querySelector('#h-aa').value = baa;
+           modal.modal.querySelector('#h-ak').value = bak;
+           hEls[0].dataset.filled = 'true';
+           calc();
+        }
     };
     modal.modal.querySelectorAll('#b-sa, #b-sk, #b-aa, #b-ak').forEach(el => el.addEventListener('change', checkBacaan));
     modal.modal.querySelectorAll('#b-sa, #b-sk, #b-aa, #b-ak').forEach(el => el.addEventListener('input', checkBacaan));
