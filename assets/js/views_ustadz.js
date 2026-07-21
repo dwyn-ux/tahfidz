@@ -305,9 +305,13 @@ const Ustadz = (() => {
 
   function ziyadahBacaanForm(santriId) {
     const s = Store.findSantri(santriId);
+    const db = Store.get();
     const last = Store.lastZiyadah(santriId);
-    const defSA = last ? last.sAkhir : 2;
-    const defAA = last ? last.aAkhir + 1 : 1;
+    let defSA = 2, defAA = 1;
+    if (last) {
+      const n = nextHafalanPosition(last.sAkhir, last.aAkhir, db.settings.juzOrder);
+      defSA = n.surah; defAA = n.ayah;
+    }
     const body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
       ${UI.field('Tanggal', `<input class="clay-input" value="${Store.todayStr()}" disabled>`)}
@@ -341,10 +345,16 @@ const Ustadz = (() => {
     const db = Store.get();
     const t = Store.todayStr();
     const bacaan = db.ziyadahBacaan.filter(z => z.santriId === santriId && z.tanggal === t).sort((a, b) => (b.id > a.id ? 1 : -1))[0];
-    const defSA = bacaan ? bacaan.sAwal : 2;
-    const defAA = bacaan ? bacaan.aAwal : 1;
-    const defSK = bacaan ? bacaan.sAkhir : 2;
-    const defAK = bacaan ? bacaan.aAkhir : 5;
+    let defSA = 2, defAA = 1, defSK = 2, defAK = 5;
+    if (bacaan) {
+      defSA = bacaan.sAwal; defAA = bacaan.aAwal; defSK = bacaan.sAkhir; defAK = bacaan.aAkhir;
+    } else {
+      const last = Store.lastZiyadah(santriId);
+      if (last) {
+        const n = nextHafalanPosition(last.sAkhir, last.aAkhir, db.settings.juzOrder);
+        defSA = n.surah; defAA = n.ayah;
+      }
+    }
     const body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
       ${UI.field('Tanggal', `<input class="clay-input" value="${t}" disabled>`)}

@@ -19,7 +19,8 @@ const Store = (() => {
         tahunAjaran: '2025/2026', semester: 'Ganjil',
         standarPenilaian: 'A (90-100), B (80-89), C (70-79), D (<70)',
         jamBelajar: '07:00 - 09:00', tema: 'Claymorphism',
-        defaultPasswordFormat: '12345678', logo: '', setoranMulti: false
+        defaultPasswordFormat: '12345678', logo: '', setoranMulti: false,
+        juzOrder: [30,29,28,27,26,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]
       },
       users: [], santri: [], wali: [], ustadz: [], halaqah: [],
       kelas: ['TK Al-Qur\'an', 'SD', 'SMP', 'SMA'],

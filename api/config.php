@@ -190,6 +190,7 @@ function defaultSettings(): array {
         'defaultPasswordFormat' => '12345678',
         'logo' => '',
         'setoranMulti' => false,
+        'juzOrder' => [30,29,28,27,26,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
         'kelas' => ['TK Al-Qur\'an', 'SD', 'SMP', 'SMA'],
         'levelTahfidz' => ['Tahsin', 'Ziyadah', 'Mutqin'],
         'tahunAjaranList' => ['2024/2025', '2025/2026', '2026/2027'],

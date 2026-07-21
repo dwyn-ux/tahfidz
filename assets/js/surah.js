@@ -155,6 +155,57 @@ function pageToJuz(page) {
   return juz;
 }
 
+/* Surah pertama dalam sebuah juz */
+function firstSurahOfJuz(juz) {
+  const page = JUZ_PAGES[juz - 1];
+  for (let i = SURAHS.length - 1; i >= 0; i--) {
+    if (SURAHS[i].page <= page) return SURAHS[i].n;
+  }
+  return 1;
+}
+
+/* Surah terakhir dalam sebuah juz */
+function lastSurahOfJuz(juz) {
+  const nextPage = juz < 30 ? JUZ_PAGES[juz] : TOTAL_PAGES + 1;
+  for (let i = 0; i < SURAHS.length; i++) {
+    if (SURAHS[i].page >= nextPage) return SURAHS[i - 1].n;
+  }
+  return 114;
+}
+
+/* Default urutan juz hafalan: 30 → 29 → 28 → 27 → 26 → 1 → 2 → 3 ... */
+const DEFAULT_JUZ_ORDER = [30,29,28,27,26,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25];
+
+function nextJuzInOrder(currentJuz, order) {
+  const o = order || DEFAULT_JUZ_ORDER;
+  const idx = o.indexOf(currentJuz);
+  if (idx < 0 || idx >= o.length - 1) return null;
+  return o[idx + 1];
+}
+
+/* Cari posisi auto-fill selanjutnya berdasarkan urutan juz */
+function nextHafalanPosition(lastSurah, lastAyah, juzOrder) {
+  const s = getSurah(lastSurah);
+  if (!s) return { surah: 78, ayah: 1 }; // fallback ke juz 30
+  const lastPage = ayahToPage(lastSurah, lastAyah);
+  const currentJuz = pageToJuz(lastPage);
+  const lastSurahOfCurrentJuz = lastSurahOfJuz(currentJuz);
+
+  // masih di tengah surah
+  if (lastAyah < s.ayahs) return { surah: lastSurah, ayah: lastAyah + 1 };
+
+  // di akhir surah, cek apakah ini surah terakhir di juz ini
+  if (lastSurah < lastSurahOfCurrentJuz) {
+    // lanjut surah berikutnya (nomor urut)
+    return { surah: lastSurah + 1, ayah: 1 };
+  }
+
+  // di ujung juz → pindah ke juz berikutnya sesuai urutan
+  const next = nextJuzInOrder(currentJuz, juzOrder);
+  if (!next) return { surah: lastSurah, ayah: lastAyah }; // gak ada lanjutan
+  return { surah: firstSurahOfJuz(next), ayah: 1 };
+}
+
 /* Hitung total hafalan dari range surat:ayat -> surat:ayat
    Mengembalikan { ayahs, pages, juzStart, juzEnd, juzRange } */
 function computeHafalan(startSurah, startAyah, endSurah, endAyah) {
