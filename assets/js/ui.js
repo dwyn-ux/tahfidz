@@ -73,5 +73,50 @@ const UI = (() => {
     return SURAHS.map(s => `<option value="${s.n}" ${Number(s.n) === Number(selected) ? 'selected' : ''}>${s.n}. ${esc(s.latin)}</option>`).join('');
   }
 
-  return { el, esc, fmtDate, fmtDateTime, toast, openModal, confirmDialog, field, optionsFromList, surahOptions };
+  /* Search bar — real-time, cross-entity */
+  let searchTimer = null;
+
+  function renderSearch() {
+    const wrap = document.getElementById('search-wrap');
+    if (!wrap) return;
+    const session = Store.getSession();
+    if (!session) { wrap.innerHTML = ''; return; }
+    wrap.innerHTML = `
+      <div class="search-box" id="search-box">
+        <input class="search-input" id="search-input" type="text" placeholder="🔍 Cari santri/ustadz/wali..." autocomplete="off" />
+        <div class="search-drop" id="search-drop" style="display:none"></div>
+      </div>`;
+    const input = document.getElementById('search-input');
+    const drop = document.getElementById('search-drop');
+    input.oninput = () => {
+      clearTimeout(searchTimer);
+      const v = input.value.trim();
+      if (v.length < 1) { drop.style.display = 'none'; return; }
+      searchTimer = setTimeout(() => {
+        const r = Store.search(v);
+        let html = '';
+        const total = r.santri.length + r.ustadz.length + r.wali.length + r.halaqah.length;
+        if (!total) { html = '<div class="search-empty">Tidak ditemukan</div>'; }
+        else {
+          if (r.santri.length) html += r.santri.map(x => `<div class="search-item" data-type="santri" data-id="${esc(x.id)}">🧒 Santri: <b>${esc(x.nama)}</b> <span class="muted">${esc(x.nis)}</span></div>`).join('');
+          if (r.ustadz.length) html += r.ustadz.map(x => `<div class="search-item" data-type="ustadz" data-id="${esc(x.id)}">🧑‍🏫 Ustadz: <b>${esc(x.nama)}</b></div>`).join('');
+          if (r.wali.length) html += r.wali.map(x => `<div class="search-item" data-type="wali" data-id="${esc(x.id)}">👤 Wali: <b>${esc(x.nama)}</b></div>`).join('');
+          if (r.halaqah.length) html += r.halaqah.map(x => `<div class="search-item" data-type="halaqah" data-id="${esc(x.id)}">🏫 Halaqah: <b>${esc(x.nama)}</b></div>`).join('');
+        }
+        drop.innerHTML = html; drop.style.display = 'block';
+        drop.querySelectorAll('.search-item').forEach(el => el.onclick = () => {
+          const type = el.dataset.type;
+          const role = (session || {}).role || '';
+          const views = { admin: { santri: 'admin_santri', ustadz: 'admin_ustadz', halaqah: 'admin_halaqah' }, ustadz: { santri: 'ustadz_riwayat' } };
+          const target = (views[role] && views[role][type]) || null;
+          if (target) App.navigate(target);
+          input.value = ''; drop.style.display = 'none';
+        });
+      }, 150);
+    };
+    input.onblur = () => setTimeout(() => { drop.style.display = 'none'; }, 200);
+    input.onfocus = () => { if (input.value.trim()) drop.style.display = 'block'; };
+  }
+
+  return { el, esc, fmtDate, fmtDateTime, toast, openModal, confirmDialog, field, optionsFromList, surahOptions, renderSearch };
 })();

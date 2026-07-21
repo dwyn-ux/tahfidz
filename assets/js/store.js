@@ -126,6 +126,18 @@ const Store = (() => {
   function findUstadzByName(name) { return db.ustadz.find(u => u.nama === name); }
   function findHalaqahByName(name) { return db.halaqah.find(h => h.nama === name); }
 
+  function search(q) {
+    const s = q.toLowerCase().trim();
+    if (!s || s.length < 1) return { santri: [], wali: [], ustadz: [], halaqah: [], users: [] };
+    return {
+      santri: db.santri.filter(x => (x.nama + ' ' + x.nis).toLowerCase().includes(s)),
+      wali: db.wali.filter(x => x.nama.toLowerCase().includes(s)),
+      ustadz: db.ustadz.filter(x => x.nama.toLowerCase().includes(s)),
+      halaqah: db.halaqah.filter(x => x.nama.toLowerCase().includes(s)),
+      users: db.users.filter(x => x.username.toLowerCase().includes(s))
+    };
+  }
+
   function lastZiyadah(santriId) {
     const list = db.ziyadahHafalan.filter(z => z.santriId === santriId)
       .sort((a, b) => b.tanggal.localeCompare(a.tanggal));
@@ -212,7 +224,7 @@ const Store = (() => {
   return {
     load, save, get, reset, uid, log, nowISO, todayStr,
     setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout,
-    recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahByName,
+    recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahByName, search,
     lastZiyadah, totalHafalanSantri, avgNilai, kehadiranBulan, addNotif, notifFor, checkSetoranTerlewat
   };
 })();
