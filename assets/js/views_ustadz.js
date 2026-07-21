@@ -299,7 +299,7 @@ const Ustadz = (() => {
         <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="h-ak" type="number" min="1" value="${defAA + 4}">`)}</div>
       </div>
       <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg)"></div>
-      ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80">`)}
+      ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80" disabled>`)}
       ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat"></textarea>`)}`;
     const modal = UI.openModal({
       title: 'Setoran Ziyadah', sub: 'Auto-fill & auto-hitung hafalan aktif',
@@ -311,18 +311,44 @@ const Ustadz = (() => {
           const session = Store.getSession();
           const sA = +m.querySelector('#h-sa').value, aA = +m.querySelector('#h-aa').value;
           const sK = +m.querySelector('#h-sk').value, aK = +m.querySelector('#h-ak').value;
-          const h = computeHafalan(sA, aA, sK, aK);
-          if (!h) { UI.toast('Range ayat tidak valid', 'error'); return; }
+          
           // simpan bacaan
           db.ziyadahBacaan.push({ id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: +m.querySelector('#b-sa').value, aAwal: +m.querySelector('#b-aa').value, sAkhir: +m.querySelector('#b-sk').value, aAkhir: +m.querySelector('#b-ak').value });
-          // simpan hafalan
-          db.ziyadahHafalan.push({ id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: aA, sAkhir: sK, aAkhir: aK, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim() });
-          const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
-          if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
-          Store.save(); Store.log('Setor ziyadah ' + s.nama); c(); UI.toast('Tersimpan · ' + formatHafalan(h), 'success'); renderZiyadah();
+          
+          let logMsg = 'Setor ziyadah bacaan ' + s.nama;
+          let toastMsg = 'Setoran bacaan tersimpan';
+          
+          if (!m.querySelector('#f-nilai').disabled) {
+            const h = computeHafalan(sA, aA, sK, aK);
+            if (!h) { UI.toast('Range ayat hafalan tidak valid', 'error'); return; }
+            // simpan hafalan
+            db.ziyadahHafalan.push({ id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: aA, sAkhir: sK, aAkhir: aK, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim() });
+            logMsg = 'Setor ziyadah hafalan & bacaan ' + s.nama;
+            toastMsg = 'Tersimpan · ' + formatHafalan(h);
+            const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
+            if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
+          }
+          
+          Store.save(); Store.log(logMsg); c(); UI.toast(toastMsg, 'success'); renderZiyadah();
         } }
       ]
     });
+    
+    // Enable hafalan when bacaan is changed
+    const checkBacaan = () => {
+        const bsa = modal.modal.querySelector('#b-sa').value;
+        const bsk = modal.modal.querySelector('#b-sk').value;
+        const baa = modal.modal.querySelector('#b-aa').value;
+        const bak = modal.modal.querySelector('#b-ak').value;
+        const hasBacaan = (bsa && bsk && baa && bak);
+        
+        modal.modal.querySelector('#f-nilai').disabled = !hasBacaan;
+        modal.modal.querySelectorAll('#h-sa, #h-aa, #h-sk, #h-ak').forEach(el => el.disabled = !hasBacaan);
+    };
+    modal.modal.querySelectorAll('#b-sa, #b-sk, #b-aa, #b-ak').forEach(el => el.addEventListener('change', checkBacaan));
+    modal.modal.querySelectorAll('#b-sa, #b-sk, #b-aa, #b-ak').forEach(el => el.addEventListener('input', checkBacaan));
+    checkBacaan();
+
     // live calc
     const calc = () => {
       const sA = +modal.modal.querySelector('#h-sa').value, aA = +modal.modal.querySelector('#h-aa').value;
