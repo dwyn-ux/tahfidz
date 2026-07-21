@@ -163,7 +163,7 @@ const Ustadz = (() => {
         });
       });
 
-      document.getElementById('btn-save').onclick = () => {
+      document.getElementById('btn-save').onclick = async () => {
         const db = Store.get();
         const t = Store.todayStr();
         db.kehadiran = db.kehadiran.filter(k => !(k.tanggal === t && k.sesi === sesiAktif && santri.some(s => s.id === k.santriId)));
@@ -176,7 +176,7 @@ const Ustadz = (() => {
             if (s) { const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId); if (wUser) Store.addNotif(wUser.id, 'wali', s.nama + ' ' + sesiAktif + ' (' + state[sid] + ')'); }
           }
         });
-        Store.save(); Store.log('Input absensi ' + sesiAktif); UI.toast('Absensi ' + sesiAktif + ' tersimpan', 'success');
+        await Store.save(); Store.log('Input absensi ' + sesiAktif); UI.toast('Absensi ' + sesiAktif + ' tersimpan', 'success');
       };
     }
     renderAbsensi();
@@ -255,13 +255,13 @@ const Ustadz = (() => {
       title: 'Input Tahsin', bodyHTML: body,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
-        { label: 'Simpan', cls: 'primary', onClick: (m, c) => {
+        { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
           const db = Store.get();
           const session = Store.getSession();
           db.tahsin.push({ id: Store.uid('ts'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: m.querySelector('#f-tgl').value, halAwal: +m.querySelector('#f-ha').value, halAkhir: +m.querySelector('#f-hk').value, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim() });
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (wUser) Store.addNotif(wUser.id, 'wali', 'Nilai Tahsin baru: ' + s.nama);
-          Store.save(); Store.log('Input tahsin ' + s.nama); c(); UI.toast('Tersimpan', 'success'); renderTahsin();
+          await Store.save(); Store.log('Input tahsin ' + s.nama); c(); UI.toast('Tersimpan', 'success'); renderTahsin();
         } }
       ]
     });
@@ -324,12 +324,13 @@ const Ustadz = (() => {
       bodyHTML: body,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
-        { label: 'Simpan Bacaan', cls: 'primary', onClick: (m, c) => {
+        { label: 'Simpan Bacaan', cls: 'primary', onClick: async (m, c) => {
           const db = Store.get();
           const sA = parseInt(m.querySelector('#b-sa').value) || defSA;
           const sK = parseInt(m.querySelector('#b-sk').value) || defSA;
+          if (!sA || !sK) { UI.toast('Pilih surat yang valid', 'error'); return; }
           db.ziyadahBacaan.push({ id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: +m.querySelector('#b-aa').value, sAkhir: sK, aAkhir: +m.querySelector('#b-ak').value });
-          Store.save(); Store.log('Setor ziyadah bacaan ' + s.nama); c(); UI.toast('Setoran bacaan tersimpan', 'success'); renderZiyadah();
+          await Store.save(); Store.log('Setor ziyadah bacaan ' + s.nama); c(); UI.toast('Setoran bacaan tersimpan', 'success'); renderZiyadah();
         } }
       ]
     });
@@ -364,7 +365,7 @@ const Ustadz = (() => {
       bodyHTML: body,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
-        { label: 'Simpan Hafalan', cls: 'primary', onClick: (m, c) => {
+        { label: 'Simpan Hafalan', cls: 'primary', onClick: async (m, c) => {
           const db = Store.get();
           const sA = parseInt(m.querySelector('#h-sa').value) || defSA, aA = +m.querySelector('#h-aa').value;
           const sK = parseInt(m.querySelector('#h-sk').value) || defSK, aK = +m.querySelector('#h-ak').value;
@@ -373,7 +374,7 @@ const Ustadz = (() => {
           db.ziyadahHafalan.push({ id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: aA, sAkhir: sK, aAkhir: aK, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim() });
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
-          Store.save(); Store.log('Setor ziyadah hafalan ' + s.nama); c(); UI.toast('Tersimpan · ' + formatHafalan(h), 'success'); renderZiyadah();
+          await Store.save(); Store.log('Setor ziyadah hafalan ' + s.nama); c(); UI.toast('Tersimpan · ' + formatHafalan(h), 'success'); renderZiyadah();
         } }
       ]
     });
@@ -429,14 +430,14 @@ const Ustadz = (() => {
       title: 'Murajaah Mutqin', bodyHTML: body,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
-        { label: 'Simpan', cls: 'primary', onClick: (m, c) => {
+        { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
           const db = Store.get();
           const sA = parseInt(m.querySelector('#m-sa').value) || 2;
           const sK = parseInt(m.querySelector('#m-sk').value) || 2;
           db.mutqin.push({ id: Store.uid('m'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: +m.querySelector('#m-aa').value, sAkhir: sK, aAkhir: +m.querySelector('#m-ak').value, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(), totalHafalan: +m.querySelector('#m-total').value });
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (wUser) Store.addNotif(wUser.id, 'wali', 'Murajaah Mutqin: ' + s.nama);
-          Store.save(); Store.log('Input mutqin ' + s.nama); c(); UI.toast('Tersimpan', 'success'); renderMutqin();
+          await Store.save(); Store.log('Input mutqin ' + s.nama); c(); UI.toast('Tersimpan', 'success'); renderMutqin();
         } }
       ]
     });

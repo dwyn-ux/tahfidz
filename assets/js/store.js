@@ -140,9 +140,10 @@ const Store = (() => {
   }
 
   function lastZiyadah(santriId) {
-    const list = db.ziyadahHafalan.filter(z => z.santriId === santriId)
-      .sort((a, b) => b.tanggal.localeCompare(a.tanggal));
-    return list[0] || null;
+    const haf = db.ziyadahHafalan.filter(z => z.santriId === santriId);
+    const bac = db.ziyadahBacaan.filter(z => z.santriId === santriId);
+    const all = [...haf, ...bac].sort((a, b) => b.tanggal.localeCompare(a.tanggal) || (b.id > a.id ? 1 : -1));
+    return all[0] || null;
   }
 
   function totalHafalanSantri(santriId) {
