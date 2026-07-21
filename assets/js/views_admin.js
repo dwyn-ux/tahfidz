@@ -352,7 +352,10 @@ const Admin = (() => {
         <div style="flex:1">${UI.field('Status', `<select class="clay-select" id="f-status"><option ${u && u.status === 'Aktif' ? 'selected' : ''}>Aktif</option><option ${u && u.status === 'Nonaktif' ? 'selected' : ''}>Nonaktif</option></select>`)}</div>
         <div style="flex:1">${UI.field('Halaqah', `<select class="clay-select" id="f-halaqah"><option value="">-</option>${UI.optionsFromList(db.halaqah.map(h => ({ v: h.nama, l: h.nama })), 'v', 'l', u ? u.halaqah : '')}</select>`)}</div>
       </div>
-      ${UI.field('Password', `<input class="clay-input" id="f-pass" value="${u ? '' : '12345678'}" placeholder="Kosongkan jika tidak diubah">`)}`;
+      <div class="row">
+        <div style="flex:1">${UI.field('Username', `<input class="clay-input" id="f-uname" value="${u ? UI.esc(db.users.find(x => x.role === 'ustadz' && x.refId === id)?.username || '') : ''}" placeholder="Otomatis jika kosong">`)}</div>
+        <div style="flex:1">${UI.field('Password', `<input class="clay-input" id="f-pass" value="${u ? '' : '12345678'}" placeholder="Kosongkan jika tidak diubah">`)}</div>
+      </div>`;
     UI.openModal({
       title: id ? 'Edit Ustadz' : 'Tambah Ustadz', bodyHTML: body,
       actions: [
@@ -361,12 +364,22 @@ const Admin = (() => {
           const db = Store.get();
           const data = { nama: m.querySelector('#f-nama').value.trim(), noHp: m.querySelector('#f-hp').value.trim(), email: m.querySelector('#f-email').value.trim(), status: m.querySelector('#f-status').value, halaqah: m.querySelector('#f-halaqah').value };
           if (!data.nama) { UI.toast('Nama wajib', 'error'); return; }
-          if (id) { Object.assign(Store.findUstadz(id), data); Store.log('Edit ustadz'); }
+          
+          let uname = m.querySelector('#f-uname').value.trim();
+          if (!uname) uname = (data.noHp && data.noHp.replace(/\D/g, '')) || data.nama.toLowerCase().replace(/\s/g, '');
+          
+          if (id) { 
+            Object.assign(Store.findUstadz(id), data);
+            const user = db.users.find(x => x.role === 'ustadz' && x.refId === id);
+            if (user) {
+              user.username = uname;
+            }
+            Store.log('Edit ustadz'); 
+          }
           else {
             const nid = Store.uid('u'); const nu = { id: nid, ...data };
             db.ustadz.push(nu);
             const pass = m.querySelector('#f-pass').value.trim() || '12345678';
-            const uname = (data.noHp && data.noHp.replace(/\D/g, '')) || data.nama.toLowerCase().replace(/\s/g, '');
             db.users.push({ id: Store.uid('usr'), username: uname, password: pass, role: 'ustadz', refId: nid });
             Store.log('Tambah ustadz');
           }
@@ -377,14 +390,14 @@ const Admin = (() => {
   }
 
   function importUstadzDialog() {
-    const body = `<p class="muted">Kolom: Nama | No HP | Email | Status | Halaqah | Password</p>
+    const body = `<p class="muted">Kolom: Nama | No HP | Email | Status | Halaqah | Username | Password</p>
       <div class="row">
         <button class="clay-btn ghost" id="imp-template">⬇ Download Template Excel</button>
       </div>
       <label class="field-label mt" for="imp-file">Pilih file template yang sudah diisi (.xls atau .csv)</label>
       <input class="clay-input" id="imp-file" type="file" accept=".xls,.csv,text/csv,application/vnd.ms-excel" />
       <label class="field-label mt">Atau tempel data dari Excel/CSV</label>
-      <textarea class="clay-textarea mt" id="imp-data" placeholder="Ust. Ali, 0812..., ali@x.id, Aktif, Halaqah 1, 12345678"></textarea>`;
+      <textarea class="clay-textarea mt" id="imp-data" placeholder="Ust. Ali, 0812..., ali@x.id, Aktif, Halaqah 1, ali_ustadz, 12345678"></textarea>`;
     const modal = UI.openModal({
       title: 'Import Ustadz', bodyHTML: body,
       actions: [
@@ -396,19 +409,20 @@ const Admin = (() => {
           lines.forEach(c => {
             const nid = Store.uid('u');
             db.ustadz.push({ id: nid, nama: c[0], noHp: c[1] || '', email: c[2] || '', status: c[3] || 'Aktif', halaqah: c[4] || '' });
-            db.users.push({ id: Store.uid('usr'), username: (c[1] && c[1].replace(/\D/g, '')) || c[0].toLowerCase().replace(/\s/g, ''), password: c[5] || '12345678', role: 'ustadz', refId: nid });
+            const uname = c[5] || (c[1] && c[1].replace(/\D/g, '')) || c[0].toLowerCase().replace(/\s/g, '');
+            db.users.push({ id: Store.uid('usr'), username: uname, password: c[6] || '12345678', role: 'ustadz', refId: nid });
             count++;
           });
           Store.save(); Store.log('Import ' + count + ' ustadz'); c(); UI.toast('Import ' + count + ' ustadz', 'success'); ustadz();
         } }
       ]
     });
-    bindImportFile(modal.modal, ['Nama', 'No HP', 'Email', 'Status', 'Halaqah', 'Password']);
+    bindImportFile(modal.modal, ['Nama', 'No HP', 'Email', 'Status', 'Halaqah', 'Username', 'Password']);
     modal.modal.querySelector('#imp-template').onclick = () => Shared.downloadTemplateExcel(
       'Template_Import_Ustadz',
-      ['Nama', 'No HP', 'Email', 'Status', 'Halaqah', 'Password'],
-      [['Ust. Ali', '081234567890', 'ali@contoh.id', 'Aktif', 'Halaqah 1', '12345678'],
-       ['Ust. Budi', '081234567891', 'budi@contoh.id', 'Aktif', 'Halaqah 2', '12345678']],
+      ['Nama', 'No HP', 'Email', 'Status', 'Halaqah', 'Username', 'Password'],
+      [['Ust. Ali', '081234567890', 'ali@contoh.id', 'Aktif', 'Halaqah 1', 'ali_ustadz', '12345678'],
+       ['Ust. Budi', '081234567891', 'budi@contoh.id', 'Aktif', 'Halaqah 2', 'budi_ustadz', '12345678']],
       'Isi tiap baris untuk 1 ustadz. Simpan sebagai .xls lalu salin isinya ke kolom di bawah, atau tempel langsung dari Excel.'
     );
   }
