@@ -128,13 +128,14 @@ const Store = (() => {
 
   function search(q) {
     const s = q.toLowerCase().trim();
-    if (!s || s.length < 1) return { santri: [], wali: [], ustadz: [], halaqah: [], users: [] };
+    if (!s || s.length < 1) return { santri: [], wali: [], ustadz: [], halaqah: [], users: [], surah: [] };
     return {
       santri: db.santri.filter(x => (x.nama + ' ' + x.nis).toLowerCase().includes(s)),
       wali: db.wali.filter(x => x.nama.toLowerCase().includes(s)),
       ustadz: db.ustadz.filter(x => x.nama.toLowerCase().includes(s)),
       halaqah: db.halaqah.filter(x => x.nama.toLowerCase().includes(s)),
-      users: db.users.filter(x => x.username.toLowerCase().includes(s))
+      users: db.users.filter(x => x.username.toLowerCase().includes(s)),
+      surah: SURAHS.filter(x => x.latin.toLowerCase().includes(s) || x.arab.toLowerCase().includes(s)).slice(0, 10)
     };
   }
 

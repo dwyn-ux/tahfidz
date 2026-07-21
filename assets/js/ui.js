@@ -95,9 +95,10 @@ const UI = (() => {
       searchTimer = setTimeout(() => {
         const r = Store.search(v);
         let html = '';
-        const total = r.santri.length + r.ustadz.length + r.wali.length + r.halaqah.length;
+        const total = r.santri.length + r.ustadz.length + r.wali.length + r.halaqah.length + r.surah.length;
         if (!total) { html = '<div class="search-empty">Tidak ditemukan</div>'; }
         else {
+          if (r.surah.length) html += r.surah.map(x => `<div class="search-item" data-type="surah" data-id="${x.n}">📖 <b>${esc(x.latin)}</b> <span class="muted">${x.arab}</span></div>`).join('');
           if (r.santri.length) html += r.santri.map(x => `<div class="search-item" data-type="santri" data-id="${esc(x.id)}">🧒 Santri: <b>${esc(x.nama)}</b> <span class="muted">${esc(x.nis)}</span></div>`).join('');
           if (r.ustadz.length) html += r.ustadz.map(x => `<div class="search-item" data-type="ustadz" data-id="${esc(x.id)}">🧑‍🏫 Ustadz: <b>${esc(x.nama)}</b></div>`).join('');
           if (r.wali.length) html += r.wali.map(x => `<div class="search-item" data-type="wali" data-id="${esc(x.id)}">👤 Wali: <b>${esc(x.nama)}</b></div>`).join('');
@@ -106,10 +107,17 @@ const UI = (() => {
         drop.innerHTML = html; drop.style.display = 'block';
         drop.querySelectorAll('.search-item').forEach(el => el.onclick = () => {
           const type = el.dataset.type;
+          const id = el.dataset.id;
           const role = (session || {}).role || '';
-          const views = { admin: { santri: 'admin_santri', ustadz: 'admin_ustadz', halaqah: 'admin_halaqah' }, ustadz: { santri: 'ustadz_riwayat' } };
-          const target = (views[role] && views[role][type]) || null;
-          if (target) App.navigate(target);
+          if (type === 'surah') {
+            const q = window.Quran;
+            if (q && typeof q.openWithSurah === 'function') q.openWithSurah(Number(id));
+            else App.navigate('quran');
+          } else {
+            const views = { admin: { santri: 'admin_santri', ustadz: 'admin_ustadz', halaqah: 'admin_halaqah' }, ustadz: { santri: 'ustadz_riwayat' } };
+            const target = (views[role] && views[role][type]) || null;
+            if (target) App.navigate(target);
+          }
           input.value = ''; drop.style.display = 'none';
         });
       }, 150);

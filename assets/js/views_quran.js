@@ -182,5 +182,10 @@ const Quran = (() => {
 
   function retry() { loadAndRender(); }
 
-  return { open, retry };
+  function openWithSurah(surahNum) {
+    state.surah = surahNum;
+    open();
+  }
+
+  return { open, retry, openWithSurah };
 })();
