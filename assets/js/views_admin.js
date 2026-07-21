@@ -373,6 +373,8 @@ const Admin = (() => {
             const user = db.users.find(x => x.role === 'ustadz' && x.refId === id);
             if (user) {
               user.username = uname;
+            } else {
+              db.users.push({ id: Store.uid('usr'), username: uname, password: m.querySelector('#f-pass').value.trim() || '12345678', role: 'ustadz', refId: id });
             }
           }
           else {
