@@ -286,6 +286,17 @@ label.field-label { display: block; font-size: 13px; font-weight: 600; margin: 1
 .search-item:last-child { border-bottom: none; }
 .search-item:hover { background: var(--bg); }
 .search-empty { padding: 20px; text-align: center; color: var(--text-soft); font-size: 13px; }
+
+/* ---------- Surah Picker (searchable) ---------- */
+.surah-picker { position: relative; }
+.surah-input { width: 100%; }
+.surah-drop {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 60;
+  max-height: 220px; overflow-y: auto; background: var(--card); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-clay); padding: 4px 0;
+}
+.surah-drop .search-item { padding: 8px 14px; font-size: 13px; }
+.surah-drop .search-empty { padding: 16px; font-size: 13px; }
 /* ---------- Auth ---------- */
 .auth-wrap { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
 .auth-card { width: 100%; max-width: 420px; }
