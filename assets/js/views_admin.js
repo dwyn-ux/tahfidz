@@ -572,12 +572,25 @@ const Admin = (() => {
         ${UI.field('Standar Penilaian', `<input class="clay-input" id="s-standar" value="${UI.esc(s.standarPenilaian)}">`)}
         ${UI.field('Jam Belajar', `<input class="clay-input" id="s-jam" value="${UI.esc(s.jamBelajar)}">`)}
         ${UI.field('Format Password Default Wali', `<input class="clay-input" id="s-pass" value="${UI.esc(s.defaultPasswordFormat)}">`)}
+        <div class="row">
+          <label class="field-label" style="flex:1">Setoran Ziyadah</label>
+          <label style="flex:1;display:flex;align-items:center;gap:8px;margin-top:12px">
+            <button class="clay-toggle ${s.setoranMulti ? 'on' : ''}" id="s-setoran-multi"></button>
+            <span id="s-setoran-label" style="font-size:13px">${s.setoranMulti ? 'Berkali-kali per hari' : 'Sekali sehari'}</span>
+          </label>
+        </div>
         <div class="row mt">
           <button class="clay-btn primary" id="btn-save">💾 Simpan</button>
           <button class="clay-btn ghost" id="btn-backup">💾 Backup Database</button>
           <button class="clay-btn danger" id="btn-reset">♻ Reset Data Demo</button>
         </div>
       </div>`;
+    document.getElementById('s-setoran-multi').onclick = function() {
+      this.classList.toggle('on');
+      const on = this.classList.contains('on');
+      document.getElementById('s-setoran-label').textContent = on ? 'Berkali-kali per hari' : 'Sekali sehari';
+    };
+
     document.getElementById('btn-save').onclick = () => {
       const db = Store.get();
       db.settings.namaLembaga = document.getElementById('s-nama').value.trim();
@@ -587,6 +600,7 @@ const Admin = (() => {
       db.settings.standarPenilaian = document.getElementById('s-standar').value.trim();
       db.settings.jamBelajar = document.getElementById('s-jam').value.trim();
       db.settings.defaultPasswordFormat = document.getElementById('s-pass').value.trim() || '12345678';
+      db.settings.setoranMulti = document.getElementById('s-setoran-multi').classList.contains('on');
       Store.save(); Store.log('Update settings'); UI.toast('Settings tersimpan', 'success');
     };
     document.getElementById('btn-backup').onclick = () => {

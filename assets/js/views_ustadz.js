@@ -270,6 +270,7 @@ const Ustadz = (() => {
   /* ----- Ziyadah (Bacaan + Hafalan) ----- */
   function renderZiyadah() {
     const db = Store.get();
+    const multi = db.settings.setoranMulti;
     const santri = mySantri().filter(s => s.level === 'Ziyadah');
     const t = Store.todayStr();
     const rows = santri.map(s => {
@@ -278,7 +279,10 @@ const Ustadz = (() => {
       const bacaanHariIni = db.ziyadahBacaan.some(z => z.santriId === s.id && z.tanggal === t);
       const hafalanHariIni = db.ziyadahHafalan.some(z => z.santriId === s.id && z.tanggal === t);
       let btn = '';
-      if (!bacaanHariIni) {
+      if (multi) {
+        btn = `<button class="clay-btn sm primary" data-bacaan="${s.id}">+ Setor Bacaan</button>
+          <button class="clay-btn sm secondary" data-hafalan="${s.id}">+ Setor Hafalan</button>`;
+      } else if (!bacaanHariIni) {
         btn = `<button class="clay-btn sm primary" data-bacaan="${s.id}">+ Setor Bacaan</button>`;
       } else if (!hafalanHariIni) {
         btn = `<button class="clay-btn sm secondary" data-hafalan="${s.id}">+ Setor Hafalan</button>`;

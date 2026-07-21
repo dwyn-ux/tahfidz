@@ -189,6 +189,7 @@ function defaultSettings(): array {
         'tema' => 'Claymorphism',
         'defaultPasswordFormat' => '12345678',
         'logo' => '',
+        'setoranMulti' => false,
         'kelas' => ['TK Al-Qur\'an', 'SD', 'SMP', 'SMA'],
         'levelTahfidz' => ['Tahsin', 'Ziyadah', 'Mutqin'],
         'tahunAjaranList' => ['2024/2025', '2025/2026', '2026/2027'],
