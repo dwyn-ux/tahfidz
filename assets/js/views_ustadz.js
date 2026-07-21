@@ -256,10 +256,21 @@ const Ustadz = (() => {
   function renderZiyadah() {
     const db = Store.get();
     const santri = mySantri();
+    const t = Store.todayStr();
     const rows = santri.map(s => {
       const last = Store.lastZiyadah(s.id);
       const rec = db.ziyadahHafalan.filter(z => z.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
-      return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${last ? getSurah(last.sAkhir).latin + ':' + last.aAkhir : '<span class="muted">-</span>'}</td><td>${rec ? formatHafalan(computeHafalan(rec.sAwal, rec.aAwal, rec.sAkhir, rec.aAkhir)) : '-'}</td><td><button class="clay-btn sm primary" data-input="${s.id}">+ Setor</button></td></tr>`;
+      const bacaanHariIni = db.ziyadahBacaan.some(z => z.santriId === s.id && z.tanggal === t);
+      const hafalanHariIni = db.ziyadahHafalan.some(z => z.santriId === s.id && z.tanggal === t);
+      let btn = '';
+      if (!bacaanHariIni) {
+        btn = `<button class="clay-btn sm primary" data-bacaan="${s.id}">+ Setor Bacaan</button>`;
+      } else if (!hafalanHariIni) {
+        btn = `<button class="clay-btn sm secondary" data-hafalan="${s.id}">+ Setor Hafalan</button>`;
+      } else {
+        btn = `<span class="badge green">Selesai ✓</span>`;
+      }
+      return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${last ? getSurah(last.sAkhir).latin + ':' + last.aAkhir : '<span class="muted">-</span>'}</td><td>${rec ? formatHafalan(computeHafalan(rec.sAwal, rec.aAwal, rec.sAkhir, rec.aAkhir)) : '-'}</td><td>${btn}</td></tr>`;
     }).join('');
     document.getElementById('tab-content').innerHTML = `
       <div class="clay-card">
@@ -269,18 +280,18 @@ const Ustadz = (() => {
           <tbody>${rows || '<tr><td colspan="4"><div class="empty">Tidak ada santri.</div></td></tr>'}</tbody>
         </table></div>
       </div>`;
-    document.querySelectorAll('[data-input]').forEach(b => b.onclick = () => ziyadahForm(b.dataset.input));
+    document.querySelectorAll('[data-bacaan]').forEach(b => b.onclick = () => ziyadahBacaanForm(b.dataset.bacaan));
+    document.querySelectorAll('[data-hafalan]').forEach(b => b.onclick = () => ziyadahHafalanForm(b.dataset.hafalan));
   }
 
-  function ziyadahForm(santriId) {
+  function ziyadahBacaanForm(santriId) {
     const s = Store.findSantri(santriId);
     const last = Store.lastZiyadah(santriId);
-    // Auto-fill: awal = lanjutan dari setoran terakhir
     const defSA = last ? last.sAkhir : 2;
     const defAA = last ? last.aAkhir + 1 : 1;
     const body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
-      <div class="section-title" style="margin-top:6px">A. Setoran Bacaan</div>
+      ${UI.field('Tanggal', `<input class="clay-input" value="${Store.todayStr()}" disabled>`)}
       <div class="row">
         <div style="flex:1">${UI.field('Awal Surat', `<select class="clay-select" id="b-sa">${UI.surahOptions(defSA)}</select>`)}</div>
         <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="b-aa" type="number" min="1" value="${defAA}">`)}</div>
@@ -288,81 +299,63 @@ const Ustadz = (() => {
       <div class="row">
         <div style="flex:1">${UI.field('Akhir Surat', `<select class="clay-select" id="b-sk">${UI.surahOptions(defSA)}</select>`)}</div>
         <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="b-ak" type="number" min="1" value="${defAA + 4}">`)}</div>
-      </div>
-      <div class="section-title mt">B. Setoran Hafalan</div>
-      <div class="row">
-        <div style="flex:1">${UI.field('Awal Surat', `<select class="clay-select" id="h-sa" disabled>${UI.surahOptions(defSA)}</select>`)}</div>
-        <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="h-aa" type="number" min="1" value="${defAA}" disabled>`)}</div>
-      </div>
-      <div class="row">
-        <div style="flex:1">${UI.field('Akhir Surat', `<select class="clay-select" id="h-sk" disabled>${UI.surahOptions(defSA)}</select>`)}</div>
-        <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="h-ak" type="number" min="1" value="${defAA + 4}" disabled>`)}</div>
-      </div>
-      <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg)"></div>
-      ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80" disabled>`)}
-      ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat"></textarea>`)}`;
-    const modal = UI.openModal({
-      title: 'Setoran Ziyadah', sub: 'Auto-fill & auto-hitung hafalan aktif',
+      </div>`;
+    UI.openModal({
+      title: 'Setoran Bacaan Ziyadah', sub: 'Setelah bacaan disimpan, form hafalan akan terbuka',
       bodyHTML: body,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
-        { label: 'Simpan', cls: 'primary', onClick: (m, c) => {
+        { label: 'Simpan Bacaan', cls: 'primary', onClick: (m, c) => {
           const db = Store.get();
-          const session = Store.getSession();
-          const sA = +m.querySelector('#h-sa').value, aA = +m.querySelector('#h-aa').value;
-          const sK = +m.querySelector('#h-sk').value, aK = +m.querySelector('#h-ak').value;
-          
-          // simpan bacaan
           db.ziyadahBacaan.push({ id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: +m.querySelector('#b-sa').value, aAwal: +m.querySelector('#b-aa').value, sAkhir: +m.querySelector('#b-sk').value, aAkhir: +m.querySelector('#b-ak').value });
-          
-          let logMsg = 'Setor ziyadah bacaan ' + s.nama;
-          let toastMsg = 'Setoran bacaan tersimpan';
-          
-          if (!m.querySelector('#f-nilai').disabled) {
-            const h = computeHafalan(sA, aA, sK, aK);
-            if (!h) { UI.toast('Range ayat hafalan tidak valid', 'error'); return; }
-            // simpan hafalan
-            db.ziyadahHafalan.push({ id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: aA, sAkhir: sK, aAkhir: aK, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim() });
-            logMsg = 'Setor ziyadah hafalan & bacaan ' + s.nama;
-            toastMsg = 'Tersimpan · ' + formatHafalan(h);
-            const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
-            if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
-          }
-          
-          Store.save(); Store.log(logMsg); c(); UI.toast(toastMsg, 'success'); renderZiyadah();
+          Store.save(); Store.log('Setor ziyadah bacaan ' + s.nama); c(); UI.toast('Setoran bacaan tersimpan', 'success'); renderZiyadah();
         } }
       ]
     });
-    
-    // Enable hafalan when bacaan is filled
-    const checkBacaan = () => {
-        const bsa = modal.modal.querySelector('#b-sa').value;
-        const bsk = modal.modal.querySelector('#b-sk').value;
-        const baa = modal.modal.querySelector('#b-aa').value;
-        const bak = modal.modal.querySelector('#b-ak').value;
-        const hasBacaan = (bsa && bsk && baa && bak);
-        
-        modal.modal.querySelector('#f-nilai').disabled = !hasBacaan;
-        const hEls = modal.modal.querySelectorAll('#h-sa, #h-aa, #h-sk, #h-ak');
-        hEls.forEach(el => {
-          el.disabled = !hasBacaan;
-        });
+  }
 
-        // Auto-fill hafalan sama dengan bacaan ketika baru terbuka
-        if (hasBacaan && hEls[0].disabled === false && !hEls[0].dataset.filled) {
-           modal.modal.querySelector('#h-sa').value = bsa;
-           modal.modal.querySelector('#h-sk').value = bsk;
-           modal.modal.querySelector('#h-aa').value = baa;
-           modal.modal.querySelector('#h-ak').value = bak;
-           hEls[0].dataset.filled = 'true';
-           calc();
-        }
-    };
-    modal.modal.querySelectorAll('#b-sa, #b-sk, #b-aa, #b-ak').forEach(el => el.addEventListener('change', checkBacaan));
-    modal.modal.querySelectorAll('#b-sa, #b-sk, #b-aa, #b-ak').forEach(el => el.addEventListener('input', checkBacaan));
-    checkBacaan();
-
-    // live calc
+  function ziyadahHafalanForm(santriId) {
+    const s = Store.findSantri(santriId);
+    const db = Store.get();
+    const t = Store.todayStr();
+    const bacaan = db.ziyadahBacaan.filter(z => z.santriId === santriId && z.tanggal === t).sort((a, b) => (b.id > a.id ? 1 : -1))[0];
+    const defSA = bacaan ? bacaan.sAwal : 2;
+    const defAA = bacaan ? bacaan.aAwal : 1;
+    const defSK = bacaan ? bacaan.sAkhir : 2;
+    const defAK = bacaan ? bacaan.aAkhir : 5;
+    const body = `
+      ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
+      ${UI.field('Tanggal', `<input class="clay-input" value="${t}" disabled>`)}
+      <div class="clay-card pad-sm mb" style="background:var(--bg)"><b>📖 Bacaan hari ini:</b> ${bacaan ? getSurah(bacaan.sAwal).latin + ':' + bacaan.aAwal + ' — ' + getSurah(bacaan.sAkhir).latin + ':' + bacaan.aAkhir : '-'}</div>
+      <div class="row">
+        <div style="flex:1">${UI.field('Awal Surat', `<select class="clay-select" id="h-sa">${UI.surahOptions(defSA)}</select>`)}</div>
+        <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="h-aa" type="number" min="1" value="${defAA}">`)}</div>
+      </div>
+      <div class="row">
+        <div style="flex:1">${UI.field('Akhir Surat', `<select class="clay-select" id="h-sk">${UI.surahOptions(defSK)}</select>`)}</div>
+        <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="h-ak" type="number" min="1" value="${defAK}">`)}</div>
+      </div>
+      <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg)"></div>
+      ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80">`)}
+      ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat"></textarea>`)}`;
+    const modal = UI.openModal({
+      title: 'Setoran Hafalan Ziyadah', sub: 'Data dari setoran bacaan hari ini',
+      bodyHTML: body,
+      actions: [
+        { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
+        { label: 'Simpan Hafalan', cls: 'primary', onClick: (m, c) => {
+          const db = Store.get();
+          const sA = +m.querySelector('#h-sa').value, aA = +m.querySelector('#h-aa').value;
+          const sK = +m.querySelector('#h-sk').value, aK = +m.querySelector('#h-ak').value;
+          const h = computeHafalan(sA, aA, sK, aK);
+          if (!h) { UI.toast('Range ayat tidak valid', 'error'); return; }
+          db.ziyadahHafalan.push({ id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: aA, sAkhir: sK, aAkhir: aK, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim() });
+          const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
+          if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
+          Store.save(); Store.log('Setor ziyadah hafalan ' + s.nama); c(); UI.toast('Tersimpan · ' + formatHafalan(h), 'success'); renderZiyadah();
+        } }
+      ]
+    });
     const calc = () => {
       const sA = +modal.modal.querySelector('#h-sa').value, aA = +modal.modal.querySelector('#h-aa').value;
       const sK = +modal.modal.querySelector('#h-sk').value, aK = +modal.modal.querySelector('#h-ak').value;

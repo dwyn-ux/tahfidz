@@ -125,12 +125,30 @@ switch ($action) {
         if (isset($b['settings']) && is_array($b['settings'])) {
             saveSettings($b['settings']);
         }
-        // users (no password overwrite from client)
+        // users: upsert (insert new + update existing); password only on insert
         if (isset($b['users']) && is_array($b['users'])) {
+            $existingIds = [];
+            $stmtAll = pdo()->query('SELECT id FROM users');
+            foreach ($stmtAll->fetchAll() as $row) $existingIds[] = $row['id'];
+
             foreach ($b['users'] as $usr) {
                 if (empty($usr['id'])) continue;
-                $stmt = pdo()->prepare('UPDATE users SET username=?, role=?, refId=? WHERE id=?');
-                $stmt->execute([$usr['username'] ?? '', $usr['role'] ?? 'wali', $usr['refId'] ?? null, $usr['id']]);
+                if (in_array($usr['id'], $existingIds, true)) {
+                    $stmt = pdo()->prepare('UPDATE users SET username=?, role=?, refId=? WHERE id=?');
+                    $stmt->execute([$usr['username'] ?? '', $usr['role'] ?? 'wali', $usr['refId'] ?? null, $usr['id']]);
+                } else {
+                    $pass = !empty($usr['password']) ? password_hash($usr['password'], PASSWORD_DEFAULT) : password_hash('12345678', PASSWORD_DEFAULT);
+                    $stmt = pdo()->prepare(insertIgnoreSQL('users', ['id', 'username', 'password', 'role', 'refId']));
+                    $stmt->execute([$usr['id'], $usr['username'] ?? '', $pass, $usr['role'] ?? 'wali', $usr['refId'] ?? null]);
+                }
+            }
+            // remove users not in payload (except current user)
+            $payloadIds = array_filter(array_map(fn($u) => $u['id'] ?? null, $b['users']));
+            foreach ($existingIds as $eid) {
+                if ($eid === $u['uid']) continue;
+                if (!in_array($eid, $payloadIds, true)) {
+                    pdo()->prepare('DELETE FROM users WHERE id = ?')->execute([$eid]);
+                }
             }
         }
         send(['ok' => true]);
