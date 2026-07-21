@@ -3,6 +3,42 @@
    ============================================================ */
 const Admin = (() => {
 
+  function parseImportRows(raw) {
+    return raw.trim().split(/\r?\n/).filter(Boolean).map(line => {
+      const separator = line.includes('\t') ? '\t' : ',';
+      return line.split(separator).map(value => value.trim());
+    });
+  }
+
+  function bindImportFile(modal, headers) {
+    const input = modal.querySelector('#imp-file');
+    const textarea = modal.querySelector('#imp-data');
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        let rows;
+        if (/<!doctype|<html|<table/i.test(text)) {
+          const doc = new DOMParser().parseFromString(text, 'text/html');
+          rows = [...doc.querySelectorAll('table tr')].map(row =>
+            [...row.querySelectorAll('th, td')].map(cell => cell.textContent.trim())
+          );
+        } else {
+          rows = parseImportRows(text);
+        }
+        if (rows.length && rows[0][0].toLowerCase() === headers[0].toLowerCase()) rows.shift();
+        rows = rows.filter(row => row.some(Boolean));
+        if (!rows.length) throw new Error('File tidak berisi data');
+        textarea.value = rows.map(row => row.join('\t')).join('\n');
+        UI.toast(rows.length + ' baris berhasil dibaca', 'success');
+      } catch (error) {
+        input.value = '';
+        UI.toast(error.message || 'File tidak dapat dibaca', 'error');
+      }
+    };
+  }
+
   function nav(active) {
     return [
       { view: 'admin_dashboard', label: 'Dashboard', ico: '📊', active: active === 'admin_dashboard' },
@@ -205,7 +241,9 @@ const Admin = (() => {
       <div class="row">
         <button class="clay-btn ghost" id="imp-template">⬇ Download Template Excel</button>
       </div>
-      <label class="field-label mt">Tempel data (CSV, pisahkan dengan koma)</label>
+      <label class="field-label mt" for="imp-file">Pilih file template yang sudah diisi (.xls atau .csv)</label>
+      <input class="clay-input" id="imp-file" type="file" accept=".xls,.csv,text/csv,application/vnd.ms-excel" />
+      <label class="field-label mt">Atau tempel data dari Excel/CSV</label>
       <textarea class="clay-textarea" id="imp-data" placeholder="Ahmad, S010, L, Bpk Ali, 0812..., Ziyadah, Halaqah 1&#10;Fatimah, S011, P, Ibu Sara, 0812..., Tahsin, Halaqah 2"></textarea>
       <div id="imp-preview" class="mt"></div>`;
     const modal = UI.openModal({
@@ -216,7 +254,7 @@ const Admin = (() => {
         { label: 'Preview', cls: '', onClick: (m) => {
           const raw = m.querySelector('#imp-data').value.trim();
           if (!raw) { UI.toast('Masukkan data', 'error'); return; }
-          const lines = raw.split('\n').map(l => l.split(',').map(x => x.trim()));
+          const lines = parseImportRows(raw);
           const valid = lines.filter(c => c.length >= 7 && c[0]);
           m.querySelector('#imp-preview').innerHTML = `<div class="clay-card pad-sm"><div class="muted" style="font-size:13px">${valid.length} baris valid dari ${lines.length}.</div>
             <div class="table-wrap mt"><table class="clay-table"><thead><tr><th>Nama</th><th>NIS</th><th>JK</th><th>Wali</th><th>HP</th><th>Level</th><th>Halaqah</th></tr></thead>
@@ -225,7 +263,7 @@ const Admin = (() => {
         { label: 'Import', cls: 'primary', onClick: (m, c) => {
           const db = Store.get();
           const raw = m.querySelector('#imp-data').value.trim();
-          const lines = raw.split('\n').map(l => l.split(',').map(x => x.trim())).filter(c => c.length >= 7 && c[0]);
+          const lines = parseImportRows(raw).filter(c => c.length >= 7 && c[0]);
           let count = 0;
           lines.forEach(c => {
             const waliId = Store.uid('w');
@@ -243,6 +281,7 @@ const Admin = (() => {
         } }
       ]
     });
+    bindImportFile(modal.modal, ['Nama', 'NIS', 'JK (L/P)', 'Wali', 'HP Wali', 'Level', 'Halaqah']);
     modal.modal.querySelector('#imp-template').onclick = () => Shared.downloadTemplateExcel(
       'Template_Import_Santri',
       ['Nama', 'NIS', 'JK (L/P)', 'Wali', 'HP Wali', 'Level', 'Halaqah'],
@@ -337,6 +376,9 @@ const Admin = (() => {
       <div class="row">
         <button class="clay-btn ghost" id="imp-template">⬇ Download Template Excel</button>
       </div>
+      <label class="field-label mt" for="imp-file">Pilih file template yang sudah diisi (.xls atau .csv)</label>
+      <input class="clay-input" id="imp-file" type="file" accept=".xls,.csv,text/csv,application/vnd.ms-excel" />
+      <label class="field-label mt">Atau tempel data dari Excel/CSV</label>
       <textarea class="clay-textarea mt" id="imp-data" placeholder="Ust. Ali, 0812..., ali@x.id, Aktif, Halaqah 1, 12345678"></textarea>`;
     const modal = UI.openModal({
       title: 'Import Ustadz', bodyHTML: body,
@@ -344,7 +386,7 @@ const Admin = (() => {
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
         { label: 'Import', cls: 'primary', onClick: (m, c) => {
           const db = Store.get();
-          const lines = m.querySelector('#imp-data').value.trim().split('\n').map(l => l.split(',').map(x => x.trim())).filter(c => c[0]);
+          const lines = parseImportRows(m.querySelector('#imp-data').value).filter(c => c[0]);
           let count = 0;
           lines.forEach(c => {
             const nid = Store.uid('u');
@@ -356,6 +398,7 @@ const Admin = (() => {
         } }
       ]
     });
+    bindImportFile(modal.modal, ['Nama', 'No HP', 'Email', 'Status', 'Halaqah', 'Password']);
     modal.modal.querySelector('#imp-template').onclick = () => Shared.downloadTemplateExcel(
       'Template_Import_Ustadz',
       ['Nama', 'No HP', 'Email', 'Status', 'Halaqah', 'Password'],
