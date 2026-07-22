@@ -477,321 +477,88 @@ const Ustadz = (() => {
     Shared.shell(c.role, nav('ustadz_riwayat'), '');
     Shared.setHeader('Riwayat Santri', 'Histori per santri');
     
-    const db = Store.get();
+    const santriList = mySantri();
     
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card">
-        <div class="row" style="align-items:center">
-          <div style="flex:1">
-            <label class="field-label">Cari Santri</label>
-            <input class="clay-input" id="riwayat-search" type="text" placeholder="🔍 Ketik untuk mencari santri..." autocomplete="off" />
-          </div>
-          <div style="flex:1">
-            <label class="field-label">Filter per Halaqah</label>
-            <select class="clay-select" id="riwayat-halaqah">
-              <option value="">Semua Halaqah</option>
-              ${myHalaqah() ? `<option value="${myHalaqah()}">${myHalaqah()}</option>` : ''}
-              ${myHalaqah() ? `<option value="other">Halaqah Lain</option>` : ''}
-            </select>
-          </div>
-        </div>
-        <div id="riwayat-content" class="mt"></div>
+        <label class="field-label">Cari Santri</label>
+        <input class="clay-input" id="riwayat-search" type="text" placeholder="Ketik nama atau NIS santri..." autocomplete="off" />
+        <div id="riwayat-santri-list" class="mt" style="max-height:200px;overflow-y:auto"></div>
+        <label class="field-label mt">Riwayat</label>
+        <div id="riwayat-content"></div>
       </div>`;
     
     const searchInput = document.getElementById('riwayat-search');
-    const halaqahSelect = document.getElementById('riwayat-halaqah');
+    const santriListEl = document.getElementById('riwayat-santri-list');
     
-    let filteredSantri = mySantri();
-    let selectedSantriId = filteredSantri[0] && filteredSantri[0].id;
-    let viewMode = 'santri';
-    let periodeFilter = 'all';
+    let selectedSantriId = santriList[0] && santriList[0].id;
+    let searchTimer = null;
     
-    document.getElementById('view-content').innerHTML += `
-      <div class="riwayat-tabs mt" style="border-bottom: 1px solid #e5e7eb; margin: 0 -22px 22px -22px; padding: 0 22px;">
-        <div style="display:flex; gap: 8px;">
-          <button class="riwayat-tab clay-btn ghost ${viewMode === 'santri' ? 'active' : ''}" data-view="santri">Per Santri</button>
-          <button class="riwayat-tab clay-btn ghost ${viewMode === 'halaqah' ? 'active' : ''}" data-view="halaqah">Per Halaqah & Periode</button>
-        </div>
-      </div>
-      <div class="riwayat-periode-filter mt" style="display:none;">
-        <label class="field-label">Periode</label>
-        <div style="display:flex; gap: 10px;">
-          <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="riwayat-periode" value="all" checked> Semua</label>
-          <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="riwayat-periode" value="this-year"> Tahun Ini</label>
-          <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="riwayat-periode" value="this-month"> Bulan Ini</label>
-          <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="riwayat-periode" value="last-3"> 3 Bulan Terakhir</label>
-        </div>
-      </div>`;
-    
-    function updateRiwayat() {
+    function updateSantriList() {
       const term = searchInput.value.trim().toLowerCase();
-      const halaqahFilter = halaqahSelect.value;
-      
-      filteredSantri = mySantri().filter(s => {
+      const filtered = santriList.filter(s => {
         const nameMatch = s.nama.toLowerCase().includes(term);
         const nisMatch = s.nis && s.nis.toString().includes(term);
-        const halaqahMatch = !halaqahFilter || halaqahFilter === 'other' ? true : s.halaqah === halaqahFilter;
-        return (nameMatch || nisMatch) && halaqahMatch;
+        return nameMatch || nisMatch;
       });
       
-      if (!selectedSantriId || !filteredSantri.some(s => s.id === selectedSantriId)) {
-        selectedSantriId = filteredSantri[0] && filteredSantri[0].id;
+      if (!filtered.length) {
+        santriListEl.innerHTML = '<div class="empty">Santri tidak ditemukan.</div>';
+        document.getElementById('riwayat-content').innerHTML = '';
+        return;
       }
       
-      renderView();
-    }
-    
-    const debouncedSearch = () => {
-      if (searchTimeout) clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(() => {
-        updateRiwayat();
-        searchTimeout = null;
-      }, 200);
-    };
-    
-    searchInput.oninput = debouncedSearch;
-    halaqahSelect.onchange = () => {
-      updateRiwayat();
-      UI.toast('Filter halaqah diubah', 'info');
-    };
-    
-    function renderView() {
-      const tabs = document.querySelectorAll('.riwayat-tab');
-      tabs.forEach(tab => {
-        tab.onclick = (e) => {
-          tabs.forEach(t => t.classList.remove('active'));
-          e.target.classList.add('active');
-          viewMode = e.target.dataset.view;
-          if (viewMode === 'halaqah') {
-            document.querySelector('.riwayat-periode-filter').style.display = 'block';
-          } else {
-            document.querySelector('.riwayat-periode-filter').style.display = 'none';
-          }
-          updateRiwayat();
+      santriListEl.innerHTML = filtered.map(s => `
+        <div class="search-item ${s.id === selectedSantriId ? 'active' : ''}" data-sid="${s.id}" style="padding:8px 12px;cursor:pointer;border-radius:8px;margin:2px 0">
+          <b>${UI.esc(s.nama)}</b> <span class="muted">(${UI.esc(s.nis || '-')})</span> <span class="muted" style="font-size:12px">${UI.esc(s.halaqah)}</span>
+        </div>
+      `).join('');
+      
+      let lastSelected = selectedSantriId;
+      santriListEl.querySelectorAll('.search-item').forEach(el => {
+        el.onclick = () => {
+          santriListEl.querySelectorAll('.search-item').forEach(x => x.classList.remove('active'));
+          el.classList.add('active');
+          selectedSantriId = el.dataset.sid;
+          document.getElementById('riwayat-content').innerHTML = Shared.renderRiwayat(selectedSantriId);
+          bindActions();
         };
       });
       
-      const periodeRadios = document.querySelectorAll('input[name="riwayat-periode"]');
-      periodeRadios.forEach(radio => {
-        radio.onchange = () => {
-          periodeFilter = radio.value;
-          updateRiwayat();
-        };
-      });
-      
-      const contentDiv = document.getElementById('riwayat-content');
-      
-      if (viewMode === 'santri') {
-        if (selectedSantriId) {
-          contentDiv.innerHTML = Shared.renderRiwayat(selectedSantriId);
-        } else {
-          contentDiv.innerHTML = '<div class="empty">Pilih santri terlebih dahulu.</div>';
-        }
-      } else {
-        if (selectedSantriId) {
-          const santri = Store.findSantri(selectedSantriId);
-          if (!santri) {
-            contentDiv.innerHTML = '<div class="empty">Santri tidak ditemukan.</div>';
-            return;
-          }
-          const halaqah = santri.halaqah;
-          const santriList = mySantri().filter(s => s.halaqah === halaqah);
-          if (!santriList.length) {
-            contentDiv.innerHTML = '<div class="empty">Tidak ada santri di halaqah ini.</div>';
-            return;
-          }
-          
-          let periodeKehadiran = {};
-          let periodeSetoran = {};
-          const now = new Date();
-          
-          santriList.forEach(st => {
-            const kehadiran = db.kehadiran.filter(k => k.santriId === st.id);
-            const tahsin = db.tahsin.filter(t => t.santriId === st.id);
-            const ziyadahHafalan = db.ziyadahHafalan.filter(z => z.santriId === st.id);
-            const ziyadahBacaan = db.ziyadahBacaan.filter(z => z.santriId === st.id);
-            const mutqin = db.mutqin.filter(m => m.santriId === st.id);
-            
-            if (periodeFilter === 'this-year') {
-              const tahun = now.getFullYear();
-              const filterFunc = (item) => new Date(item.tanggal).getFullYear() === tahun;
-              kehadiran.filter(filterFunc).forEach(k => {
-                if (!periodeKehadiran[k.tanggal]) periodeKehadiran[k.tanggal] = {};
-                periodeKehadiran[k.tanggal][st.id] = k;
-              });
-              tahsin.filter(filterFunc).forEach(t => {
-                if (!periodeSetoran[t.tanggal]) periodeSetoran[t.tanggal] = {};
-                periodeSetoran[t.tanggal][st.id] = { ...t, tipe: 'Tahsin' };
-              });
-              ziyadahHafalan.filter(filterFunc).forEach(z => {
-                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
-                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Hafalan' };
-              });
-              ziyadahBacaan.filter(filterFunc).forEach(z => {
-                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
-                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Bacaan' };
-              });
-              mutqin.filter(filterFunc).forEach(m => {
-                if (!periodeSetoran[m.tanggal]) periodeSetoran[m.tanggal] = {};
-                periodeSetoran[m.tanggal][st.id] = { ...m, tipe: 'Mutqin' };
-              });
-            } else if (periodeFilter === 'this-month') {
-              const bulan = now.getMonth();
-              const tahun = now.getFullYear();
-              const filterFunc = (item) => {
-                const d = new Date(item.tanggal);
-                return d.getMonth() === bulan && d.getFullYear() === tahun;
-              };
-              kehadiran.filter(filterFunc).forEach(k => {
-                if (!periodeKehadiran[k.tanggal]) periodeKehadiran[k.tanggal] = {};
-                periodeKehadiran[k.tanggal][st.id] = k;
-              });
-              tahsin.filter(filterFunc).forEach(t => {
-                if (!periodeSetoran[t.tanggal]) periodeSetoran[t.tanggal] = {};
-                periodeSetoran[t.tanggal][st.id] = { ...t, tipe: 'Tahsin' };
-              });
-              ziyadahHafalan.filter(filterFunc).forEach(z => {
-                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
-                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Hafalan' };
-              });
-              ziyadahBacaan.filter(filterFunc).forEach(z => {
-                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
-                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Bacaan' };
-              });
-              mutqin.filter(filterFunc).forEach(m => {
-                if (!periodeSetoran[m.tanggal]) periodeSetoran[m.tanggal] = {};
-                periodeSetoran[m.tanggal][st.id] = { ...m, tipe: 'Mutqin' };
-              });
-            } else if (periodeFilter === 'last-3') {
-              const tigaBulanLalu = new Date();
-              tigaBulanLalu.setMonth(threeBulanLalu.getMonth() - 3);
-              const filterFunc = (item) => new Date(item.tanggal) >= tigaBulanLalu;
-              kehadiran.filter(filterFunc).forEach(k => {
-                if (!periodeKehadiran[k.tanggal]) periodeKehadiran[k.tanggal] = {};
-                periodeKehadiran[k.tanggal][st.id] = k;
-              });
-              tahsin.filter(filterFunc).forEach(t => {
-                if (!periodeSetoran[t.tanggal]) periodeSetoran[t.tanggal] = {};
-                periodeSetoran[t.tanggal][st.id] = { ...t, tipe: 'Tahsin' };
-              });
-              ziyadahHafalan.filter(filterFunc).forEach(z => {
-                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
-                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Hafalan' };
-              });
-              ziyadahBacaan.filter(filterFunc).forEach(z => {
-                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
-                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Bacaan' };
-              });
-              mutqin.filter(filterFunc).forEach(m => {
-                if (!periodeSetoran[m.tanggal]) periodeSetoran[m.tanggal] = {};
-                periodeSetoran[m.tanggal][st.id] = { ...m, tipe: 'Mutqin' };
-              });
-            } else {
-              kehadiran.forEach(k => {
-                if (!periodeKehadiran[k.tanggal]) periodeKehadiran[k.tanggal] = {};
-                periodeKehadiran[k.tanggal][st.id] = k;
-              });
-              tahsin.forEach(t => {
-                if (!periodeSetoran[t.tanggal]) periodeSetoran[t.tanggal] = {};
-                periodeSetoran[t.tanggal][st.id] = { ...t, tipe: 'Tahsin' };
-              });
-              ziyadahHafalan.forEach(z => {
-                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
-                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Hafalan' };
-              });
-              ziyadahBacaan.forEach(z => {
-                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
-                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Bacaan' };
-              });
-              mutqin.forEach(m => {
-                if (!periodeSetoran[m.tanggal]) periodeSetoran[m.tanggal] = {};
-                periodeSetoran[m.tanggal][st.id] = { ...m, tipe: 'Mutqin' };
-              });
-            }
-          });
-          
-          const tanggalList = Object.keys({ ...periodeKehadiran, ...periodeSetoran }).sort().reverse();
-          
-          let tableHTML = `
-          <div class="clay-card" style="padding: 0">
-            <div class="table-wrap">
-              <table class="clay-table">
-                <thead>
-                  <tr>
-                    <th class="center">Periode</th>
-                    ${santriList.map(st => `<th class="center">${st.nama}</th>`).join('')}
-                  </tr>
-                </thead>
-                <tbody>`;
-          
-          tanggalList.forEach(tanggal => {
-            const bulan = new Date(tanggal).toLocaleDateString('id-ID', { month: 'short', year: 'numeric' });
-            let cols = `<td class="center" style="font-weight:600">${bulan}</td>`;
-            
-            santriList.forEach(st => {
-              const kehadiran = periodeKehadiran[tanggal] ? periodeKehadiran[tanggal][st.id] : null;
-              const setoran = periodeSetoran[tanggal] ? periodeSetoran[tanggal][st.id] : null;
-              
-              let status = 'Tidak Hadir';
-              let badgeClass = 'danger';
-              if (kehadiran) {
-                status = kehadiran.status;
-                badgeClass = kehadiran.status === 'Hadir' ? 'green' : kehadiran.status === 'Izin' ? 'warn' : kehadiran.status === 'Sakit' ? 'blue' : 'danger';
-              }
-              
-              let setoranInfo = '-';
-              if (setoran) {
-                if (setoran.tipe === 'Tahsin') {
-                  setoranInfo = `Tahsin: Hal ${setoran.halAwal}-${setoran.halAkhir} · Nilai ${setoran.nilai}`;
-                } else if (setoran.tipe === 'Ziyadah Hafalan') {
-                  setoranInfo = `Ziyadah: ${getSurah(setoran.sAwal).latin}:${setoran.aAwal} → ${getSurah(setoran.sAkhir).latin}:${setoran.aAkhir} · ${formatHafalan(computeHafalan(setoran.sAwal, setoran.aAwal, setoran.sAkhir, setoran.aAkhir))}`;
-                } else if (setoran.tipe === 'Ziyadah Bacaan') {
-                  setoranInfo = `Ziyadah Bacaan: ${getSurah(setoran.sAwal).latin}:${setoran.aAwal} → ${getSurah(setoran.sAkhir).latin}:${setoran.aAkhir}`;
-                } else if (setoran.tipe === 'Mutqin') {
-                  setoranInfo = `Mutqin: ${getSurah(setoran.sAwal).latin}:${setoran.aAwal} → ${getSurah(setoran.sAkhir).latin}:${setoran.aAkhir} · ${formatHafalan(computeHafalan(setoran.sAwal, setoran.aAwal, setoran.sAkhir, setoran.aAkhir))}`;
-                }
-              }
-              
-              cols += `<td class="center" style="padding:4px">
-                <div style="display:flex; flex-direction:column; gap:2px;">
-                  <div class="badge ${badgeClass}" style="font-size:11px; padding:2px 6px;">${status}</div>
-                  <div class="muted" style="font-size:11px; line-height:1.2;">${setoranInfo}</div>
-                </div>
-              </td>`;
-            });
-            
-            tableHTML += `<tr>${cols}</tr>`;
-          });
-          
-          tableHTML += `
-                </tbody>
-              </table>
-            </div>
-          </div>`;
-          
-          contentDiv.innerHTML = tableHTML;
-        } else {
-          contentDiv.innerHTML = '<div class="empty">Pilih santri terlebih dahulu.</div>';
-        }
+      if (!selectedSantriId || !filtered.some(s => s.id === selectedSantriId)) {
+        selectedSantriId = filtered[0].id;
+      }
+      if (selectedSantriId !== lastSelected) {
+        document.getElementById('riwayat-content').innerHTML = Shared.renderRiwayat(selectedSantriId);
+        bindActions();
       }
     }
     
-    const tabBtns = document.querySelectorAll('.riwayat-tab');
-    tabBtns.forEach(btn => {
-      btn.onclick = (e) => {
-        tabBtns.forEach(t => t.classList.remove('active'));
-        e.target.classList.add('active');
-        viewMode = e.target.dataset.view;
-        if (viewMode === 'halaqah') {
-          document.querySelector('.riwayat-periode-filter').style.display = 'block';
-        } else {
-          document.querySelector('.riwayat-periode-filter').style.display = 'none';
-        }
-        updateRiwayat();
-      };
-    });
+    function bindActions() {
+      document.querySelectorAll('[data-hapus]').forEach(el => {
+        el.onclick = () => {
+          const type = el.dataset.hapus;
+          const id = el.dataset.id;
+          UI.confirmDialog('Hapus Setoran', 'Yakin ingin menghapus setoran ini?', () => {
+            const db = Store.get();
+            if (type === 'tahsin') db.tahsin = db.tahsin.filter(x => x.id !== id);
+            else if (type === 'ziyadahBacaan') db.ziyadahBacaan = db.ziyadahBacaan.filter(x => x.id !== id);
+            else if (type === 'ziyadahHafalan') db.ziyadahHafalan = db.ziyadahHafalan.filter(x => x.id !== id);
+            else if (type === 'mutqin') db.mutqin = db.mutqin.filter(x => x.id !== id);
+            Store.save(); UI.toast('Setoran dihapus', 'success');
+            document.getElementById('riwayat-content').innerHTML = Shared.renderRiwayat(selectedSantriId);
+            bindActions();
+          });
+        };
+      });
+    }
     
-    updateRiwayat();
+    searchInput.oninput = () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(updateSantriList, 150);
+    };
+    
+    updateSantriList();
   }
 
   /* ---------------- Laporan ---------------- */

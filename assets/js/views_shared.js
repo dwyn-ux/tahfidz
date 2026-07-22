@@ -99,24 +99,38 @@ const Shared = (() => {
     const db = Store.get();
     const s = Store.findSantri(santriId);
     if (!s) return `<div class="empty">Santri tidak ditemukan.</div>`;
+    const session = Store.getSession();
     const items = [];
-    db.tahsin.filter(t => t.santriId === santriId).forEach(t => items.push({ t: t.tanggal, html: `<b>Tahsin</b> — Hal ${t.halAwal}-${t.halAkhir} · Nilai <b>${t.nilai}</b><div class="muted">${UI.esc(t.catatan || '')}</div>` }));
-    db.ziyadahBacaan.filter(z => z.santriId === santriId).forEach(z => items.push({ t: z.tanggal, html: `<b>Ziyadah Bacaan</b> — ${getSurah(z.sAwal).latin}:${z.aAwal} → ${getSurah(z.sAkhir).latin}:${z.aAkhir}` }));
+    db.tahsin.filter(t => t.santriId === santriId).forEach(t => items.push({
+      t: t.tanggal, html: `<b>Tahsin</b> — Hal ${t.halAwal}-${t.halAkhir} · Nilai <b>${t.nilai}</b><div class="muted">${UI.esc(t.catatan || '')}</div>`,
+      hapus: (session && (session.role === 'ustadz' || session.role === 'admin')) ? `<button class="clay-btn sm ghost" data-hapus="tahsin" data-id="${t.id}" style="padding:2px 8px;font-size:11px;color:var(--danger)">Hapus</button>` : ''
+    }));
+    db.ziyadahBacaan.filter(z => z.santriId === santriId).forEach(z => items.push({
+      t: z.tanggal, html: `<b>Ziyadah Bacaan</b> — ${getSurah(z.sAwal).latin}:${z.aAwal} → ${getSurah(z.sAkhir).latin}:${z.aAkhir}`,
+      hapus: (session && (session.role === 'ustadz' || session.role === 'admin')) ? `<button class="clay-btn sm ghost" data-hapus="ziyadahBacaan" data-id="${z.id}" style="padding:2px 8px;font-size:11px;color:var(--danger)">Hapus</button>` : ''
+    }));
     db.ziyadahHafalan.filter(z => z.santriId === santriId).forEach(z => {
       const h = computeHafalan(z.sAwal, z.aAwal, z.sAkhir, z.aAkhir);
-      items.push({ t: z.tanggal, html: `<b>Ziyadah Hafalan</b> — ${getSurah(z.sAwal).latin}:${z.aAwal} → ${getSurah(z.sAkhir).latin}:${z.aAkhir} · <b>${formatHafalan(h)}</b> · Nilai ${z.nilai}<div class="muted">${UI.esc(z.catatan || '')}</div>` });
+      items.push({
+        t: z.tanggal, html: `<b>Ziyadah Hafalan</b> — ${getSurah(z.sAwal).latin}:${z.aAwal} → ${getSurah(z.sAkhir).latin}:${z.aAkhir} · <b>${formatHafalan(h)}</b> · Nilai ${z.nilai}<div class="muted">${UI.esc(z.catatan || '')}</div>`,
+        hapus: (session && (session.role === 'ustadz' || session.role === 'admin')) ? `<button class="clay-btn sm ghost" data-hapus="ziyadahHafalan" data-id="${z.id}" style="padding:2px 8px;font-size:11px;color:var(--danger)">Hapus</button>` : ''
+      });
     });
     db.mutqin.filter(m => m.santriId === santriId).forEach(m => {
       const h = computeHafalan(m.sAwal, m.aAwal, m.sAkhir, m.aAkhir);
-      items.push({ t: m.tanggal, html: `<b>Mutqin (Murajaah)</b> — ${getSurah(m.sAwal).latin}:${m.aAwal} → ${getSurah(m.sAkhir).latin}:${m.aAkhir} · <b>${formatHafalan(h)}</b> · Nilai ${m.nilai}<div class="muted">${UI.esc(m.catatan || '')}</div>` });
+      items.push({
+        t: m.tanggal, html: `<b>Mutqin (Murajaah)</b> — ${getSurah(m.sAwal).latin}:${m.aAwal} → ${getSurah(m.sAkhir).latin}:${m.aAkhir} · <b>${formatHafalan(h)}</b> · Nilai ${m.nilai}<div class="muted">${UI.esc(m.catatan || '')}</div>`,
+        hapus: (session && (session.role === 'ustadz' || session.role === 'admin')) ? `<button class="clay-btn sm ghost" data-hapus="mutqin" data-id="${m.id}" style="padding:2px 8px;font-size:11px;color:var(--danger)">Hapus</button>` : ''
+      });
     });
-    db.kehadiran.filter(k => k.santriId === santriId).forEach(k => items.push({ t: k.tanggal, html: `Kehadiran ${k.sesi || ''}: <span class="badge ${k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : 'danger'}">${k.status}</span>` }));
-    db.catatan.filter(c => c.santriId === santriId).forEach(c => items.push({ t: c.tanggal, html: `<b>Catatan Ustadz:</b> ${UI.esc(c.isi)}` }));
+    db.kehadiran.filter(k => k.santriId === santriId).forEach(k => items.push({ t: k.tanggal, html: `Kehadiran ${k.sesi || ''}: <span class="badge ${k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : 'danger'}">${k.status}</span>`, hapus: '' }));
+    db.catatan.filter(c => c.santriId === santriId).forEach(c => items.push({ t: c.tanggal, html: `<b>Catatan Ustadz:</b> ${UI.esc(c.isi)}`, hapus: '' }));
 
     items.sort((a, b) => b.t.localeCompare(a.t));
     if (!items.length) return `<div class="empty">Belum ada riwayat untuk ${UI.esc(s.nama)}.</div>`;
     return `<div class="timeline">${items.map(i =>
-      `<div class="item"><div class="t">${UI.fmtDate(i.t)}</div><div class="d">${i.html}</div></div>`).join('')}</div>`;
+      `<div class="item"><div class="t">${UI.fmtDate(i.t)}</div><div class="d">${i.html}${i.hapus ? '<div style="margin-top:4px">' + i.hapus + '</div>' : ''}</div></div>`
+    ).join('')}</div>`;
   }
 
   function renderPerHalaqahRiwayat(santriId, periode) {

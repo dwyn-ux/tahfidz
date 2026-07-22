@@ -520,51 +520,82 @@ const Admin = (() => {
     Shared.shell('admin', nav('admin_riwayat'), '');
     Shared.setHeader('Riwayat Santri', 'Histori lengkap per santri');
     const db = Store.get();
+    const santriList = db.santri;
+    
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card">
-        <label class="field-label">Pilih Santri</label>
+        <label class="field-label">Cari Santri</label>
         <input class="clay-input" id="riwayat-search" type="text" placeholder="Ketik nama atau NIS santri..." autocomplete="off" />
-        <select class="clay-select mt" id="pick-santri" style="display:none"></select>
+        <div id="riwayat-santri-list" class="mt" style="max-height:200px;overflow-y:auto"></div>
         <div id="riwayat-content" class="mt"></div>
       </div>`;
     const searchInput = document.getElementById('riwayat-search');
-    const pick = document.getElementById('pick-santri');
-    let selectedSantriId = db.santri[0] && db.santri[0].id;
+    const santriListEl = document.getElementById('riwayat-santri-list');
     
-    function updateList() {
+    let selectedSantriId = santriList[0] && santriList[0].id;
+    let searchTimer = null;
+    
+    function updateSantriList() {
       const term = searchInput.value.trim().toLowerCase();
-      const filtered = db.santri.filter(s => {
+      const filtered = santriList.filter(s => {
         return s.nama.toLowerCase().includes(term) || (s.nis && s.nis.toString().includes(term));
       });
-      const options = filtered.map(s => `<option value="${s.id}" ${s.id === selectedSantriId ? 'selected' : ''}>${s.nama} (${s.nis})</option>`).join('');
-      pick.innerHTML = options;
-      pick.style.display = filtered.length ? 'block' : 'none';
-      if (filtered.length && !filtered.some(s => s.id === selectedSantriId)) {
+      
+      if (!filtered.length) {
+        santriListEl.innerHTML = '<div class="empty">Santri tidak ditemukan.</div>';
+        document.getElementById('riwayat-content').innerHTML = '';
+        return;
+      }
+      
+      santriListEl.innerHTML = filtered.map(s => `
+        <div class="search-item ${s.id === selectedSantriId ? 'active' : ''}" data-sid="${s.id}" style="padding:8px 12px;cursor:pointer;border-radius:8px;margin:2px 0">
+          <b>${UI.esc(s.nama)}</b> <span class="muted">(${UI.esc(s.nis || '-')})</span> <span class="muted" style="font-size:12px">${UI.esc(s.halaqah)}</span>
+        </div>
+      `).join('');
+      
+      santriListEl.querySelectorAll('.search-item').forEach(el => {
+        el.onclick = () => {
+          santriListEl.querySelectorAll('.search-item').forEach(x => x.classList.remove('active'));
+          el.classList.add('active');
+          selectedSantriId = el.dataset.sid;
+          const content = document.getElementById('riwayat-content');
+          content.innerHTML = Shared.renderRiwayat(selectedSantriId);
+          bindActions();
+        };
+      });
+      
+      if (!filtered.some(s => s.id === selectedSantriId)) {
         selectedSantriId = filtered[0].id;
-        pick.value = selectedSantriId;
-      }
-      renderRiwayat();
-    }
-    
-    function renderRiwayat() {
-      if (selectedSantriId) {
         document.getElementById('riwayat-content').innerHTML = Shared.renderRiwayat(selectedSantriId);
-      } else {
-        document.getElementById('riwayat-content').innerHTML = '<div class="empty">Pilih santri terlebih dahulu.</div>';
+        bindActions();
       }
     }
     
-    let searchTimeout = null;
+    function bindActions() {
+      document.querySelectorAll('[data-hapus]').forEach(el => {
+        el.onclick = () => {
+          const type = el.dataset.hapus;
+          const id = el.dataset.id;
+          UI.confirmDialog('Hapus Setoran', 'Yakin ingin menghapus setoran ini?', () => {
+            const db = Store.get();
+            if (type === 'tahsin') db.tahsin = db.tahsin.filter(x => x.id !== id);
+            else if (type === 'ziyadahBacaan') db.ziyadahBacaan = db.ziyadahBacaan.filter(x => x.id !== id);
+            else if (type === 'ziyadahHafalan') db.ziyadahHafalan = db.ziyadahHafalan.filter(x => x.id !== id);
+            else if (type === 'mutqin') db.mutqin = db.mutqin.filter(x => x.id !== id);
+            Store.save(); UI.toast('Setoran dihapus', 'success');
+            document.getElementById('riwayat-content').innerHTML = Shared.renderRiwayat(selectedSantriId);
+            bindActions();
+          });
+        };
+      });
+    }
+    
     searchInput.oninput = () => {
-      clearTimeout(searchTimeout);
-      searchTimeout = setTimeout(updateList, 200);
-    };
-    pick.onchange = () => {
-      selectedSantriId = pick.value;
-      renderRiwayat();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(updateSantriList, 150);
     };
     
-    updateList();
+    updateSantriList();
   }
 
   /* ---------------- Laporan ---------------- */
