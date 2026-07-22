@@ -78,6 +78,9 @@ const Ustadz = (() => {
 
     document.getElementById('view-content').innerHTML = `
       <div class="grid kpi">
+        ${db.settings.logo ? `<div class="stat" style="justify-content:center;padding:12px">
+          <img src="${UI.esc(db.settings.logo)}" style="max-height:64px;object-fit:contain">
+        </div>` : ''}
         ${Shared.statCard('', santri.length, 'Santri Diampu', '#16A34A')}
         ${sesiStats.map(st => Shared.statCard(st.s === 'Subuh' ? '' : st.s === 'Maghrib' ? '' : '', st.h + '/' + santri.length + ' Hadir', st.s, '#22C55E')).join('')}
       </div>
