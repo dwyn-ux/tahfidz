@@ -620,6 +620,14 @@ const Ustadz = (() => {
     Shared.setHeader('Notifikasi', 'Pengingat untuk ustadz');
     const session = Store.getSession();
     document.getElementById('view-content').innerHTML = Shared.renderNotifikasi(session.userId);
+    const clearBtn = document.getElementById('clear-notif');
+    if (clearBtn) clearBtn.onclick = () => {
+      if (confirm('Hapus semua notifikasi?')) {
+        Store.clearNotifs(session.userId);
+        document.getElementById('view-content').innerHTML = '<div class="empty">Notifikasi dikosongkan.</div>';
+        UI.toast('Notifikasi dihapus', 'success');
+      }
+    };
   }
 
   return { nav, dashboard, absensi, pembelajaran, riwayat, laporan, notif };

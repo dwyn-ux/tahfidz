@@ -396,12 +396,18 @@ const Shared = (() => {
     const list = Store.notifFor(userId);
     if (!list.length) return `<div class="empty">Belum ada notifikasi.</div>`;
     const icon = { wali: '', ustadz: '', admin: '' };
-    return `<div class="clay-card">${list.map(n =>
+    return `<div class="clay-card" id="notif-card">
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="section-title" style="margin:0">Notifikasi</div>
+        <button class="clay-btn sm ghost" id="clear-notif" style="color:var(--danger)">Hapus Semua</button>
+      </div>
+      ${list.map(n =>
       `<div class="row center" style="justify-content:space-between;padding:12px 0;border-bottom:1px solid #eee">
         <div class="row center" style="gap:10px"><span style="font-size:20px">${icon[n.tipe] || ''}</span>
         <div><div>${UI.esc(n.pesan)}</div><div class="muted" style="font-size:12px">${UI.fmtDateTime(n.tanggal)}</div></div></div>
         ${n.read ? '' : '<span class="badge blue">Baru</span>'}
-      </div>`).join('')}</div>`;
+      </div>`).join('')}
+    </div>`;
   }
 
   return { shell, setHeader, setActions, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadTemplateExcel, bulanLabel, renderNotifikasi, ICONS };

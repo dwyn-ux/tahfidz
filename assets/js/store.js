@@ -178,6 +178,10 @@ const Store = (() => {
     save();
   }
   function notifFor(userId) { return db.notifikasi.filter(n => n.userId === userId); }
+  function clearNotifs(userId) {
+    db.notifikasi = db.notifikasi.filter(n => n.userId !== userId);
+    save();
+  }
 
   /* ---------- Cek setoran terlewat ----------
      Aturan: tiap santri wajib setoran 1x per hari kerja (Senin-Jumat).
@@ -230,6 +234,6 @@ const Store = (() => {
     load, save, get, reset, uid, log, nowISO, todayStr,
     setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout,
     recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahByName, search,
-    lastZiyadah, totalHafalanSantri, avgNilai, kehadiranBulan, addNotif, notifFor, checkSetoranTerlewat
+    lastZiyadah, totalHafalanSantri, avgNilai, kehadiranBulan, addNotif, notifFor, clearNotifs, checkSetoranTerlewat
   };
 })();
