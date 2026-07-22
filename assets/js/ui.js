@@ -76,7 +76,7 @@ const UI = (() => {
   function surahDatalistId() { return 'dl-surah'; }
 
   function surahDatalistHTML() {
-    return `<datalist id="dl-surah">${SURAHS.map(s => `<option value="${s.n}. ${esc(s.latin)}">${s.arab}</option>`).join('')}</datalist>`;
+    return `<datalist id="dl-surah">${SURAHS.map(s => `<option value="${s.n}. ${esc(s.latin)}">${s.n}. ${esc(s.latin)} (${esc(s.arab)})</option>`).join('')}</datalist>`;
   }
 
   /* Search bar — real-time, cross-entity */
@@ -104,7 +104,7 @@ const UI = (() => {
         const total = r.santri.length + r.ustadz.length + r.wali.length + r.halaqah.length + r.surah.length;
         if (!total) { html = '<div class="search-empty">Tidak ditemukan</div>'; }
         else {
-          if (r.surah.length) html += r.surah.map(x => `<div class="search-item" data-type="surah" data-id="${x.n}">📖 <b>${esc(x.latin)}</b> <span class="muted">${x.arab}</span></div>`).join('');
+          if (r.surah.length) html += r.surah.map(x => `<div class="search-item" data-type="surah" data-id="${x.n}">📖 <b>${x.n}. ${esc(x.latin)}</b> <span class="muted">${x.arab}</span></div>`).join('');
           if (r.santri.length) html += r.santri.map(x => `<div class="search-item" data-type="santri" data-id="${esc(x.id)}">🧒 Santri: <b>${esc(x.nama)}</b> <span class="muted">${esc(x.nis)}</span></div>`).join('');
           if (r.ustadz.length) html += r.ustadz.map(x => `<div class="search-item" data-type="ustadz" data-id="${esc(x.id)}">🧑‍🏫 Ustadz: <b>${esc(x.nama)}</b></div>`).join('');
           if (r.wali.length) html += r.wali.map(x => `<div class="search-item" data-type="wali" data-id="${esc(x.id)}">👤 Wali: <b>${esc(x.nama)}</b></div>`).join('');
