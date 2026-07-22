@@ -81,9 +81,6 @@ const Ustadz = (() => {
         ${db.settings.logo ? `<div class="stat" style="justify-content:center;padding:12px">
           <img src="${UI.esc(db.settings.logo)}" style="max-height:64px;object-fit:contain">
         </div>` : ''}
-        ${db.settings.logo ? `<div class="stat" style="justify-content:center;padding:12px">
-          <img src="${UI.esc(db.settings.logo)}" style="max-height:64px;object-fit:contain">
-        </div>` : ''}
         ${Shared.statCard(Shared.ICONS.users, santri.length, 'Santri Diampu', '#16A34A')}
         ${sesiStats.map(st => Shared.statCard(
           st.s === 'Subuh' ? Shared.ICONS.sun : st.s === 'Maghrib' ? Shared.ICONS.sunset : Shared.ICONS.moon,
