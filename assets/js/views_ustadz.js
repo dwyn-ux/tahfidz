@@ -81,13 +81,18 @@ const Ustadz = (() => {
         ${db.settings.logo ? `<div class="stat" style="justify-content:center;padding:12px">
           <img src="${UI.esc(db.settings.logo)}" style="max-height:64px;object-fit:contain">
         </div>` : ''}
-        ${Shared.statCard('', santri.length, 'Santri Diampu', '#16A34A')}
-        ${sesiStats.map(st => Shared.statCard(st.s === 'Subuh' ? '' : st.s === 'Maghrib' ? '' : '', st.h + '/' + santri.length + ' Hadir', st.s, '#22C55E')).join('')}
+        ${db.settings.logo ? `<div class="stat" style="justify-content:center;padding:12px">
+          <img src="${UI.esc(db.settings.logo)}" style="max-height:64px;object-fit:contain">
+        </div>` : ''}
+        ${Shared.statCard(Shared.ICONS.users, santri.length, 'Santri Diampu', '#16A34A')}
+        ${sesiStats.map(st => Shared.statCard(
+          st.s === 'Subuh' ? Shared.ICONS.sun : st.s === 'Maghrib' ? Shared.ICONS.sunset : Shared.ICONS.moon,
+          st.h + '/' + santri.length + ' Hadir', st.s, '#22C55E')).join('')}
       </div>
       <div class="grid kpi mt">
-        ${Shared.statCard('', totalSubuh, 'Kehadiran Subuh (Bulan Ini)', '#22C55E')}
-        ${Shared.statCard('', totalMaghrib, 'Kehadiran Maghrib (Bulan Ini)', '#22C55E')}
-        ${Shared.statCard('', totalIsya, 'Kehadiran Isya (Bulan Ini)', '#22C55E')}
+        ${Shared.statCard(Shared.ICONS.sun, totalSubuh, 'Kehadiran Subuh (Bulan Ini)', '#22C55E')}
+        ${Shared.statCard(Shared.ICONS.sunset, totalMaghrib, 'Kehadiran Maghrib (Bulan Ini)', '#22C55E')}
+        ${Shared.statCard(Shared.ICONS.moon, totalIsya, 'Kehadiran Isya (Bulan Ini)', '#22C55E')}
       </div>
       <div class="grid cols-2 mt">
         <div class="clay-card">

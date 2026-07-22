@@ -70,17 +70,17 @@ const Admin = (() => {
 
     const kpi = `
       <div class="grid kpi">
-        ${Shared.statCard('', db.santri.length, 'Santri', '#16A34A')}
-        ${Shared.statCard('', db.ustadz.length, 'Ustadz', '#3B82F6')}
-        ${Shared.statCard('', db.halaqah.length, 'Halaqah', '#FACC15')}
-        ${Shared.statCard('', db.santri.filter(s => s.level === 'Tahsin').length, 'Tahsin', '#22C55E')}
-        ${Shared.statCard('', db.santri.filter(s => s.level === 'Ziyadah').length, 'Ziyadah', '#3B82F6')}
-        ${Shared.statCard('', db.santri.filter(s => s.level === 'Mutqin').length, 'Mutqin', '#16A34A')}
+        ${Shared.statCard(Shared.ICONS.users, db.santri.length, 'Santri', '#16A34A')}
+        ${Shared.statCard(Shared.ICONS.teacher, db.ustadz.length, 'Ustadz', '#3B82F6')}
+        ${Shared.statCard(Shared.ICONS.building, db.halaqah.length, 'Halaqah', '#FACC15')}
+        ${Shared.statCard(Shared.ICONS.book, db.santri.filter(s => s.level === 'Tahsin').length, 'Tahsin', '#22C55E')}
+        ${Shared.statCard(Shared.ICONS.star, db.santri.filter(s => s.level === 'Ziyadah').length, 'Ziyadah', '#3B82F6')}
+        ${Shared.statCard(Shared.ICONS.star, db.santri.filter(s => s.level === 'Mutqin').length, 'Mutqin', '#16A34A')}
       </div>
       <div class="grid kpi mt">
-        ${Shared.statCard('', hadirSubuh, 'Kehadiran Subuh', '#22C55E')}
-        ${Shared.statCard('', hadirMaghrib, 'Kehadiran Maghrib', '#22C55E')}
-        ${Shared.statCard('', hadirIsya, 'Kehadiran Isya', '#22C55E')}
+        ${Shared.statCard(Shared.ICONS.sun, hadirSubuh, 'Kehadiran Subuh', '#22C55E')}
+        ${Shared.statCard(Shared.ICONS.sunset, hadirMaghrib, 'Kehadiran Maghrib', '#22C55E')}
+        ${Shared.statCard(Shared.ICONS.moon, hadirIsya, 'Kehadiran Isya', '#22C55E')}
       </div>`;
 
     // progress hafalan per halaqah (avg pages)
