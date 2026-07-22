@@ -372,7 +372,7 @@ const Ustadz = (() => {
           const sAyah = getSurah(sA); const sKyah = getSurah(sK);
           if (sAyah && +m.querySelector('#b-aa').value > sAyah.ayahs) { UI.toast('Awal ayat melebihi batas surat', 'error'); return; }
           if (sKyah && +m.querySelector('#b-ak').value > sKyah.ayahs) { UI.toast('Akhir ayat melebihi batas surat', 'error'); return; }
-          db.ziyadahBacaan.push({ id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: +m.querySelector('#b-aa').value, sAkhir: sK, aAkhir: +m.querySelector('#b-ak').value });
+          db.ziyadahBacaan.push({ id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: +m.querySelector('#b-aa').value, sAkhir: sK, aAkhir: +m.querySelector('#b-ak').value, _created: Date.now() });
           await Store.save(); Store.log('Setor ziyadah bacaan ' + s.nama); c(); UI.toast('Setoran bacaan tersimpan', 'success'); renderZiyadah();
         } }
       ]
@@ -425,7 +425,7 @@ const Ustadz = (() => {
           if (sKyh && aK > sKyh.ayahs) { UI.toast('Akhir ayat melebihi batas surat', 'error'); return; }
           const h = computeHafalan(sA, aA, sK, aK);
           if (!h) { UI.toast('Range ayat tidak valid', 'error'); return; }
-          db.ziyadahHafalan.push({ id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: aA, sAkhir: sK, aAkhir: aK, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim() });
+          db.ziyadahHafalan.push({ id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: aA, sAkhir: sK, aAkhir: aK, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(), _created: Date.now() });
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
           await Store.save(); Store.log('Setor ziyadah hafalan ' + s.nama); c(); UI.toast('Tersimpan · ' + formatHafalan(h), 'success'); renderZiyadah();

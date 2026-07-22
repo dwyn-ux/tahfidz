@@ -153,7 +153,7 @@ const Store = (() => {
     const all = [...haf, ...bac].sort((a, b) => {
       const d = b.tanggal.localeCompare(a.tanggal);
       if (d !== 0) return d;
-      return b.id.localeCompare(a.id);
+      return (b._created || 0) - (a._created || 0);
     });
     return all[0] || null;
   }
