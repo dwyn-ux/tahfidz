@@ -385,7 +385,7 @@ const Ustadz = (() => {
     const db = Store.get();
     const t = Store.todayStr();
     // cari bacaan TERAKHIR (bukan cuma hari ini) — biar setoran hafalan cocok walau beda hari
-    const bacaan = db.ziyadahBacaan.filter(z => z.santriId === santriId).sort((a, b) => (b.id > a.id ? 1 : -1))[0];
+    const bacaan = db.ziyadahBacaan.filter(z => z.santriId === santriId).sort((a, b) => b.tanggal.localeCompare(a.tanggal) || (b.id > a.id ? 1 : -1))[0];
     let defSA = 2, defAA = 1, defSK = 2, defAK = 5;
     if (bacaan) {
       defSA = bacaan.sAwal; defAA = bacaan.aAwal; defSK = bacaan.sAkhir; defAK = bacaan.aAkhir;

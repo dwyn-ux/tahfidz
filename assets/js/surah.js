@@ -155,8 +155,14 @@ function pageToJuz(page) {
   return juz;
 }
 
-/* Surah pertama yang dimulai dalam sebuah juz (forward: surah pertama dengan page >= batas juz) */
+/* Range surah dalam satu juz untuk urutan hafalan */
+const JUZ_SURAH_RANGE = {
+  30: [78, 114], 29: [67, 77], 28: [58, 66], 27: [51, 57], 26: [46, 50]
+};
+
 function firstSurahOfJuz(juz) {
+  if (JUZ_SURAH_RANGE[juz]) return JUZ_SURAH_RANGE[juz][0];
+  // untuk juz 1-25: cari surah pertama yg mulai di halaman >= batas juz
   const page = JUZ_PAGES[juz - 1];
   for (let i = 0; i < SURAHS.length; i++) {
     if (SURAHS[i].page >= page) return SURAHS[i].n;
@@ -164,8 +170,8 @@ function firstSurahOfJuz(juz) {
   return 114;
 }
 
-/* Surah terakhir dalam sebuah juz */
 function lastSurahOfJuz(juz) {
+  if (JUZ_SURAH_RANGE[juz]) return JUZ_SURAH_RANGE[juz][1];
   const nextPage = juz < 30 ? JUZ_PAGES[juz] : TOTAL_PAGES + 1;
   for (let i = 0; i < SURAHS.length; i++) {
     if (SURAHS[i].page >= nextPage) return SURAHS[i - 1].n;
