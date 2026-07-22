@@ -70,17 +70,17 @@ const Admin = (() => {
 
     const kpi = `
       <div class="grid kpi">
-        ${Shared.statCard('🧒', db.santri.length, 'Santri', '#16A34A')}
-        ${Shared.statCard('🧑‍🏫', db.ustadz.length, 'Ustadz', '#3B82F6')}
-        ${Shared.statCard('🏫', db.halaqah.length, 'Halaqah', '#FACC15')}
-        ${Shared.statCard('📖', db.santri.filter(s => s.level === 'Tahsin').length, 'Tahsin', '#22C55E')}
-        ${Shared.statCard('📝', db.santri.filter(s => s.level === 'Ziyadah').length, 'Ziyadah', '#3B82F6')}
-        ${Shared.statCard('🏆', db.santri.filter(s => s.level === 'Mutqin').length, 'Mutqin', '#16A34A')}
+        ${Shared.statCard('', db.santri.length, 'Santri', '#16A34A')}
+        ${Shared.statCard('‍', db.ustadz.length, 'Ustadz', '#3B82F6')}
+        ${Shared.statCard('', db.halaqah.length, 'Halaqah', '#FACC15')}
+        ${Shared.statCard('', db.santri.filter(s => s.level === 'Tahsin').length, 'Tahsin', '#22C55E')}
+        ${Shared.statCard('', db.santri.filter(s => s.level === 'Ziyadah').length, 'Ziyadah', '#3B82F6')}
+        ${Shared.statCard('', db.santri.filter(s => s.level === 'Mutqin').length, 'Mutqin', '#16A34A')}
       </div>
       <div class="grid kpi mt">
-        ${Shared.statCard('🌅', hadirSubuh, 'Kehadiran Subuh', '#22C55E')}
-        ${Shared.statCard('🌇', hadirMaghrib, 'Kehadiran Maghrib', '#22C55E')}
-        ${Shared.statCard('🌙', hadirIsya, 'Kehadiran Isya', '#22C55E')}
+        ${Shared.statCard('', hadirSubuh, 'Kehadiran Subuh', '#22C55E')}
+        ${Shared.statCard('', hadirMaghrib, 'Kehadiran Maghrib', '#22C55E')}
+        ${Shared.statCard('', hadirIsya, 'Kehadiran Isya', '#22C55E')}
       </div>`;
 
     // progress hafalan per halaqah (avg pages)
@@ -97,17 +97,17 @@ const Admin = (() => {
       ${kpi}
       <div class="grid cols-2 mt">
         <div class="clay-card">
-          <div class="section-title">📈 Progress Hafalan per Halaqah</div>
+          <div class="section-title"> Progress Hafalan per Halaqah</div>
           ${Shared.barChart(halaqahData, Math.max(1, ...halaqahData.map(d => d.value)))}
         </div>
         <div class="clay-card">
-          <div class="section-title">✅ Kehadiran Mingguan</div>
+          <div class="section-title"> Kehadiran Mingguan</div>
           ${Shared.barChart(kehadiranData, Math.max(1, ...kehadiranData.map(d => d.value)))}
         </div>
       </div>
       <div class="grid cols-2 mt">
         <div class="clay-card">
-          <div class="section-title">🏆 Ranking Halaqah</div>
+          <div class="section-title"> Ranking Halaqah</div>
           ${db.halaqah.map((h, i) => {
             const ss = db.santri.filter(s => s.halaqah === h.nama);
             const total = ss.reduce((a, s) => { const hh = Store.totalHafalanSantri(s.id); return a + (hh ? hh.pages : 0); }, 0);
@@ -115,14 +115,14 @@ const Admin = (() => {
           }).join('')}
         </div>
         <div class="clay-card">
-          <div class="section-title">⚡ Quick Action</div>
+          <div class="section-title"> Quick Action</div>
           <div class="row">
             <button class="clay-btn primary" data-go="admin_santri">+ Santri</button>
             <button class="clay-btn secondary" data-go="admin_ustadz">+ Ustadz</button>
             <button class="clay-btn" data-go="admin_halaqah">+ Halaqah</button>
-            <button class="clay-btn ghost" id="qa-import">⬇ Import Excel</button>
+            <button class="clay-btn ghost" id="qa-import"> Import Excel</button>
           </div>
-          <div class="section-title mt">🕓 Aktivitas Terakhir</div>
+          <div class="section-title mt"> Aktivitas Terakhir</div>
           ${db.logAktivitas.slice(0, 6).map(l => `<div class="row center" style="justify-content:space-between;padding:6px 0"><span class="muted" style="font-size:13px">${UI.esc(l.aksi)}</span><span class="muted" style="font-size:12px">${UI.fmtDateTime(l.tanggal)}</span></div>`).join('') || '<div class="empty">Belum ada aktivitas.</div>'}
         </div>
       </div>`;
@@ -144,8 +144,8 @@ const Admin = (() => {
       <td>${UI.esc(s.kelas)}</td>
       <td><span class="badge ${s.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(s.status)}</span></td>
       <td>
-        <button class="clay-btn sm" data-edit="${s.id}">✏️</button>
-        <button class="clay-btn sm danger" data-del="${s.id}">🗑</button>
+        <button class="clay-btn sm" data-edit="${s.id}"></button>
+        <button class="clay-btn sm danger" data-del="${s.id}"></button>
       </td>
     </tr>`).join('');
     document.getElementById('view-content').innerHTML = `
@@ -153,7 +153,7 @@ const Admin = (() => {
         <div class="row" style="justify-content:space-between">
           <div class="section-title" style="margin:0">Daftar Santri (${db.santri.length})</div>
           <div class="row">
-            <button class="clay-btn ghost" id="btn-import">⬇ Import Excel</button>
+            <button class="clay-btn ghost" id="btn-import"> Import Excel</button>
             <button class="clay-btn primary" id="btn-add">+ Tambah Santri</button>
           </div>
         </div>
@@ -249,7 +249,7 @@ const Admin = (() => {
     const body = `
       <p class="muted">Kolom: Nama | NIS | JK (L/P) | Wali | HP Wali | Level | Halaqah</p>
       <div class="row">
-        <button class="clay-btn ghost" id="imp-template">⬇ Download Template Excel</button>
+        <button class="clay-btn ghost" id="imp-template"> Download Template Excel</button>
       </div>
       <label class="field-label mt" for="imp-file">Pilih file template yang sudah diisi (.xls atau .csv)</label>
       <input class="clay-input" id="imp-file" type="file" accept=".xls,.csv,text/csv,application/vnd.ms-excel" />
@@ -317,8 +317,8 @@ const Admin = (() => {
         <td>${UI.esc(u.halaqah)}</td>
         <td><span class="badge ${u.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(u.status)}</span></td>
         <td>
-          <button class="clay-btn sm" data-edit="${u.id}">✏️</button>
-          <button class="clay-btn sm danger" data-del="${u.id}">🗑</button>
+          <button class="clay-btn sm" data-edit="${u.id}"></button>
+          <button class="clay-btn sm danger" data-del="${u.id}"></button>
         </td>
       </tr>`;
     }).join('');
@@ -327,7 +327,7 @@ const Admin = (() => {
         <div class="row" style="justify-content:space-between">
           <div class="section-title" style="margin:0">Daftar Ustadz (${db.ustadz.length})</div>
           <div class="row">
-            <button class="clay-btn ghost" id="btn-import">⬇ Import Excel</button>
+            <button class="clay-btn ghost" id="btn-import"> Import Excel</button>
             <button class="clay-btn primary" id="btn-add">+ Tambah Ustadz</button>
           </div>
         </div>
@@ -402,7 +402,7 @@ const Admin = (() => {
   function importUstadzDialog() {
     const body = `<p class="muted">Kolom: Nama | No HP | Email | Status | Halaqah | Username | Password</p>
       <div class="row">
-        <button class="clay-btn ghost" id="imp-template">⬇ Download Template Excel</button>
+        <button class="clay-btn ghost" id="imp-template"> Download Template Excel</button>
       </div>
       <label class="field-label mt" for="imp-file">Pilih file template yang sudah diisi (.xls atau .csv)</label>
       <input class="clay-input" id="imp-file" type="file" accept=".xls,.csv,text/csv,application/vnd.ms-excel" />
@@ -444,8 +444,8 @@ const Admin = (() => {
     const db = Store.get();
     const cards = db.halaqah.map(h => `<div class="clay-card pad-sm">
       <div class="row center" style="justify-content:space-between">
-        <b>🏫 ${UI.esc(h.nama)}</b>
-        <div><button class="clay-btn sm" data-edit="${h.id}">✏️</button> <button class="clay-btn sm danger" data-del="${h.id}">🗑</button></div>
+        <b> ${UI.esc(h.nama)}</b>
+        <div><button class="clay-btn sm" data-edit="${h.id}"></button> <button class="clay-btn sm danger" data-del="${h.id}"></button></div>
       </div>
       <div class="muted" style="font-size:13px;margin-top:8px">
         Ustadz: ${UI.esc(h.ustadz)} · Level: ${UI.esc(h.level)}<br>
@@ -507,7 +507,7 @@ const Admin = (() => {
     </tr>`).join('');
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card">
-        <div class="section-title">📜 Database Surat (${SURAHS.length})</div>
+        <div class="section-title"> Database Surat (${SURAHS.length})</div>
         <div class="table-wrap"><table class="clay-table">
           <thead><tr><th>#</th><th>Nama</th><th>Ayat</th><th>Hal Awal</th><th>Hal Akhir</th><th>Juz</th></tr></thead>
           <tbody>${rows}</tbody>
@@ -574,7 +574,7 @@ const Admin = (() => {
     const db = Store.get();
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card mb">
-        <div class="section-title">🔎 Filter Laporan</div>
+        <div class="section-title"> Filter Laporan</div>
         <div class="row">
           <div style="flex:1">${UI.field('Bulan', `<input type="month" class="clay-input" id="f-bulan" value="${Store.todayStr().slice(0, 7)}">`)}</div>
           <div style="flex:1">${UI.field('Halaqah', `<select class="clay-select" id="f-halaqah"><option value="">Semua</option>${UI.optionsFromList(db.halaqah.map(h => ({ v: h.nama, l: h.nama })), 'v', 'l')}</select>`)}</div>
@@ -608,7 +608,7 @@ const Admin = (() => {
     const db = Store.get(); const s = db.settings;
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card mb">
-        <div class="section-title">⚙️ Informasi Lembaga</div>
+        <div class="section-title"> Informasi Lembaga</div>
         ${UI.field('Nama Lembaga', `<input class="clay-input" id="s-nama" value="${UI.esc(s.namaLembaga)}">`)}
         ${UI.field('Alamat', `<input class="clay-input" id="s-alamat" value="${UI.esc(s.alamat)}">`)}
         <div class="row">
@@ -627,7 +627,7 @@ const Admin = (() => {
         </div>
       </div>
       <div class="clay-card mb">
-        <div class="section-title">🔔 Pengaturan Notifikasi</div>
+        <div class="section-title"> Pengaturan Notifikasi</div>
         <div class="row">
           <label style="flex:1;display:flex;align-items:center;gap:8px;margin-top:12px">
             <button class="clay-toggle ${s.notifActive ? 'on' : ''}" id="s-notif-active"></button>
@@ -650,9 +650,9 @@ const Admin = (() => {
       </div>
       <div class="clay-card">
         <div class="row">
-          <button class="clay-btn primary" id="btn-save">💾 Simpan</button>
-          <button class="clay-btn ghost" id="btn-backup">💾 Backup Database</button>
-          <button class="clay-btn danger" id="btn-reset">♻ Reset Data Demo</button>
+          <button class="clay-btn primary" id="btn-save"> Simpan</button>
+          <button class="clay-btn ghost" id="btn-backup"> Backup Database</button>
+          <button class="clay-btn danger" id="btn-reset"> Reset Data Demo</button>
         </div>
       </div>`;
     document.getElementById('s-setoran-multi').onclick = function() {

@@ -212,7 +212,7 @@ const Store = (() => {
               const uObj = hObj ? Store.findUstadzByName(hObj.ustadz) : null;
               const uUser = db.settings.notifUstadz && uObj ? db.users.find(u => u.role === 'ustadz' && u.refId === uObj.id) : null;
               const tglTxt = UI.fmtDate(tgl);
-              const pesan = '⚠️ ' + s.nama + ' belum setoran pada ' + tglTxt + '. Mohon dampingi anak untuk setoran.';
+              const pesan = ' ' + s.nama + ' belum setoran pada ' + tglTxt + '. Mohon dampingi anak untuk setoran.';
               const pesanU = s.nama + ' belum setoran pada ' + tglTxt + '.';
               if (wUser && !db.notifikasi.some(n => n.userId === wUser.id && n.pesan === pesan)) { addNotif(wUser.id, 'wali', pesan); notifCount++; }
               if (uUser && !db.notifikasi.some(n => n.userId === uUser.id && n.pesan === pesanU)) { addNotif(uUser.id, 'ustadz', pesanU); notifCount++; }

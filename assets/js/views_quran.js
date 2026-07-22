@@ -46,8 +46,8 @@ const Quran = (() => {
         <div class="row" style="align-items:flex-end">
           <div style="flex:2">${UI.field('Surat', `<select class="clay-select" id="q-surah">${options}</select>`)}</div>
           <div style="flex:1">${UI.field('Mode', `<select class="clay-select" id="q-mode">
-            <option value="mushaf" ${state.mode === 'mushaf' ? 'selected' : ''}>📖 Mushaf</option>
-            <option value="terjemah" ${state.mode === 'terjemah' ? 'selected' : ''}>🌐 + Terjemah</option>
+            <option value="mushaf" ${state.mode === 'mushaf' ? 'selected' : ''}> Mushaf</option>
+            <option value="terjemah" ${state.mode === 'terjemah' ? 'selected' : ''}> + Terjemah</option>
           </select>`)}</div>
           <div style="flex:1" id="q-trans-wrap" class="${state.mode === 'mushaf' ? 'hidden' : ''}">${UI.field('Bahasa', `<select class="clay-select" id="q-trans">
             <option value="id" ${state.trans === 'id' ? 'selected' : ''}>🇮🇩 Indonesia</option>
@@ -114,7 +114,7 @@ const Quran = (() => {
       render();
       renderAyahs(ayahs);
     } catch (e) {
-      content.innerHTML = `<div class="empty">⚠️ ${UI.esc(e.message)}<br><button class="clay-btn primary mt" onclick="Quran.retry()">Coba Lagi</button></div>`;
+      content.innerHTML = `<div class="empty"> ${UI.esc(e.message)}<br><button class="clay-btn primary mt" onclick="Quran.retry()">Coba Lagi</button></div>`;
     }
   }
 
@@ -132,7 +132,7 @@ const Quran = (() => {
           ${showTrans ? `<div class="q-trans">${UI.esc(state.trans === 'id' ? a.id : a.en)}</div>` : ''}
         </div>
       </div>`).join('');
-    const pageBadge = state.mode === 'mushaf' ? `<div class="q-page-badge">📄 Halaman Mushaf ${state.page}</div>` : '';
+    const pageBadge = state.mode === 'mushaf' ? `<div class="q-page-badge"> Halaman Mushaf ${state.page}</div>` : '';
     content.innerHTML = `<div class="clay-card q-reader">${pageBadge}${html}</div>`;
   }
 
@@ -153,11 +153,11 @@ const Quran = (() => {
   }
 
   function renderPublicShell() {
-    const nav = `<button class="nav-item active" data-view="quran"><span class="ico">📖</span> Al-Qur'an</button>`;
+    const nav = `<button class="nav-item active" data-view="quran"><span class="ico"></span> Al-Qur'an</button>`;
     document.getElementById('app').innerHTML = `
       <div class="app-shell">
         <aside class="sidebar" id="sidebar">
-          <div class="brand"><span class="logo">📖</span> Tahfidzku</div>
+          <div class="brand"><span class="logo"></span> Tahfidzku</div>
           ${nav}
           <div class="spacer"></div>
           <div class="user-box">
