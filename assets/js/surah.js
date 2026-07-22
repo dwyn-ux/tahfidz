@@ -155,13 +155,13 @@ function pageToJuz(page) {
   return juz;
 }
 
-/* Surah pertama dalam sebuah juz */
+/* Surah pertama yang dimulai dalam sebuah juz (forward: surah pertama dengan page >= batas juz) */
 function firstSurahOfJuz(juz) {
   const page = JUZ_PAGES[juz - 1];
-  for (let i = SURAHS.length - 1; i >= 0; i--) {
-    if (SURAHS[i].page <= page) return SURAHS[i].n;
+  for (let i = 0; i < SURAHS.length; i++) {
+    if (SURAHS[i].page >= page) return SURAHS[i].n;
   }
-  return 1;
+  return 114;
 }
 
 /* Surah terakhir dalam sebuah juz */
