@@ -108,7 +108,13 @@ const Store = (() => {
 
   function uid(prefix) { return (prefix || 'id') + '_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4); }
   function nowISO() { return new Date().toISOString(); }
-  function todayStr() { return new Date().toISOString().slice(0, 10); }
+  function todayStr() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
 
   function log(aksi) {
     const s = getSession();
@@ -190,9 +196,16 @@ const Store = (() => {
      Agar tidak duplikat, pasangan (santriId|tanggal) disimpan di db.setoranNotif. */
   function isHariKerja(d) { const h = d.getDay(); return h >= 1 && h <= 5; } // 1=Sen, 5=Jum
 
+  function todayLocal(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
   function checkSetoranTerlewat() {
     if (!db.settings.notifActive) return;
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const today = todayStr();
     if (!db.setoranNotif) db.setoranNotif = [];
     const sudah = (sid, tgl) => db.setoranNotif.some(x => x.santriId === sid && x.tanggal === tgl);
     const tandai = (sid, tgl) => { if (!sudah(sid, tgl)) db.setoranNotif.push({ santriId: sid, tanggal: tgl }); };
@@ -200,12 +213,12 @@ const Store = (() => {
     let notifCount = 0;
 
     db.santri.filter(s => s.status === 'Aktif').forEach(s => {
-      const kemarin = new Date(today); kemarin.setDate(kemarin.getDate() - 1);
+      const kemarin = new Date(); kemarin.setDate(kemarin.getDate() - 1);
       const mulai = new Date(kemarin); mulai.setDate(mulai.getDate() - 6);
       const cek = new Date(mulai);
       while (cek <= kemarin) {
         if (isHariKerja(cek)) {
-          const tgl = cek.toISOString().slice(0, 10);
+          const tgl = todayLocal(cek);
           if (!sudah(s.id, tgl) && notifCount < maxNotif) {
             const adaSetoran = db.ziyadahHafalan.some(z => z.santriId === s.id && z.tanggal === tgl)
               || db.ziyadahBacaan.some(z => z.santriId === s.id && z.tanggal === tgl)
