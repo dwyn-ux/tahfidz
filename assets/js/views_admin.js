@@ -41,18 +41,18 @@ const Admin = (() => {
 
   function nav(active) {
     return [
-      { view: 'admin_dashboard', label: 'Dashboard', ico: '📊', active: active === 'admin_dashboard' },
-      { view: 'admin_santri', label: 'Santri', ico: '🧒', active: active === 'admin_santri' },
-      { view: 'admin_ustadz', label: 'Ustadz', ico: '🧑‍🏫', active: active === 'admin_ustadz' },
-      { view: 'admin_halaqah', label: 'Halaqah', ico: '🏫', active: active === 'admin_halaqah' },
-      { view: 'admin_master', label: 'Master Surat', ico: '📜', active: active === 'admin_master' },
-      { view: 'ustadz_absensi', label: 'Absensi', ico: '✅', active: active === 'ustadz_absensi' },
-      { view: 'ustadz_pembelajaran', label: 'Pembelajaran', ico: '📝', active: active === 'ustadz_pembelajaran' },
-      { view: 'admin_riwayat', label: 'Riwayat', ico: '🕓', active: active === 'admin_riwayat' },
-      { view: 'admin_laporan', label: 'Laporan', ico: '📈', active: active === 'admin_laporan' },
-      { view: 'admin_notif', label: 'Notifikasi', ico: '🔔', active: active === 'admin_notif' },
-      { view: 'admin_settings', label: 'Settings', ico: '⚙️', active: active === 'admin_settings' },
-      { view: 'quran', label: 'Al-Qur\'an', ico: '📖', active: active === 'quran' }
+      { view: 'admin_dashboard', label: 'Dashboard', active: active === 'admin_dashboard' },
+      { view: 'admin_santri', label: 'Santri', active: active === 'admin_santri' },
+      { view: 'admin_ustadz', label: 'Ustadz', active: active === 'admin_ustadz' },
+      { view: 'admin_halaqah', label: 'Halaqah', active: active === 'admin_halaqah' },
+      { view: 'admin_master', label: 'Master Surat', active: active === 'admin_master' },
+      { view: 'ustadz_absensi', label: 'Absensi', active: active === 'ustadz_absensi' },
+      { view: 'ustadz_pembelajaran', label: 'Pembelajaran', active: active === 'ustadz_pembelajaran' },
+      { view: 'admin_riwayat', label: 'Riwayat', active: active === 'admin_riwayat' },
+      { view: 'admin_laporan', label: 'Laporan', active: active === 'admin_laporan' },
+      { view: 'admin_notif', label: 'Notifikasi', active: active === 'admin_notif' },
+      { view: 'admin_settings', label: 'Settings', active: active === 'admin_settings' },
+      { view: 'quran', label: 'Al-Qur\'an', active: active === 'quran' }
     ];
   }
 
@@ -63,6 +63,11 @@ const Admin = (() => {
     Shared.setHeader('Dashboard Admin', 'Ringkasan lembaga');
     const db = Store.get();
     const totalHafalanPages = db.santri.reduce((acc, s) => { const h = Store.totalHafalanSantri(s.id); return acc + (h ? h.pages : 0); }, 0);
+    const bulanIni = Store.todayStr().slice(0, 7);
+    const hadirSubuh = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Subuh' && k.status === 'Hadir').length;
+    const hadirMaghrib = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Maghrib' && k.status === 'Hadir').length;
+    const hadirIsya = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Isya' && k.status === 'Hadir').length;
+
     const kpi = `
       <div class="grid kpi">
         ${Shared.statCard('🧒', db.santri.length, 'Santri', '#16A34A')}
@@ -71,6 +76,11 @@ const Admin = (() => {
         ${Shared.statCard('📖', db.santri.filter(s => s.level === 'Tahsin').length, 'Tahsin', '#22C55E')}
         ${Shared.statCard('📝', db.santri.filter(s => s.level === 'Ziyadah').length, 'Ziyadah', '#3B82F6')}
         ${Shared.statCard('🏆', db.santri.filter(s => s.level === 'Mutqin').length, 'Mutqin', '#16A34A')}
+      </div>
+      <div class="grid kpi mt">
+        ${Shared.statCard('🌅', hadirSubuh, 'Kehadiran Subuh', '#22C55E')}
+        ${Shared.statCard('🌇', hadirMaghrib, 'Kehadiran Maghrib', '#22C55E')}
+        ${Shared.statCard('🌙', hadirIsya, 'Kehadiran Isya', '#22C55E')}
       </div>`;
 
     // progress hafalan per halaqah (avg pages)
@@ -513,12 +523,48 @@ const Admin = (() => {
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card">
         <label class="field-label">Pilih Santri</label>
-        <select class="clay-select" id="pick-santri">${UI.optionsFromList(db.santri.map(s => ({ v: s.id, l: s.nama + ' (' + s.nis + ')' })), 'v', 'l', db.santri[0] && db.santri[0].id)}</select>
+        <input class="clay-input" id="riwayat-search" type="text" placeholder="Ketik nama atau NIS santri..." autocomplete="off" />
+        <select class="clay-select mt" id="pick-santri" style="display:none"></select>
         <div id="riwayat-content" class="mt"></div>
       </div>`;
+    const searchInput = document.getElementById('riwayat-search');
     const pick = document.getElementById('pick-santri');
-    const render = () => { document.getElementById('riwayat-content').innerHTML = Shared.renderRiwayat(pick.value); };
-    pick.onchange = render; render();
+    let selectedSantriId = db.santri[0] && db.santri[0].id;
+    
+    function updateList() {
+      const term = searchInput.value.trim().toLowerCase();
+      const filtered = db.santri.filter(s => {
+        return s.nama.toLowerCase().includes(term) || (s.nis && s.nis.toString().includes(term));
+      });
+      const options = filtered.map(s => `<option value="${s.id}" ${s.id === selectedSantriId ? 'selected' : ''}>${s.nama} (${s.nis})</option>`).join('');
+      pick.innerHTML = options;
+      pick.style.display = filtered.length ? 'block' : 'none';
+      if (filtered.length && !filtered.some(s => s.id === selectedSantriId)) {
+        selectedSantriId = filtered[0].id;
+        pick.value = selectedSantriId;
+      }
+      renderRiwayat();
+    }
+    
+    function renderRiwayat() {
+      if (selectedSantriId) {
+        document.getElementById('riwayat-content').innerHTML = Shared.renderRiwayat(selectedSantriId);
+      } else {
+        document.getElementById('riwayat-content').innerHTML = '<div class="empty">Pilih santri terlebih dahulu.</div>';
+      }
+    }
+    
+    let searchTimeout = null;
+    searchInput.oninput = () => {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(updateList, 200);
+    };
+    pick.onchange = () => {
+      selectedSantriId = pick.value;
+      renderRiwayat();
+    };
+    
+    updateList();
   }
 
   /* ---------------- Laporan ---------------- */
@@ -561,7 +607,7 @@ const Admin = (() => {
     Shared.setHeader('Setting Umum', 'Konfigurasi lembaga');
     const db = Store.get(); const s = db.settings;
     document.getElementById('view-content').innerHTML = `
-      <div class="clay-card">
+      <div class="clay-card mb">
         <div class="section-title">⚙️ Informasi Lembaga</div>
         ${UI.field('Nama Lembaga', `<input class="clay-input" id="s-nama" value="${UI.esc(s.namaLembaga)}">`)}
         ${UI.field('Alamat', `<input class="clay-input" id="s-alamat" value="${UI.esc(s.alamat)}">`)}
@@ -579,7 +625,31 @@ const Admin = (() => {
             <span id="s-setoran-label" style="font-size:13px">${s.setoranMulti ? 'Berkali-kali per hari' : 'Sekali sehari'}</span>
           </label>
         </div>
-        <div class="row mt">
+      </div>
+      <div class="clay-card mb">
+        <div class="section-title">🔔 Pengaturan Notifikasi</div>
+        <div class="row">
+          <label style="flex:1;display:flex;align-items:center;gap:8px;margin-top:12px">
+            <button class="clay-toggle ${s.notifActive ? 'on' : ''}" id="s-notif-active"></button>
+            <span id="s-notif-active-label" style="font-size:13px">${s.notifActive ? 'Notifikasi Aktif' : 'Notifikasi Nonaktif'}</span>
+          </label>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <label style="flex:1;display:flex;align-items:center;gap:8px">
+            <button class="clay-toggle ${s.notifWali ? 'on' : ''}" id="s-notif-wali"></button>
+            <span id="s-notif-wali-label" style="font-size:13px">${s.notifWali ? 'Kirim ke Wali: Ya' : 'Kirim ke Wali: Tidak'}</span>
+          </label>
+          <label style="flex:1;display:flex;align-items:center;gap:8px">
+            <button class="clay-toggle ${s.notifUstadz ? 'on' : ''}" id="s-notif-ustadz"></button>
+            <span id="s-notif-ustadz-label" style="font-size:13px">${s.notifUstadz ? 'Kirim ke Ustadz: Ya' : 'Kirim ke Ustadz: Tidak'}</span>
+          </label>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div style="flex:1">${UI.field('Maks Notif per Hari', `<input class="clay-input" id="s-notif-max" type="number" min="1" max="20" value="${s.notifMaxPerDay || 3}">`)}</div>
+        </div>
+      </div>
+      <div class="clay-card">
+        <div class="row">
           <button class="clay-btn primary" id="btn-save">💾 Simpan</button>
           <button class="clay-btn ghost" id="btn-backup">💾 Backup Database</button>
           <button class="clay-btn danger" id="btn-reset">♻ Reset Data Demo</button>
@@ -591,6 +661,18 @@ const Admin = (() => {
       document.getElementById('s-setoran-label').textContent = on ? 'Berkali-kali per hari' : 'Sekali sehari';
     };
 
+    ['s-notif-active', 's-notif-wali', 's-notif-ustadz'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.onclick = function() {
+        this.classList.toggle('on');
+        const on = this.classList.contains('on');
+        const label = document.getElementById(id + '-label');
+        if (id === 's-notif-active') label.textContent = on ? 'Notifikasi Aktif' : 'Notifikasi Nonaktif';
+        else if (id === 's-notif-wali') label.textContent = on ? 'Kirim ke Wali: Ya' : 'Kirim ke Wali: Tidak';
+        else if (id === 's-notif-ustadz') label.textContent = on ? 'Kirim ke Ustadz: Ya' : 'Kirim ke Ustadz: Tidak';
+      };
+    });
+
     document.getElementById('btn-save').onclick = () => {
       const db = Store.get();
       db.settings.namaLembaga = document.getElementById('s-nama').value.trim();
@@ -601,6 +683,10 @@ const Admin = (() => {
       db.settings.jamBelajar = document.getElementById('s-jam').value.trim();
       db.settings.defaultPasswordFormat = document.getElementById('s-pass').value.trim() || '12345678';
       db.settings.setoranMulti = document.getElementById('s-setoran-multi').classList.contains('on');
+      db.settings.notifActive = document.getElementById('s-notif-active').classList.contains('on');
+      db.settings.notifWali = document.getElementById('s-notif-wali').classList.contains('on');
+      db.settings.notifUstadz = document.getElementById('s-notif-ustadz').classList.contains('on');
+      db.settings.notifMaxPerDay = parseInt(document.getElementById('s-notif-max').value) || 3;
       Store.save(); Store.log('Update settings'); UI.toast('Settings tersimpan', 'success');
     };
     document.getElementById('btn-backup').onclick = () => {

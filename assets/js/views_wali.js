@@ -5,12 +5,12 @@ const Wali = (() => {
 
   function nav(active) {
     return [
-      { view: 'wali_dashboard', label: 'Dashboard', ico: '📊', active: active === 'wali_dashboard' },
-      { view: 'wali_perkembangan', label: 'Perkembangan', ico: '📈', active: active === 'wali_perkembangan' },
-      { view: 'wali_absensi', label: 'Absensi', ico: '✅', active: active === 'wali_absensi' },
-      { view: 'wali_catatan', label: 'Catatan', ico: '📝', active: active === 'wali_catatan' },
-      { view: 'wali_profil', label: 'Profil', ico: '👤', active: active === 'wali_profil' },
-      { view: 'quran', label: 'Al-Qur\'an', ico: '📖', active: active === 'quran' }
+      { view: 'wali_dashboard', label: 'Dashboard', active: active === 'wali_dashboard' },
+      { view: 'wali_perkembangan', label: 'Perkembangan', active: active === 'wali_perkembangan' },
+      { view: 'wali_absensi', label: 'Absensi', active: active === 'wali_absensi' },
+      { view: 'wali_catatan', label: 'Catatan', active: active === 'wali_catatan' },
+      { view: 'wali_profil', label: 'Profil', active: active === 'wali_profil' },
+      { view: 'quran', label: 'Al-Qur\'an', active: active === 'quran' }
     ];
   }
 

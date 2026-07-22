@@ -5,13 +5,13 @@ const Ustadz = (() => {
 
   function nav(active) {
     return [
-      { view: 'ustadz_dashboard', label: 'Dashboard', ico: '📊', active: active === 'ustadz_dashboard' },
-      { view: 'ustadz_absensi', label: 'Absensi', ico: '✅', active: active === 'ustadz_absensi' },
-      { view: 'ustadz_pembelajaran', label: 'Pembelajaran', ico: '📝', active: active === 'ustadz_pembelajaran' },
-      { view: 'ustadz_riwayat', label: 'Riwayat', ico: '🕓', active: active === 'ustadz_riwayat' },
-      { view: 'ustadz_laporan', label: 'Laporan', ico: '📈', active: active === 'ustadz_laporan' },
-      { view: 'ustadz_notif', label: 'Notifikasi', ico: '🔔', active: active === 'ustadz_notif' },
-      { view: 'quran', label: 'Al-Qur\'an', ico: '📖', active: active === 'quran' }
+      { view: 'ustadz_dashboard', label: 'Dashboard', active: active === 'ustadz_dashboard' },
+      { view: 'ustadz_absensi', label: 'Absensi', active: active === 'ustadz_absensi' },
+      { view: 'ustadz_pembelajaran', label: 'Pembelajaran', active: active === 'ustadz_pembelajaran' },
+      { view: 'ustadz_riwayat', label: 'Riwayat', active: active === 'ustadz_riwayat' },
+      { view: 'ustadz_laporan', label: 'Laporan', active: active === 'ustadz_laporan' },
+      { view: 'ustadz_notif', label: 'Notifikasi', active: active === 'ustadz_notif' },
+      { view: 'quran', label: 'Al-Qur\'an', active: active === 'quran' }
     ];
   }
 
@@ -63,10 +63,28 @@ const Ustadz = (() => {
       const b = santri.length - (db.kehadiran.filter(k => k.tanggal === t && k.sesi === s && santri.some(x => x.id === k.santriId)).length);
       return { s, h, i, b };
     });
+    const bulanIni = Store.todayStr().slice(0, 7);
+    const kehadiranBulan = santri.map(s => {
+      const k = Store.kehadiranBulan(s.id, bulanIni);
+      return {
+        subuh: k.filter(k => k.sesi === 'Subuh' && k.status === 'Hadir').length,
+        maghrib: k.filter(k => k.sesi === 'Maghrib' && k.status === 'Hadir').length,
+        isya: k.filter(k => k.sesi === 'Isya' && k.status === 'Hadir').length
+      };
+    });
+    const totalSubuh = kehadiranBulan.reduce((a, b) => a + b.subuh, 0);
+    const totalMaghrib = kehadiranBulan.reduce((a, b) => a + b.maghrib, 0);
+    const totalIsya = kehadiranBulan.reduce((a, b) => a + b.isya, 0);
+
     document.getElementById('view-content').innerHTML = `
       <div class="grid kpi">
         ${Shared.statCard('🏫', santri.length, 'Santri Diampu', '#16A34A')}
         ${sesiStats.map(st => Shared.statCard(st.s === 'Subuh' ? '🌅' : st.s === 'Maghrib' ? '🌇' : '🌙', st.h + '/' + santri.length + ' Hadir', st.s, '#22C55E')).join('')}
+      </div>
+      <div class="grid kpi mt">
+        ${Shared.statCard('🌅', totalSubuh, 'Kehadiran Subuh (Bulan Ini)', '#22C55E')}
+        ${Shared.statCard('🌇', totalMaghrib, 'Kehadiran Maghrib (Bulan Ini)', '#22C55E')}
+        ${Shared.statCard('🌙', totalIsya, 'Kehadiran Isya (Bulan Ini)', '#22C55E')}
       </div>
       <div class="grid cols-2 mt">
         <div class="clay-card">
@@ -458,16 +476,322 @@ const Ustadz = (() => {
     const c = ctx(); _scope = c.scope;
     Shared.shell(c.role, nav('ustadz_riwayat'), '');
     Shared.setHeader('Riwayat Santri', 'Histori per santri');
+    
     const db = Store.get();
+    
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card">
-        <label class="field-label">Pilih Santri</label>
-        <select class="clay-select" id="pick-santri">${UI.optionsFromList(mySantri().map(s => ({ v: s.id, l: s.nama })), 'v', 'l', mySantri()[0] && mySantri()[0].id)}</select>
+        <div class="row" style="align-items:center">
+          <div style="flex:1">
+            <label class="field-label">Cari Santri</label>
+            <input class="clay-input" id="riwayat-search" type="text" placeholder="🔍 Ketik untuk mencari santri..." autocomplete="off" />
+          </div>
+          <div style="flex:1">
+            <label class="field-label">Filter per Halaqah</label>
+            <select class="clay-select" id="riwayat-halaqah">
+              <option value="">Semua Halaqah</option>
+              ${myHalaqah() ? `<option value="${myHalaqah()}">${myHalaqah()}</option>` : ''}
+              ${myHalaqah() ? `<option value="other">Halaqah Lain</option>` : ''}
+            </select>
+          </div>
+        </div>
         <div id="riwayat-content" class="mt"></div>
       </div>`;
-    const pick = document.getElementById('pick-santri');
-    const render = () => { document.getElementById('riwayat-content').innerHTML = Shared.renderRiwayat(pick.value); };
-    pick.onchange = render; render();
+    
+    const searchInput = document.getElementById('riwayat-search');
+    const halaqahSelect = document.getElementById('riwayat-halaqah');
+    
+    let filteredSantri = mySantri();
+    let selectedSantriId = filteredSantri[0] && filteredSantri[0].id;
+    let viewMode = 'santri';
+    let periodeFilter = 'all';
+    
+    document.getElementById('view-content').innerHTML += `
+      <div class="riwayat-tabs mt" style="border-bottom: 1px solid #e5e7eb; margin: 0 -22px 22px -22px; padding: 0 22px;">
+        <div style="display:flex; gap: 8px;">
+          <button class="riwayat-tab clay-btn ghost ${viewMode === 'santri' ? 'active' : ''}" data-view="santri">Per Santri</button>
+          <button class="riwayat-tab clay-btn ghost ${viewMode === 'halaqah' ? 'active' : ''}" data-view="halaqah">Per Halaqah & Periode</button>
+        </div>
+      </div>
+      <div class="riwayat-periode-filter mt" style="display:none;">
+        <label class="field-label">Periode</label>
+        <div style="display:flex; gap: 10px;">
+          <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="riwayat-periode" value="all" checked> Semua</label>
+          <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="riwayat-periode" value="this-year"> Tahun Ini</label>
+          <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="riwayat-periode" value="this-month"> Bulan Ini</label>
+          <label style="display:flex; align-items:center; gap:5px;"><input type="radio" name="riwayat-periode" value="last-3"> 3 Bulan Terakhir</label>
+        </div>
+      </div>`;
+    
+    function updateRiwayat() {
+      const term = searchInput.value.trim().toLowerCase();
+      const halaqahFilter = halaqahSelect.value;
+      
+      filteredSantri = mySantri().filter(s => {
+        const nameMatch = s.nama.toLowerCase().includes(term);
+        const nisMatch = s.nis && s.nis.toString().includes(term);
+        const halaqahMatch = !halaqahFilter || halaqahFilter === 'other' ? true : s.halaqah === halaqahFilter;
+        return (nameMatch || nisMatch) && halaqahMatch;
+      });
+      
+      if (!selectedSantriId || !filteredSantri.some(s => s.id === selectedSantriId)) {
+        selectedSantriId = filteredSantri[0] && filteredSantri[0].id;
+      }
+      
+      renderView();
+    }
+    
+    const debouncedSearch = () => {
+      if (searchTimeout) clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(() => {
+        updateRiwayat();
+        searchTimeout = null;
+      }, 200);
+    };
+    
+    searchInput.oninput = debouncedSearch;
+    halaqahSelect.onchange = () => {
+      updateRiwayat();
+      UI.toast('Filter halaqah diubah', 'info');
+    };
+    
+    function renderView() {
+      const tabs = document.querySelectorAll('.riwayat-tab');
+      tabs.forEach(tab => {
+        tab.onclick = (e) => {
+          tabs.forEach(t => t.classList.remove('active'));
+          e.target.classList.add('active');
+          viewMode = e.target.dataset.view;
+          if (viewMode === 'halaqah') {
+            document.querySelector('.riwayat-periode-filter').style.display = 'block';
+          } else {
+            document.querySelector('.riwayat-periode-filter').style.display = 'none';
+          }
+          updateRiwayat();
+        };
+      });
+      
+      const periodeRadios = document.querySelectorAll('input[name="riwayat-periode"]');
+      periodeRadios.forEach(radio => {
+        radio.onchange = () => {
+          periodeFilter = radio.value;
+          updateRiwayat();
+        };
+      });
+      
+      const contentDiv = document.getElementById('riwayat-content');
+      
+      if (viewMode === 'santri') {
+        if (selectedSantriId) {
+          contentDiv.innerHTML = Shared.renderRiwayat(selectedSantriId);
+        } else {
+          contentDiv.innerHTML = '<div class="empty">Pilih santri terlebih dahulu.</div>';
+        }
+      } else {
+        if (selectedSantriId) {
+          const santri = Store.findSantri(selectedSantriId);
+          if (!santri) {
+            contentDiv.innerHTML = '<div class="empty">Santri tidak ditemukan.</div>';
+            return;
+          }
+          const halaqah = santri.halaqah;
+          const santriList = mySantri().filter(s => s.halaqah === halaqah);
+          if (!santriList.length) {
+            contentDiv.innerHTML = '<div class="empty">Tidak ada santri di halaqah ini.</div>';
+            return;
+          }
+          
+          let periodeKehadiran = {};
+          let periodeSetoran = {};
+          const now = new Date();
+          
+          santriList.forEach(st => {
+            const kehadiran = db.kehadiran.filter(k => k.santriId === st.id);
+            const tahsin = db.tahsin.filter(t => t.santriId === st.id);
+            const ziyadahHafalan = db.ziyadahHafalan.filter(z => z.santriId === st.id);
+            const ziyadahBacaan = db.ziyadahBacaan.filter(z => z.santriId === st.id);
+            const mutqin = db.mutqin.filter(m => m.santriId === st.id);
+            
+            if (periodeFilter === 'this-year') {
+              const tahun = now.getFullYear();
+              const filterFunc = (item) => new Date(item.tanggal).getFullYear() === tahun;
+              kehadiran.filter(filterFunc).forEach(k => {
+                if (!periodeKehadiran[k.tanggal]) periodeKehadiran[k.tanggal] = {};
+                periodeKehadiran[k.tanggal][st.id] = k;
+              });
+              tahsin.filter(filterFunc).forEach(t => {
+                if (!periodeSetoran[t.tanggal]) periodeSetoran[t.tanggal] = {};
+                periodeSetoran[t.tanggal][st.id] = { ...t, tipe: 'Tahsin' };
+              });
+              ziyadahHafalan.filter(filterFunc).forEach(z => {
+                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
+                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Hafalan' };
+              });
+              ziyadahBacaan.filter(filterFunc).forEach(z => {
+                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
+                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Bacaan' };
+              });
+              mutqin.filter(filterFunc).forEach(m => {
+                if (!periodeSetoran[m.tanggal]) periodeSetoran[m.tanggal] = {};
+                periodeSetoran[m.tanggal][st.id] = { ...m, tipe: 'Mutqin' };
+              });
+            } else if (periodeFilter === 'this-month') {
+              const bulan = now.getMonth();
+              const tahun = now.getFullYear();
+              const filterFunc = (item) => {
+                const d = new Date(item.tanggal);
+                return d.getMonth() === bulan && d.getFullYear() === tahun;
+              };
+              kehadiran.filter(filterFunc).forEach(k => {
+                if (!periodeKehadiran[k.tanggal]) periodeKehadiran[k.tanggal] = {};
+                periodeKehadiran[k.tanggal][st.id] = k;
+              });
+              tahsin.filter(filterFunc).forEach(t => {
+                if (!periodeSetoran[t.tanggal]) periodeSetoran[t.tanggal] = {};
+                periodeSetoran[t.tanggal][st.id] = { ...t, tipe: 'Tahsin' };
+              });
+              ziyadahHafalan.filter(filterFunc).forEach(z => {
+                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
+                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Hafalan' };
+              });
+              ziyadahBacaan.filter(filterFunc).forEach(z => {
+                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
+                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Bacaan' };
+              });
+              mutqin.filter(filterFunc).forEach(m => {
+                if (!periodeSetoran[m.tanggal]) periodeSetoran[m.tanggal] = {};
+                periodeSetoran[m.tanggal][st.id] = { ...m, tipe: 'Mutqin' };
+              });
+            } else if (periodeFilter === 'last-3') {
+              const tigaBulanLalu = new Date();
+              tigaBulanLalu.setMonth(threeBulanLalu.getMonth() - 3);
+              const filterFunc = (item) => new Date(item.tanggal) >= tigaBulanLalu;
+              kehadiran.filter(filterFunc).forEach(k => {
+                if (!periodeKehadiran[k.tanggal]) periodeKehadiran[k.tanggal] = {};
+                periodeKehadiran[k.tanggal][st.id] = k;
+              });
+              tahsin.filter(filterFunc).forEach(t => {
+                if (!periodeSetoran[t.tanggal]) periodeSetoran[t.tanggal] = {};
+                periodeSetoran[t.tanggal][st.id] = { ...t, tipe: 'Tahsin' };
+              });
+              ziyadahHafalan.filter(filterFunc).forEach(z => {
+                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
+                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Hafalan' };
+              });
+              ziyadahBacaan.filter(filterFunc).forEach(z => {
+                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
+                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Bacaan' };
+              });
+              mutqin.filter(filterFunc).forEach(m => {
+                if (!periodeSetoran[m.tanggal]) periodeSetoran[m.tanggal] = {};
+                periodeSetoran[m.tanggal][st.id] = { ...m, tipe: 'Mutqin' };
+              });
+            } else {
+              kehadiran.forEach(k => {
+                if (!periodeKehadiran[k.tanggal]) periodeKehadiran[k.tanggal] = {};
+                periodeKehadiran[k.tanggal][st.id] = k;
+              });
+              tahsin.forEach(t => {
+                if (!periodeSetoran[t.tanggal]) periodeSetoran[t.tanggal] = {};
+                periodeSetoran[t.tanggal][st.id] = { ...t, tipe: 'Tahsin' };
+              });
+              ziyadahHafalan.forEach(z => {
+                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
+                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Hafalan' };
+              });
+              ziyadahBacaan.forEach(z => {
+                if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
+                periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Bacaan' };
+              });
+              mutqin.forEach(m => {
+                if (!periodeSetoran[m.tanggal]) periodeSetoran[m.tanggal] = {};
+                periodeSetoran[m.tanggal][st.id] = { ...m, tipe: 'Mutqin' };
+              });
+            }
+          });
+          
+          const tanggalList = Object.keys({ ...periodeKehadiran, ...periodeSetoran }).sort().reverse();
+          
+          let tableHTML = `
+          <div class="clay-card" style="padding: 0">
+            <div class="table-wrap">
+              <table class="clay-table">
+                <thead>
+                  <tr>
+                    <th class="center">Periode</th>
+                    ${santriList.map(st => `<th class="center">${st.nama}</th>`).join('')}
+                  </tr>
+                </thead>
+                <tbody>`;
+          
+          tanggalList.forEach(tanggal => {
+            const bulan = new Date(tanggal).toLocaleDateString('id-ID', { month: 'short', year: 'numeric' });
+            let cols = `<td class="center" style="font-weight:600">${bulan}</td>`;
+            
+            santriList.forEach(st => {
+              const kehadiran = periodeKehadiran[tanggal] ? periodeKehadiran[tanggal][st.id] : null;
+              const setoran = periodeSetoran[tanggal] ? periodeSetoran[tanggal][st.id] : null;
+              
+              let status = 'Tidak Hadir';
+              let badgeClass = 'danger';
+              if (kehadiran) {
+                status = kehadiran.status;
+                badgeClass = kehadiran.status === 'Hadir' ? 'green' : kehadiran.status === 'Izin' ? 'warn' : kehadiran.status === 'Sakit' ? 'blue' : 'danger';
+              }
+              
+              let setoranInfo = '-';
+              if (setoran) {
+                if (setoran.tipe === 'Tahsin') {
+                  setoranInfo = `Tahsin: Hal ${setoran.halAwal}-${setoran.halAkhir} · Nilai ${setoran.nilai}`;
+                } else if (setoran.tipe === 'Ziyadah Hafalan') {
+                  setoranInfo = `Ziyadah: ${getSurah(setoran.sAwal).latin}:${setoran.aAwal} → ${getSurah(setoran.sAkhir).latin}:${setoran.aAkhir} · ${formatHafalan(computeHafalan(setoran.sAwal, setoran.aAwal, setoran.sAkhir, setoran.aAkhir))}`;
+                } else if (setoran.tipe === 'Ziyadah Bacaan') {
+                  setoranInfo = `Ziyadah Bacaan: ${getSurah(setoran.sAwal).latin}:${setoran.aAwal} → ${getSurah(setoran.sAkhir).latin}:${setoran.aAkhir}`;
+                } else if (setoran.tipe === 'Mutqin') {
+                  setoranInfo = `Mutqin: ${getSurah(setoran.sAwal).latin}:${setoran.aAwal} → ${getSurah(setoran.sAkhir).latin}:${setoran.aAkhir} · ${formatHafalan(computeHafalan(setoran.sAwal, setoran.aAwal, setoran.sAkhir, setoran.aAkhir))}`;
+                }
+              }
+              
+              cols += `<td class="center" style="padding:4px">
+                <div style="display:flex; flex-direction:column; gap:2px;">
+                  <div class="badge ${badgeClass}" style="font-size:11px; padding:2px 6px;">${status}</div>
+                  <div class="muted" style="font-size:11px; line-height:1.2;">${setoranInfo}</div>
+                </div>
+              </td>`;
+            });
+            
+            tableHTML += `<tr>${cols}</tr>`;
+          });
+          
+          tableHTML += `
+                </tbody>
+              </table>
+            </div>
+          </div>`;
+          
+          contentDiv.innerHTML = tableHTML;
+        } else {
+          contentDiv.innerHTML = '<div class="empty">Pilih santri terlebih dahulu.</div>';
+        }
+      }
+    }
+    
+    const tabBtns = document.querySelectorAll('.riwayat-tab');
+    tabBtns.forEach(btn => {
+      btn.onclick = (e) => {
+        tabBtns.forEach(t => t.classList.remove('active'));
+        e.target.classList.add('active');
+        viewMode = e.target.dataset.view;
+        if (viewMode === 'halaqah') {
+          document.querySelector('.riwayat-periode-filter').style.display = 'block';
+        } else {
+          document.querySelector('.riwayat-periode-filter').style.display = 'none';
+        }
+        updateRiwayat();
+      };
+    });
+    
+    updateRiwayat();
   }
 
   /* ---------------- Laporan ---------------- */

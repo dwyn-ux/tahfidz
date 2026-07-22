@@ -62,7 +62,7 @@ h1, h2, h3, h4, .brand { font-family: 'Poppins', sans-serif; }
 }
 .sidebar .brand .logo {
   width: 40px; height: 40px; border-radius: 14px;
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  background: var(--primary);
   display: grid; place-items: center; color: #fff; font-size: 20px;
   box-shadow: var(--shadow-clay-sm);
 }
@@ -78,7 +78,7 @@ h1, h2, h3, h4, .brand { font-family: 'Poppins', sans-serif; }
   background: var(--primary); color: #fff;
   box-shadow: var(--shadow-clay-sm);
 }
-.nav-item .ico { font-size: 18px; width: 22px; text-align: center; }
+/* .nav-item .ico removed — icons removed from nav */
 .sidebar .spacer { flex: 1; }
 .sidebar .user-box {
   background: var(--bg); border-radius: var(--radius-md);
@@ -226,7 +226,7 @@ label.field-label { display: block; font-size: 13px; font-weight: 600; margin: 1
 /* ---------- Charts (simple bars) ---------- */
 .bar-chart { display: flex; align-items: flex-end; gap: 10px; height: 180px; padding-top: 10px; }
 .bar-chart .bar {
-  flex: 1; background: linear-gradient(180deg, var(--primary), var(--secondary));
+  flex: 1; background: var(--primary);
   border-radius: 10px 10px 4px 4px; position: relative; min-height: 4px;
   box-shadow: var(--shadow-clay-sm); transition: height .4s ease;
 }

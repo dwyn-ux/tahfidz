@@ -14,7 +14,7 @@ const Shared = (() => {
 
     const nav = navItems.map(n => `
       <button class="nav-item ${n.active ? 'active' : ''}" data-view="${n.view}">
-        <span class="ico">${n.ico}</span> ${n.label}
+        ${n.label}
       </button>`).join('');
 
     document.getElementById('app').innerHTML = `
@@ -117,6 +117,98 @@ const Shared = (() => {
     if (!items.length) return `<div class="empty">Belum ada riwayat untuk ${UI.esc(s.nama)}.</div>`;
     return `<div class="timeline">${items.map(i =>
       `<div class="item"><div class="t">${UI.fmtDate(i.t)}</div><div class="d">${i.html}</div></div>`).join('')}</div>`;
+  }
+
+  function renderPerHalaqahRiwayat(santriId, periode) {
+    const db = Store.get();
+    const s = Store.findSantri(santriId);
+    if (!s) return `<div class="empty">Santri tidak ditemukan.</div>`;
+    
+    const santri = db.santri.filter(st => st.halaqah === s.halaqah);
+    if (!santri.length) return `<div class="empty">Tidak ada santri di halaqah yang sama.</div>`;
+    
+    const now = new Date();
+    let filterFunc = (item) => true;
+    if (periode === 'this-year') {
+      const tahun = now.getFullYear();
+      filterFunc = (item) => new Date(item.tanggal).getFullYear() === tahun;
+    } else if (periode === 'this-month') {
+      const bulan = now.getMonth();
+      const tahun = now.getFullYear();
+      filterFunc = (item) => { const d = new Date(item.tanggal); return d.getMonth() === bulan && d.getFullYear() === tahun; };
+    } else if (periode === 'last-3') {
+      const tigaBulanLalu = new Date();
+      tigaBulanLalu.setMonth(tigaBulanLalu.getMonth() - 3);
+      filterFunc = (item) => new Date(item.tanggal) >= tigaBulanLalu;
+    }
+    
+    let periodeKehadiran = {};
+    let periodeSetoran = {};
+    
+    santri.forEach(st => {
+      const kehadiran = db.kehadiran.filter(k => k.santriId === st.id);
+      const tahsin = db.tahsin.filter(t => t.santriId === st.id);
+      const ziyadahHafalan = db.ziyadahHafalan.filter(z => z.santriId === st.id);
+      const ziyadahBacaan = db.ziyadahBacaan.filter(z => z.santriId === st.id);
+      const mutqin = db.mutqin.filter(m => m.santriId === st.id);
+      
+      kehadiran.filter(filterFunc).forEach(k => {
+        if (!periodeKehadiran[k.tanggal]) periodeKehadiran[k.tanggal] = {};
+        periodeKehadiran[k.tanggal][st.id] = k;
+      });
+      tahsin.filter(filterFunc).forEach(t => {
+        if (!periodeSetoran[t.tanggal]) periodeSetoran[t.tanggal] = {};
+        periodeSetoran[t.tanggal][st.id] = { ...t, tipe: 'Tahsin' };
+      });
+      ziyadahHafalan.filter(filterFunc).forEach(z => {
+        if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
+        periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Hafalan' };
+      });
+      ziyadahBacaan.filter(filterFunc).forEach(z => {
+        if (!periodeSetoran[z.tanggal]) periodeSetoran[z.tanggal] = {};
+        periodeSetoran[z.tanggal][st.id] = { ...z, tipe: 'Ziyadah Bacaan' };
+      });
+      mutqin.filter(filterFunc).forEach(m => {
+        if (!periodeSetoran[m.tanggal]) periodeSetoran[m.tanggal] = {};
+        periodeSetoran[m.tanggal][st.id] = { ...m, tipe: 'Mutqin' };
+      });
+    });
+    
+    const tanggalList = Object.keys({ ...periodeKehadiran, ...periodeSetoran }).sort((a, b) => new Date(b) - new Date(a));
+    if (!tanggalList.length) return `<div class="empty">Belum ada riwayat untuk halaqah ini.</div>`;
+    
+    let table = `
+    <div class="clay-card" style="padding:0">
+      <div class="table-wrap">
+        <table class="clay-table" style="font-size:13px">
+          <thead>
+            <tr>
+              <th class="center">Tanggal</th>
+              ${santri.map(st => `<th class="center">${st.nama}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${tanggalList.map(tanggal => {
+              let cols = `<td class="center" style="font-weight:600;white-space:nowrap">${UI.fmtDate(new Date(tanggal))}</td>`;
+              santri.forEach(st => {
+                const k = periodeKehadiran[tanggal] ? periodeKehadiran[tanggal][st.id] : null;
+                const s = periodeSetoran[tanggal] ? periodeSetoran[tanggal][st.id] : null;
+                let status = k ? k.status : '-';
+                let badge = k ? (k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : 'danger') : 'gray';
+                let info = s ? (s.tipe || '') : '-';
+                cols += `<td style="padding:4px 6px">
+                  <span class="badge ${badge}" style="font-size:10px;padding:1px 5px">${status}</span>
+                  ${info !== '-' ? `<div class="muted" style="font-size:10px;line-height:1.2">${info}</div>` : ''}
+                </td>`;
+              });
+              return `<tr>${cols}</tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+    
+    return table;
   }
 
   /* ---------- Laporan (shared, role-aware) ---------- */
@@ -286,5 +378,5 @@ const Shared = (() => {
       </div>`).join('')}</div>`;
   }
 
-  return { shell, setHeader, setActions, statCard, barChart, progressCircle, renderRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadTemplateExcel, bulanLabel, renderNotifikasi };
+  return { shell, setHeader, setActions, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadTemplateExcel, bulanLabel, renderNotifikasi };
 })();
