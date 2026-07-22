@@ -21,7 +21,7 @@ const Shared = (() => {
       <div class="app-shell">
         <div class="scrim" id="scrim"></div>
         <aside class="sidebar" id="sidebar">
-          <div class="brand"><span class="logo"></span> Tahfidzku</div>
+          <div class="brand"><span class="logo">${db.settings.logo ? `<img src="${UI.esc(db.settings.logo)}" style="width:100%;height:100%;object-fit:cover;border-radius:14px">` : ''}</span> Tahfidzku</div>
           ${nav}
           <div class="spacer"></div>
           <div class="user-box">

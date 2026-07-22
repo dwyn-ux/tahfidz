@@ -639,9 +639,21 @@ const Admin = (() => {
     const db = Store.get(); const s = db.settings;
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card mb">
-        <div class="section-title">⚙️ Informasi Lembaga</div>
-        ${UI.field('Nama Lembaga', `<input class="clay-input" id="s-nama" value="${UI.esc(s.namaLembaga)}">`)}
-        ${UI.field('Alamat', `<input class="clay-input" id="s-alamat" value="${UI.esc(s.alamat)}">`)}
+        <div class="section-title">Informasi Lembaga</div>
+        <div class="row">
+          <div style="flex:0 0 120px;text-align:center">
+            <div id="s-logo-preview" style="width:100px;height:100px;border-radius:14px;background:var(--bg);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;overflow:hidden">
+              ${s.logo ? `<img src="${UI.esc(s.logo)}" style="max-width:100%;max-height:100%">` : '<span style="font-size:32px;color:var(--text-soft)">+</span>'}
+            </div>
+            <label class="clay-btn sm ghost" style="font-size:12px;cursor:pointer">Upload Logo
+              <input type="file" id="s-logo-upload" accept="image/*" style="display:none">
+            </label>
+          </div>
+          <div style="flex:1">
+            ${UI.field('Nama Lembaga', `<input class="clay-input" id="s-nama" value="${UI.esc(s.namaLembaga)}">`)}
+            ${UI.field('Alamat', `<input class="clay-input" id="s-alamat" value="${UI.esc(s.alamat)}">`)}
+          </div>
+        </div>
         <div class="row">
           <div style="flex:1">${UI.field('Tahun Ajaran', `<input class="clay-input" id="s-thn" value="${UI.esc(s.tahunAjaran)}">`)}</div>
           <div style="flex:1">${UI.field('Semester', `<select class="clay-select" id="s-sem"><option ${s.semester === 'Ganjil' ? 'selected' : ''}>Ganjil</option><option ${s.semester === 'Genap' ? 'selected' : ''}>Genap</option></select>`)}</div>
@@ -704,6 +716,19 @@ const Admin = (() => {
       };
     });
 
+    document.getElementById('s-logo-upload').onchange = function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const dataUrl = ev.target.result;
+        document.getElementById('s-logo-preview').innerHTML = `<img src="${UI.esc(dataUrl)}" style="max-width:100%;max-height:100%">`;
+        _logoData = dataUrl;
+      };
+      reader.readAsDataURL(file);
+    };
+    let _logoData = s.logo || '';
+
     document.getElementById('btn-save').onclick = () => {
       const db = Store.get();
       db.settings.namaLembaga = document.getElementById('s-nama').value.trim();
@@ -718,6 +743,7 @@ const Admin = (() => {
       db.settings.notifWali = document.getElementById('s-notif-wali').classList.contains('on');
       db.settings.notifUstadz = document.getElementById('s-notif-ustadz').classList.contains('on');
       db.settings.notifMaxPerDay = parseInt(document.getElementById('s-notif-max').value) || 3;
+      db.settings.logo = _logoData || '';
       Store.save(); Store.log('Update settings'); UI.toast('Settings tersimpan', 'success');
     };
     document.getElementById('btn-backup').onclick = () => {
