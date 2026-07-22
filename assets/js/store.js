@@ -106,7 +106,7 @@ const Store = (() => {
     return api('reset', { method: 'POST' }).then(() => load());
   }
 
-  function uid(prefix) { return (prefix || 'id') + '_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4); }
+  function uid(prefix) { return (prefix || 'id') + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 9); }
   function nowISO() { return new Date().toISOString(); }
   function todayStr() {
     const d = new Date();
@@ -150,7 +150,11 @@ const Store = (() => {
   function lastZiyadah(santriId) {
     const haf = db.ziyadahHafalan.filter(z => z.santriId === santriId);
     const bac = db.ziyadahBacaan.filter(z => z.santriId === santriId);
-    const all = [...haf, ...bac].sort((a, b) => b.tanggal.localeCompare(a.tanggal) || (b.id > a.id ? 1 : -1));
+    const all = [...haf, ...bac].sort((a, b) => {
+      const d = b.tanggal.localeCompare(a.tanggal);
+      if (d !== 0) return d;
+      return b.id.localeCompare(a.id);
+    });
     return all[0] || null;
   }
 
