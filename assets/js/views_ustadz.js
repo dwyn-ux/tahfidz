@@ -78,24 +78,24 @@ const Ustadz = (() => {
 
     document.getElementById('view-content').innerHTML = `
       <div class="grid kpi">
-        ${Shared.statCard('', santri.length, 'Santri Diampu', '#16A34A')}
-        ${sesiStats.map(st => Shared.statCard(st.s === 'Subuh' ? '' : st.s === 'Maghrib' ? '' : '', st.h + '/' + santri.length + ' Hadir', st.s, '#22C55E')).join('')}
+        ${Shared.statCard('🏫', santri.length, 'Santri Diampu', '#16A34A')}
+        ${sesiStats.map(st => Shared.statCard(st.s === 'Subuh' ? '🌅' : st.s === 'Maghrib' ? '🌇' : '🌙', st.h + '/' + santri.length + ' Hadir', st.s, '#22C55E')).join('')}
       </div>
       <div class="grid kpi mt">
-        ${Shared.statCard('', totalSubuh, 'Kehadiran Subuh (Bulan Ini)', '#22C55E')}
-        ${Shared.statCard('', totalMaghrib, 'Kehadiran Maghrib (Bulan Ini)', '#22C55E')}
-        ${Shared.statCard('', totalIsya, 'Kehadiran Isya (Bulan Ini)', '#22C55E')}
+        ${Shared.statCard('🌅', totalSubuh, 'Kehadiran Subuh (Bulan Ini)', '#22C55E')}
+        ${Shared.statCard('🌇', totalMaghrib, 'Kehadiran Maghrib (Bulan Ini)', '#22C55E')}
+        ${Shared.statCard('🌙', totalIsya, 'Kehadiran Isya (Bulan Ini)', '#22C55E')}
       </div>
       <div class="grid cols-2 mt">
         <div class="clay-card">
-          <div class="section-title"> Shortcut</div>
+          <div class="section-title">⚡ Shortcut</div>
           <div class="row">
-            <button class="clay-btn primary" data-go="ustadz_absensi"> Absensi</button>
-            <button class="clay-btn secondary" data-go="ustadz_pembelajaran"> Pembelajaran</button>
+            <button class="clay-btn primary" data-go="ustadz_absensi">✅ Absensi</button>
+            <button class="clay-btn secondary" data-go="ustadz_pembelajaran">📝 Pembelajaran</button>
           </div>
         </div>
         <div class="clay-card">
-          <div class="section-title"> Daftar Santri</div>
+          <div class="section-title">📋 Daftar Santri</div>
           ${santri.map(s => {
             const h = Store.totalHafalanSantri(s.id);
             return `<div class="row center" style="justify-content:space-between;padding:6px 0"><span>${UI.esc(s.nama)} <span class="muted" style="font-size:12px">(${UI.esc(s.level)})</span></span><span class="badge green">${h ? formatHafalan(h) : '-'}</span></div>`;
@@ -128,10 +128,10 @@ const Ustadz = (() => {
           <td><b>${UI.esc(s.nama)}</b></td>
           <td>
             <div class="row" style="gap:6px">
-<button class="clay-btn sm ${cur === 'Hadir' ? 'primary' : 'ghost'}" data-st="Hadir">Hadir</button>
-<button class="clay-btn sm ${cur === 'Izin' ? '' : 'ghost'}" data-st="Izin" style="${cur === 'Izin' ? 'background:#FACC15;color:#000' : ''}">Izin</button>
-<button class="clay-btn sm ${cur === 'Sakit' ? 'secondary' : 'ghost'}" data-st="Sakit">Sakit</button>
-<button class="clay-btn sm ${cur === 'Alfa' ? 'danger' : 'ghost'}" data-st="Alfa">Alfa</button>
+              <button class="clay-btn sm ${cur === 'Hadir' ? 'primary' : 'ghost'}" data-st="Hadir">🟢 Hadir</button>
+              <button class="clay-btn sm ${cur === 'Izin' ? '' : 'ghost'}" data-st="Izin" style="${cur === 'Izin' ? 'background:#FACC15;color:#000' : ''}">🟡 Izin</button>
+              <button class="clay-btn sm ${cur === 'Sakit' ? 'secondary' : 'ghost'}" data-st="Sakit">🔵 Sakit</button>
+              <button class="clay-btn sm ${cur === 'Alfa' ? 'danger' : 'ghost'}" data-st="Alfa">🔴 Alfa</button>
             </div>
           </td>
           <td><span class="badge ${cur === 'Hadir' ? 'green' : cur === 'Izin' ? 'warn' : cur === 'Sakit' ? 'blue' : 'danger'}">${cur}</span></td>
@@ -142,11 +142,11 @@ const Ustadz = (() => {
         <div class="clay-card">
           <div class="row" style="justify-content:space-between">
             <div class="section-title" style="margin:0">Absensi ${UI.fmtDate(t)}</div>
-            <button class="clay-btn primary" id="btn-save"> Simpan Absensi</button>
+            <button class="clay-btn primary" id="btn-save">💾 Simpan Absensi</button>
           </div>
           <div class="row mb" style="margin-top:12px">
             <span class="muted" style="font-size:13px">Sesi:</span>
-            ${SESI.map(s => `<button class="pill ${s === sesiAktif ? 'active' : ''}" data-sesi="${s}">${s === 'Subuh' ? '' : s === 'Maghrib' ? '' : ''} ${s}</button>`).join('')}
+            ${SESI.map(s => `<button class="pill ${s === sesiAktif ? 'active' : ''}" data-sesi="${s}">${s === 'Subuh' ? '🌅' : s === 'Maghrib' ? '🌇' : '🌙'} ${s}</button>`).join('')}
           </div>
           <div class="table-wrap mt"><table class="clay-table">
             <thead><tr><th>Santri</th><th>Status</th><th></th></tr></thead>
@@ -208,9 +208,9 @@ const Ustadz = (() => {
     Shared.setHeader('Pembelajaran', 'Tahsin · Ziyadah · Mutqin');
     document.getElementById('view-content').innerHTML = `
       <div class="pill-tabs" id="tabs">
-        <button class="pill active" data-tab="tahsin"> Tahsin</button>
-        <button class="pill" data-tab="ziyadah"> Ziyadah</button>
-        <button class="pill" data-tab="mutqin"> Mutqin</button>
+        <button class="pill active" data-tab="tahsin">📖 Tahsin</button>
+        <button class="pill" data-tab="ziyadah">📝 Ziyadah</button>
+        <button class="pill" data-tab="mutqin">🏆 Mutqin</button>
       </div>
       <div id="tab-content"></div>`;
     const tabs = document.getElementById('tabs');
@@ -227,8 +227,8 @@ const Ustadz = (() => {
   function modeSelector(onChange) {
     return `<div class="row mb">
       <span class="muted" style="font-size:13px">Mode:</span>
-      <button class="pill active" data-mode="saya"> Halaqah Saya</button>
-      <button class="pill" data-mode="umum"> Halaqah Umum</button>
+      <button class="pill active" data-mode="saya">🏫 Halaqah Saya</button>
+      <button class="pill" data-mode="umum">🌐 Halaqah Umum</button>
     </div>`;
   }
   function bindMode(container, getSantriFn, rerender) {
@@ -249,7 +249,7 @@ const Ustadz = (() => {
     }).join('');
     document.getElementById('tab-content').innerHTML = `
       <div class="clay-card">
-        <div class="section-title"> Input Tahsin</div>
+        <div class="section-title">📖 Input Tahsin</div>
         <div class="table-wrap"><table class="clay-table">
           <thead><tr><th>Santri</th><th>Terakhir</th><th>Nilai</th><th></th></tr></thead>
           <tbody>${rows || '<tr><td colspan="4"><div class="empty">Tidak ada santri.</div></td></tr>'}</tbody>
@@ -305,13 +305,13 @@ const Ustadz = (() => {
       } else if (!hafalanHariIni) {
         btn = `<button class="clay-btn sm secondary" data-hafalan="${s.id}">+ Setor Hafalan</button>`;
       } else {
-        btn = `<span class="badge green">Selesai </span>`;
+        btn = `<span class="badge green">Selesai ✓</span>`;
       }
       return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${last ? getSurah(last.sAkhir).latin + ':' + last.aAkhir : '<span class="muted">-</span>'}</td><td>${rec ? formatHafalan(computeHafalan(rec.sAwal, rec.aAwal, rec.sAkhir, rec.aAkhir)) : '-'}</td><td>${btn}</td></tr>`;
     }).join('');
     document.getElementById('tab-content').innerHTML = `
       <div class="clay-card">
-        <div class="section-title"> Input Ziyadah</div>
+        <div class="section-title">📝 Input Ziyadah</div>
         <div class="table-wrap"><table class="clay-table">
           <thead><tr><th>Santri</th><th>Lanjutan Terakhir</th><th>Total Hafalan</th><th></th></tr></thead>
           <tbody>${rows || '<tr><td colspan="4"><div class="empty">Tidak ada santri.</div></td></tr>'}</tbody>
@@ -376,7 +376,7 @@ const Ustadz = (() => {
     const body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
       ${UI.field('Tanggal', `<input class="clay-input" value="${t}" disabled>`)}
-      <div class="clay-card pad-sm mb" style="background:var(--bg)"><b> Bacaan hari ini:</b> ${bacaan ? getSurah(bacaan.sAwal).latin + ':' + bacaan.aAwal + ' — ' + getSurah(bacaan.sAkhir).latin + ':' + bacaan.aAkhir : '-'}</div>
+      <div class="clay-card pad-sm mb" style="background:var(--bg)"><b>📖 Bacaan hari ini:</b> ${bacaan ? getSurah(bacaan.sAwal).latin + ':' + bacaan.aAwal + ' — ' + getSurah(bacaan.sAkhir).latin + ':' + bacaan.aAkhir : '-'}</div>
       <div class="row">
         <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="h-sa" list="dl-surah" type="text" value="${defSA}" autocomplete="off">`)}</div>
         <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="h-aa" type="number" min="1" value="${defAA}">`)}</div>
@@ -413,7 +413,7 @@ const Ustadz = (() => {
       const aK = +modal.modal.querySelector('#h-ak').value;
       const h = computeHafalan(sA, aA, sK, aK);
       modal.modal.querySelector('#calc-preview').innerHTML = h
-        ? `<b> Auto Hitung:</b> ${h.ayahs} ayat · ${h.pages} halaman · Juz ${h.juzStart}${h.juzRange > 1 ? '-' + h.juzEnd : ''}`
+        ? `<b>📐 Auto Hitung:</b> ${h.ayahs} ayat · ${h.pages} halaman · Juz ${h.juzStart}${h.juzRange > 1 ? '-' + h.juzEnd : ''}`
         : '<span class="muted">Range belum valid.</span>';
     };
     modal.modal.querySelectorAll('#h-sa,#h-aa,#h-sk,#h-ak').forEach(i => i.oninput = calc);
@@ -430,7 +430,7 @@ const Ustadz = (() => {
     }).join('');
     document.getElementById('tab-content').innerHTML = `
       <div class="clay-card">
-        <div class="section-title"> Input Mutqin (Murajaah)</div>
+        <div class="section-title">🏆 Input Mutqin (Murajaah)</div>
         <div class="table-wrap"><table class="clay-table">
           <thead><tr><th>Santri</th><th>Terakhir</th><th>Total</th><th></th></tr></thead>
           <tbody>${rows || '<tr><td colspan="4"><div class="empty">Tidak ada santri.</div></td></tr>'}</tbody>
@@ -484,7 +484,7 @@ const Ustadz = (() => {
         <div class="row" style="align-items:center">
           <div style="flex:1">
             <label class="field-label">Cari Santri</label>
-            <input class="clay-input" id="riwayat-search" type="text" placeholder=" Ketik untuk mencari santri..." autocomplete="off" />
+            <input class="clay-input" id="riwayat-search" type="text" placeholder="🔍 Ketik untuk mencari santri..." autocomplete="off" />
           </div>
           <div style="flex:1">
             <label class="field-label">Filter per Halaqah</label>

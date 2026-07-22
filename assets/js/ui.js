@@ -22,7 +22,7 @@ const UI = (() => {
   }
   function toast(msg, type = 'success') {
     const root = document.getElementById('toast-root');
-    const t = el(`<div class="toast ${type}">${type === 'success' ? '' : type === 'error' ? '' : ''} <span>${esc(msg)}</span></div>`);
+    const t = el(`<div class="toast ${type}">${type === 'success' ? '✅' : type === 'error' ? '⛔' : 'ℹ️'} <span>${esc(msg)}</span></div>`);
     root.appendChild(t);
     setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(40px)'; setTimeout(() => t.remove(), 250); }, 2800);
   }
@@ -89,7 +89,7 @@ const UI = (() => {
     if (!session) { wrap.innerHTML = ''; return; }
     wrap.innerHTML = `
       <div class="search-box" id="search-box">
-        <input class="search-input" id="search-input" type="text" placeholder=" Cari santri/ustadz/wali..." autocomplete="off" />
+        <input class="search-input" id="search-input" type="text" placeholder="🔍 Cari santri/ustadz/wali..." autocomplete="off" />
         <div class="search-drop" id="search-drop" style="display:none"></div>
       </div>`;
     const input = document.getElementById('search-input');
@@ -104,11 +104,11 @@ const UI = (() => {
         const total = r.santri.length + r.ustadz.length + r.wali.length + r.halaqah.length + r.surah.length;
         if (!total) { html = '<div class="search-empty">Tidak ditemukan</div>'; }
         else {
-          if (r.surah.length) html += r.surah.map(x => `<div class="search-item" data-type="surah" data-id="${x.n}"> <b>${x.n}. ${esc(x.latin)}</b> <span class="muted">${x.arab}</span></div>`).join('');
-          if (r.santri.length) html += r.santri.map(x => `<div class="search-item" data-type="santri" data-id="${esc(x.id)}"> Santri: <b>${esc(x.nama)}</b> <span class="muted">${esc(x.nis)}</span></div>`).join('');
-          if (r.ustadz.length) html += r.ustadz.map(x => `<div class="search-item" data-type="ustadz" data-id="${esc(x.id)}">‍ Ustadz: <b>${esc(x.nama)}</b></div>`).join('');
-          if (r.wali.length) html += r.wali.map(x => `<div class="search-item" data-type="wali" data-id="${esc(x.id)}"> Wali: <b>${esc(x.nama)}</b></div>`).join('');
-          if (r.halaqah.length) html += r.halaqah.map(x => `<div class="search-item" data-type="halaqah" data-id="${esc(x.id)}"> Halaqah: <b>${esc(x.nama)}</b></div>`).join('');
+          if (r.surah.length) html += r.surah.map(x => `<div class="search-item" data-type="surah" data-id="${x.n}">📖 <b>${x.n}. ${esc(x.latin)}</b> <span class="muted">${x.arab}</span></div>`).join('');
+          if (r.santri.length) html += r.santri.map(x => `<div class="search-item" data-type="santri" data-id="${esc(x.id)}">🧒 Santri: <b>${esc(x.nama)}</b> <span class="muted">${esc(x.nis)}</span></div>`).join('');
+          if (r.ustadz.length) html += r.ustadz.map(x => `<div class="search-item" data-type="ustadz" data-id="${esc(x.id)}">🧑‍🏫 Ustadz: <b>${esc(x.nama)}</b></div>`).join('');
+          if (r.wali.length) html += r.wali.map(x => `<div class="search-item" data-type="wali" data-id="${esc(x.id)}">👤 Wali: <b>${esc(x.nama)}</b></div>`).join('');
+          if (r.halaqah.length) html += r.halaqah.map(x => `<div class="search-item" data-type="halaqah" data-id="${esc(x.id)}">🏫 Halaqah: <b>${esc(x.nama)}</b></div>`).join('');
         }
         drop.innerHTML = html; drop.style.display = 'block';
         drop.querySelectorAll('.search-item').forEach(el => el.onclick = () => {

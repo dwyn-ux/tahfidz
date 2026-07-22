@@ -21,7 +21,7 @@ const Shared = (() => {
       <div class="app-shell">
         <div class="scrim" id="scrim"></div>
         <aside class="sidebar" id="sidebar">
-          <div class="brand"><span class="logo"></span> Tahfidzku</div>
+          <div class="brand"><span class="logo">📖</span> Tahfidzku</div>
           ${nav}
           <div class="spacer"></div>
           <div class="user-box">
@@ -33,7 +33,7 @@ const Shared = (() => {
         <main class="main">
           <div class="topbar">
             <div>
-              <button class="menu-toggle" id="menu-toggle"></button>
+              <button class="menu-toggle" id="menu-toggle">☰</button>
               <h1 id="page-title">Dashboard</h1>
               <div class="sub" id="page-sub">${UI.esc(db.settings.namaLembaga)}</div>
             </div>
@@ -258,12 +258,12 @@ const Shared = (() => {
       <td class="center">${r.hafalan ? r.hafalan.pages + ' hlm' : '-'}</td>
       <td class="center">${r.hafalan ? (r.hafalan.juzRange === 1 ? 'Juz ' + r.hafalan.juzStart : r.hafalan.juzStart + '–' + r.hafalan.juzEnd) : '-'}</td>
       <td class="center">${r.nilai ? r.nilai : '-'}</td>
-      <td class="center" style="font-size:12px">${r.hadirSubuh} ${r.hadirMaghrib} ${r.hadirIsya}</td>
+      <td class="center" style="font-size:12px">🌅${r.hadirSubuh} 🌇${r.hadirMaghrib} 🌙${r.hadirIsya}</td>
       <td class="center">${r.hadir}/${r.totalK} (${r.pct}%)</td>
       <td><span class="badge ${r.s.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(r.s.status)}</span></td>
     </tr>`).join('');
     return `<div class="clay-card">
-      <div class="section-title"> Laporan Santri — ${UI.esc(bulanLabel(bulan))}</div>
+      <div class="section-title">📊 Laporan Santri — ${UI.esc(bulanLabel(bulan))}</div>
       <div class="table-wrap">
         <table class="clay-table" id="laporan-table">
           <thead><tr><th class="center">No</th><th>Santri</th><th>NIS</th><th>Halaqah</th><th>Level</th><th class="center">JK</th><th class="center">Total Hafalan</th><th class="center">Juz</th><th class="center">Rata² Nilai</th><th class="center">Per Sesi</th><th class="center">Kehadiran (${UI.esc(bulanLabel(bulan))})</th><th>Status</th></tr></thead>
@@ -271,8 +271,8 @@ const Shared = (() => {
         </table>
       </div>
       <div class="row mt">
-        <button class="clay-btn secondary" id="export-excel"> Export Excel</button>
-        <button class="clay-btn" id="export-pdf"> Print / PDF</button>
+        <button class="clay-btn secondary" id="export-excel">⬇ Export Excel</button>
+        <button class="clay-btn" id="export-pdf">🖨 Print / PDF</button>
       </div>
     </div>`;
   }
@@ -369,10 +369,10 @@ const Shared = (() => {
   function renderNotifikasi(userId) {
     const list = Store.notifFor(userId);
     if (!list.length) return `<div class="empty">Belum ada notifikasi.</div>`;
-    const icon = { wali: '', ustadz: '‍', admin: '' };
+    const icon = { wali: '👪', ustadz: '🧑‍🏫', admin: '👑' };
     return `<div class="clay-card">${list.map(n =>
       `<div class="row center" style="justify-content:space-between;padding:12px 0;border-bottom:1px solid #eee">
-        <div class="row center" style="gap:10px"><span style="font-size:20px">${icon[n.tipe] || ''}</span>
+        <div class="row center" style="gap:10px"><span style="font-size:20px">${icon[n.tipe] || '🔔'}</span>
         <div><div>${UI.esc(n.pesan)}</div><div class="muted" style="font-size:12px">${UI.fmtDateTime(n.tanggal)}</div></div></div>
         ${n.read ? '' : '<span class="badge blue">Baru</span>'}
       </div>`).join('')}</div>`;

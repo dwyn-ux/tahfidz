@@ -51,17 +51,17 @@ const Wali = (() => {
           </div>
         </div>
         <div class="clay-card">
-          <div class="section-title"> Ringkasan</div>
+          <div class="section-title">📊 Ringkasan</div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span>Total Hafalan</span><b>${h ? formatHafalan(h) : '-'}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span>Kehadiran Bulan Ini</span><b>${totalHadir}/${kehadiran.length || 0} (${pct}%)</b></div>
-          <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Subuh</span><b>${hadirSubuh}</b></div>
-          <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Maghrib</span><b>${hadirMaghrib}</b></div>
-          <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Isya</span><b>${hadirIsya}</b></div>
+          <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span>🌅 Subuh</span><b>${hadirSubuh}</b></div>
+          <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span>🌇 Maghrib</span><b>${hadirMaghrib}</b></div>
+          <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span>🌙 Isya</span><b>${hadirIsya}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span>Rata-rata Nilai</span><b>${Store.avgNilai(s.id) || '-'}</b></div>
         </div>
       </div>
       <div class="clay-card mt">
-        <div class="section-title"> Catatan Terakhir Ustadz</div>
+        <div class="section-title">📝 Catatan Terakhir Ustadz</div>
         ${lastCat ? `<div>${UI.esc(lastCat.isi)}</div><div class="muted" style="font-size:12px;margin-top:6px">${UI.fmtDate(lastCat.tanggal)}</div>` : '<div class="empty">Belum ada catatan.</div>'}
       </div>
       ${renderNotifWali(Store.getSession().userId)}`;
@@ -77,7 +77,7 @@ const Wali = (() => {
       </div>`).join('');
     return `
       <div class="clay-card mt">
-        <div class="section-title"> Notifikasi</div>
+        <div class="section-title">🔔 Notifikasi</div>
         ${items}
       </div>`;
   }
@@ -108,25 +108,25 @@ const Wali = (() => {
 
     document.getElementById('view-content').innerHTML = `
       <div class="grid kpi">
-        ${Shared.statCard('', h ? h.pages + ' hlm' : '-', 'Total Hafalan', '#16A34A')}
-        ${Shared.statCard('', ziy.length, 'Setoran Ziyadah', '#3B82F6')}
-        ${Shared.statCard('', mut.length, 'Murajaah Mutqin', '#FACC15')}
-        ${Shared.statCard('', Store.avgNilai(s.id) || '-', 'Rata² Nilai', '#22C55E')}
+        ${Shared.statCard('📖', h ? h.pages + ' hlm' : '-', 'Total Hafalan', '#16A34A')}
+        ${Shared.statCard('📝', ziy.length, 'Setoran Ziyadah', '#3B82F6')}
+        ${Shared.statCard('🏆', mut.length, 'Murajaah Mutqin', '#FACC15')}
+        ${Shared.statCard('⭐', Store.avgNilai(s.id) || '-', 'Rata² Nilai', '#22C55E')}
       </div>
       <div class="clay-card mt">
-        <div class="section-title"> Grafik Perkembangan Hafalan</div>
+        <div class="section-title">📈 Grafik Perkembangan Hafalan</div>
         ${chartData.length ? Shared.barChart(chartData, Math.max(1, ...chartData.map(d => d.value))) : '<div class="empty">Belum ada data setoran.</div>'}
       </div>
       <div class="clay-card mt">
-        <div class="section-title"> Tahsin</div>
+        <div class="section-title">📖 Tahsin</div>
         <div class="table-wrap"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Halaman</th><th>Nilai</th><th>Catatan</th></tr></thead><tbody>${tahsinRows || '<tr><td colspan="4"><div class="empty">Belum ada.</div></td></tr>'}</tbody></table></div>
       </div>
       <div class="clay-card mt">
-        <div class="section-title"> Ziyadah</div>
+        <div class="section-title">📝 Ziyadah</div>
         <div class="table-wrap"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Setoran</th><th>Total</th><th>Nilai</th></tr></thead><tbody>${ziyRows || '<tr><td colspan="4"><div class="empty">Belum ada.</div></td></tr>'}</tbody></table></div>
       </div>
       <div class="clay-card mt">
-        <div class="section-title"> Mutqin</div>
+        <div class="section-title">🏆 Mutqin</div>
         <div class="table-wrap"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Murajaah</th><th>Total</th><th>Nilai</th></tr></thead><tbody>${mutRows || '<tr><td colspan="4"><div class="empty">Belum ada.</div></td></tr>'}</tbody></table></div>
       </div>`;
   }
@@ -144,13 +144,13 @@ const Wali = (() => {
     const rows = kehadiran.slice(0, 30).map(k => `<tr><td>${UI.fmtDate(k.tanggal)}</td><td>${k.sesi ? '<span class="pill sm" style="font-size:11px;padding:2px 8px">' + k.sesi + '</span>' : ''}</td><td><span class="badge ${k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : 'danger'}">${k.status}</span></td></tr>`).join('');
     document.getElementById('view-content').innerHTML = `
       <div class="grid kpi">
-        ${Shared.statCard('', counts.Hadir, 'Hadir', '#22C55E')}
-        ${Shared.statCard('', counts.Izin, 'Izin', '#FACC15')}
-        ${Shared.statCard('', counts.Sakit, 'Sakit', '#3B82F6')}
-        ${Shared.statCard('', counts.Alfa, 'Alfa', '#EF4444')}
+        ${Shared.statCard('🟢', counts.Hadir, 'Hadir', '#22C55E')}
+        ${Shared.statCard('🟡', counts.Izin, 'Izin', '#FACC15')}
+        ${Shared.statCard('🔵', counts.Sakit, 'Sakit', '#3B82F6')}
+        ${Shared.statCard('🔴', counts.Alfa, 'Alfa', '#EF4444')}
       </div>
       <div class="clay-card mt">
-        <div class="section-title"> Riwayat Kehadiran</div>
+        <div class="section-title">📅 Riwayat Kehadiran</div>
         <div class="table-wrap"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Sesi</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="3"><div class="empty">Belum ada.</div></td></tr>'}</tbody></table></div>
       </div>`;
   }
@@ -180,7 +180,7 @@ const Wali = (() => {
     document.getElementById('view-content').innerHTML = `
       <div class="grid cols-2">
         <div class="clay-card">
-          <div class="section-title"> Data Santri</div>
+          <div class="section-title">👤 Data Santri</div>
           ${s ? `
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Nama</span><b>${UI.esc(s.nama)}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">NIS</span><b>${UI.esc(s.nis)}</b></div>
@@ -191,7 +191,7 @@ const Wali = (() => {
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Ustadz</span><b>${ustadz ? UI.esc(ustadz.nama) : '-'}</b></div>` : '<div class="empty">-</div>'}
         </div>
         <div class="clay-card">
-          <div class="section-title"> Data Wali</div>
+          <div class="section-title">👪 Data Wali</div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Nama Wali</span><b>${w ? UI.esc(w.nama) : '-'}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">No HP</span><b>${w ? UI.esc(w.noHp) : '-'}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Username Login</span><b>${w ? UI.esc((db.users.find(u => u.refId === w.id) || {}).username || '-') : '-'}</b></div>
