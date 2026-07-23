@@ -425,6 +425,11 @@ const Ustadz = (() => {
       document.getElementById('btn-simpan-bacaan').style.display = 'none';
       document.getElementById('bacaan-ok').style.display = 'inline';
 
+      document.getElementById('h-sa').value = surahLabel(sA);
+      document.getElementById('h-sk').value = surahLabel(sK);
+      document.getElementById('h-aa').value = aaEl.value;
+      document.getElementById('h-ak').value = akEl.value;
+
       document.getElementById('sec-hafalan').style.opacity = '1';
       document.getElementById('sec-hafalan').style.borderLeftColor = 'var(--primary)';
       document.querySelectorAll('#h-sa,#h-aa,#h-sk,#h-ak,#f-nilai,#f-cat').forEach(el => el.disabled = false);
