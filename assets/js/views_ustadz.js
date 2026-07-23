@@ -306,27 +306,11 @@ const Ustadz = (() => {
   /* ----- Ziyadah (Bacaan + Hafalan) ----- */
   function renderZiyadah() {
     const db = Store.get();
-    const multi = db.settings.setoranMulti;
     const santri = mySantri().filter(s => s.level === 'Ziyadah');
-    const t = Store.todayStr();
     const rows = santri.map(s => {
       const last = Store.lastZiyadah(s.id);
-      const rec = db.ziyadahHafalan.filter(z => z.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
-      const bacaanHariIni = db.ziyadahBacaan.some(z => z.santriId === s.id && z.tanggal === t);
-      const hafalanHariIni = db.ziyadahHafalan.some(z => z.santriId === s.id && z.tanggal === t);
-      let btn = '';
-      if (multi) {
-        btn = `<button class="clay-btn sm primary" data-bacaan="${s.id}">+ Setor Bacaan</button>
-          <button class="clay-btn sm secondary" data-hafalan="${s.id}">+ Setor Hafalan</button>`;
-      } else if (!bacaanHariIni) {
-        btn = `<button class="clay-btn sm primary" data-bacaan="${s.id}">+ Setor Bacaan</button>`;
-      } else if (!hafalanHariIni) {
-        btn = `<button class="clay-btn sm secondary" data-hafalan="${s.id}">+ Setor Hafalan</button>`;
-      } else {
-        btn = `<span class="badge green">Selesai ✓</span>`;
-      }
       const totalH = Store.totalHafalanSantri(s.id);
-      return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${last ? getSurah(last.sAkhir).latin + ':' + last.aAkhir : '<span class="muted">-</span>'}</td><td>${totalH ? formatHafalan(totalH) : '-'}</td><td>${btn}</td></tr>`;
+      return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${last ? getSurah(last.sAkhir).latin + ':' + last.aAkhir : '<span class="muted">-</span>'}</td><td>${totalH ? formatHafalan(totalH) : '-'}</td><td><button class="clay-btn sm primary" data-setoran="${s.id}">+ Setoran</button></td></tr>`;
     }).join('');
     document.getElementById('tab-content').innerHTML = `
       <div class="clay-card">
@@ -336,11 +320,10 @@ const Ustadz = (() => {
           <tbody>${rows || '<tr><td colspan="4"><div class="empty">Tidak ada santri.</div></td></tr>'}</tbody>
         </table></div>
       </div>`;
-    document.querySelectorAll('[data-bacaan]').forEach(b => b.onclick = () => ziyadahBacaanForm(b.dataset.bacaan));
-    document.querySelectorAll('[data-hafalan]').forEach(b => b.onclick = () => ziyadahHafalanForm(b.dataset.hafalan));
+    document.querySelectorAll('[data-setoran]').forEach(b => b.onclick = () => ziyadahForm(b.dataset.setoran));
   }
 
-  function ziyadahBacaanForm(santriId) {
+  function ziyadahForm(santriId) {
     const s = Store.findSantri(santriId);
     const db = Store.get();
     const last = Store.lastZiyadah(santriId);
@@ -351,137 +334,151 @@ const Ustadz = (() => {
     }
     function surahLabel(n) { const s = getSurah(n); return s ? s.n + '. ' + s.latin : n; }
     function riwayatSingkat() {
-      const semua = [...db.ziyadahHafalan.filter(z => z.santriId === santriId), ...db.ziyadahBacaan.filter(z => z.santriId === santriId)]
+      const d = Store.get();
+      const semua = [...d.ziyadahHafalan.filter(z => z.santriId === santriId), ...d.ziyadahBacaan.filter(z => z.santriId === santriId)]
         .sort((a, b) => b.tanggal.localeCompare(a.tanggal) || ((b._created||0)-(a._created||0)))
         .slice(0, 3);
       if (!semua.length) return '<span class="muted">Belum ada setoran</span>';
       return semua.map(r => {
         const label = r.nilai !== undefined ? 'Hafalan' : 'Bacaan';
-const sA = getSurah(r.sAwal).latin;
-const sK = getSurah(r.sAkhir).latin;
+        const sA = getSurah(r.sAwal).latin;
+        const sK = getSurah(r.sAkhir).latin;
         return `<div style="font-size:13px;padding:4px 0">${UI.fmtDate(r.tanggal)} — ${label}: ${sA}:${r.aAwal} → ${sK}:${r.aAkhir}</div>`;
       }).join('');
     }
+
+    let hSlide = null;
+
     const body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
       ${UI.field('Tanggal', `<input class="clay-input" value="${Store.todayStr()}" disabled>`)}
-      <div class="row">
-        <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="b-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off">`)}</div>
-        <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="b-aa" type="number" min="1" max="${getSurah(defSA) ? getSurah(defSA).ayahs : 286}" value="${Math.min(defAA, getSurah(defSA) ? getSurah(defSA).ayahs : 286)}">`)}</div>
+      <hr style="border:none;border-top:1px solid var(--border,#ddd);margin:12px 0">
+      <div id="sec-bacaan" class="clay-card pad-sm mb" style="background:var(--bg);border-left:3px solid var(--primary)">
+        <div class="section-title" style="font-size:14px;margin:0 0 8px 0">📖 Setoran Bacaan</div>
+        <div class="row">
+          <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="b-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off">`)}</div>
+          <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="b-aa" type="number" min="1" max="${getSurah(defSA) ? getSurah(defSA).ayahs : 286}" value="${Math.min(defAA, getSurah(defSA) ? getSurah(defSA).ayahs : 286)}">`)}</div>
+        </div>
+        <div class="row">
+          <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="b-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off">`)}</div>
+          <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="b-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}">`)}</div>
+        </div>
+        <button class="clay-btn primary" id="btn-simpan-bacaan" style="margin-top:8px">💾 Simpan Bacaan</button>
+        <span id="bacaan-ok" style="display:none;margin-top:8px;color:var(--green)">✓ Bacaan tersimpan</span>
       </div>
-      <div class="row">
-        <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="b-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off">`)}</div>
-        <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="b-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}">`)}</div>
+      <div id="sec-hafalan" class="clay-card pad-sm mb" style="background:var(--bg);border-left:3px solid var(--muted);opacity:0.5">
+        <div class="section-title" style="font-size:14px;margin:0 0 8px 0">📝 Setoran Hafalan</div>
+        <div class="row">
+          <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="h-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off" disabled>`)}</div>
+          <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="h-aa" type="number" min="1" max="${getSurah(defSA) ? getSurah(defSA).ayahs : 286}" value="${Math.min(defAA, getSurah(defSA) ? getSurah(defSA).ayahs : 286)}" disabled>`)}</div>
+        </div>
+        <div class="row">
+          <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="h-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off" disabled>`)}</div>
+          <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="h-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}" disabled>`)}</div>
+        </div>
+        <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg);font-size:13px"></div>
+        ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80" disabled>`)}
+        ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat" disabled></textarea>`)}
+        <button class="clay-btn primary" id="btn-simpan-hafalan" style="margin-top:8px" disabled>💾 Simpan Hafalan</button>
       </div>
-      <div class="clay-card pad-sm" style="background:var(--bg);font-size:13px"><b> Riwayat 3 setoran terakhir:</b> ${riwayatSingkat()}</div>`;
-    const modal = UI.openModal({
-      title: 'Setoran Bacaan Ziyadah', sub: 'Setelah bacaan disimpan, form hafalan akan terbuka',
-      bodyHTML: body,
-      actions: [
-        { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
-        { label: 'Simpan Bacaan', cls: 'primary', onClick: async (m, c) => {
-          const db = Store.get();
-          const sAInput = m.querySelector('#b-sa').value;
-          const sKInput = m.querySelector('#b-sk').value;
-          const sA = sAInput ? parseInt(sAInput) : defSA;
-          const sK = sKInput ? parseInt(sKInput) : defSK;
-          if (!sA || !sK) { UI.toast('Pilih surat yang valid', 'error'); return; }
-          const sAyah = getSurah(sA); const sKyah = getSurah(sK);
-          if (sAyah && +m.querySelector('#b-aa').value > sAyah.ayahs) { UI.toast('Awal ayat melebihi batas surat', 'error'); return; }
-          if (sKyah && +m.querySelector('#b-ak').value > sKyah.ayahs) { UI.toast('Akhir ayat melebihi batas surat', 'error'); return; }
-          db.ziyadahBacaan.push({ id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: +m.querySelector('#b-aa').value, sAkhir: sK, aAkhir: +m.querySelector('#b-ak').value, _created: Date.now() });
-          await Store.save(); Store.log('Setor ziyadah bacaan ' + s.nama); c(); UI.toast('Setoran bacaan tersimpan', 'success'); renderZiyadah();
-        } }
-      ]
-    });
-    setTimeout(() => { bindAyatMax('b-sa', 'b-aa,b-ak'); bindAyatMax('b-sk', 'b-aa,b-ak'); }, 50);
-  }
+      <div class="clay-card pad-sm" style="background:var(--bg);font-size:13px"><b> Riwayat 3 setoran terakhir:</b> <div id="riwayat-list">${riwayatSingkat()}</div></div>`;
 
-  function ziyadahHafalanForm(santriId) {
-    const s = Store.findSantri(santriId);
-    const db = Store.get();
-    const t = Store.todayStr();
-    // cari bacaan TERAKHIR (bukan cuma hari ini) — biar setoran hafalan cocok walau beda hari
-    const bacaan = db.ziyadahBacaan.filter(z => z.santriId === santriId).sort((a, b) => b.tanggal.localeCompare(a.tanggal) || (b.id > a.id ? 1 : -1))[0];
-    let defSA = 2, defAA = 1, defSK = 2, defAK = 5;
-    if (bacaan) {
-      defSA = bacaan.sAwal; defAA = bacaan.aAwal; defSK = bacaan.sAkhir; defAK = bacaan.aAkhir;
-    } else {
-      const last = Store.lastZiyadah(santriId);
-      if (last) {
-        const n = nextHafalanPosition(last.sAkhir, last.aAkhir, db.settings.juzOrder);
-        defSA = n.surah; defAA = n.ayah; defSK = n.surah; defAK = n.ayah + 4;
-      }
-    }
-    function surahLabel(n) { const s = getSurah(n); return s ? s.n + '. ' + s.latin : n; }
-    function riwayatSingkat() {
-      const semua = [...db.ziyadahHafalan.filter(z => z.santriId === santriId), ...db.ziyadahBacaan.filter(z => z.santriId === santriId)]
-        .sort((a, b) => b.tanggal.localeCompare(a.tanggal) || ((b._created||0)-(a._created||0)))
-        .slice(0, 3);
-      if (!semua.length) return '<span class="muted">Belum ada setoran</span>';
-      return semua.map(r => {
-        const label = r.nilai !== undefined ? 'Hafalan' : 'Bacaan';
-const sA = getSurah(r.sAwal).latin;
-const sK = getSurah(r.sAkhir).latin;
-        return `<div style="font-size:13px;padding:4px 0">${UI.fmtDate(r.tanggal)} — ${label}: ${sA}:${r.aAwal} → ${sK}:${r.aAkhir}</div>`;
-      }).join('');
-    }
-    const body = `
-      ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
-      ${UI.field('Tanggal', `<input class="clay-input" value="${t}" disabled>`)}
-      <div class="clay-card pad-sm mb" style="background:var(--bg)"><b> Bacaan hari ini:</b> ${bacaan ? getSurah(bacaan.sAwal).latin + ':' + bacaan.aAwal + ' — ' + getSurah(bacaan.sAkhir).latin + ':' + bacaan.aAkhir : '-'}</div>
-      <div class="row">
-        <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="h-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off">`)}</div>
-        <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="h-aa" type="number" min="1" max="${getSurah(defSA) ? getSurah(defSA).ayahs : 286}" value="${Math.min(defAA, getSurah(defSA) ? getSurah(defSA).ayahs : 286)}">`)}</div>
-      </div>
-      <div class="row">
-        <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="h-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off">`)}</div>
-        <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="h-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}">`)}</div>
-      </div>
-      <div class="clay-card pad-sm mt" style="background:var(--bg);font-size:13px"><b> Riwayat 3 setoran terakhir:</b> ${riwayatSingkat()}</div>
-      <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg)"></div>
-      ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80">`)}
-      ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat"></textarea>`)}`;
     const modal = UI.openModal({
-      title: 'Setoran Hafalan Ziyadah', sub: 'Data dari setoran bacaan hari ini',
+      title: 'Setoran Ziyadah',
+      sub: s.nama,
       bodyHTML: body,
       actions: [
-        { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
-        { label: 'Simpan Hafalan', cls: 'primary', onClick: async (m, c) => {
-          const db = Store.get();
-          const sAInput = m.querySelector('#h-sa').value;
-          const sKInput = m.querySelector('#h-sk').value;
-          const sA = sAInput ? parseInt(sAInput) : defSA;
-          const sK = sKInput ? parseInt(sKInput) : defSK;
-          const aA = +m.querySelector('#h-aa').value;
-          const aK = +m.querySelector('#h-ak').value;
-          const sAyh = getSurah(sA); const sKyh = getSurah(sK);
-          if (sAyh && aA > sAyh.ayahs) { UI.toast('Awal ayat melebihi batas surat', 'error'); return; }
-          if (sKyh && aK > sKyh.ayahs) { UI.toast('Akhir ayat melebihi batas surat', 'error'); return; }
-          const h = computeHafalan(sA, aA, sK, aK);
-          if (!h) { UI.toast('Range ayat tidak valid', 'error'); return; }
-          db.ziyadahHafalan.push({ id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: aA, sAkhir: sK, aAkhir: aK, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(), _created: Date.now() });
-          const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
-          if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
-          await Store.save(); Store.log('Setor ziyadah hafalan ' + s.nama); c(); UI.toast('Tersimpan · ' + formatHafalan(h), 'success'); renderZiyadah();
-        } }
+        { label: 'Tutup', cls: 'ghost', onClick: (m, c) => c() }
       ]
     });
-    setTimeout(() => { bindAyatMax('h-sa', 'h-aa'); bindAyatMax('h-sk', 'h-ak'); }, 50);
-    const calc = () => {
-      const sAInput = modal.modal.querySelector('#h-sa').value;
-      const sKInput = modal.modal.querySelector('#h-sk').value;
-      const sA = sAInput ? parseInt(sAInput) : 0;
-      const aA = +modal.modal.querySelector('#h-aa').value;
-      const sK = sKInput ? parseInt(sKInput) : 0;
-      const aK = +modal.modal.querySelector('#h-ak').value;
-      const h = computeHafalan(sA, aA, sK, aK);
-      modal.modal.querySelector('#calc-preview').innerHTML = h
-        ? `<b> Auto Hitung:</b> ${h.ayahs} ayat · ${h.pages} halaman · Juz ${h.juzStart}${h.juzRange > 1 ? '-' + h.juzEnd : ''}`
-        : '<span class="muted">Range belum valid.</span>';
+
+    setTimeout(() => {
+      bindAyatMax('b-sa', 'b-aa,b-ak');
+      bindAyatMax('b-sk', 'b-aa,b-ak');
+    }, 50);
+
+    document.getElementById('btn-simpan-bacaan').onclick = async () => {
+      const sa = document.getElementById('b-sa').value;
+      const sk = document.getElementById('b-sk').value;
+      const sA = sa ? parseInt(sa) : defSA;
+      const sK = sk ? parseInt(sk) : defSK;
+      if (!sA || !sK) { UI.toast('Pilih surat yang valid', 'error'); return; }
+      const sAyah = getSurah(sA); const sKyah = getSurah(sK);
+      const aaEl = document.getElementById('b-aa');
+      const akEl = document.getElementById('b-ak');
+      if (sAyah && +aaEl.value > sAyah.ayahs) { UI.toast('Awal ayat melebihi batas surat', 'error'); return; }
+      if (sKyah && +akEl.value > sKyah.ayahs) { UI.toast('Akhir ayat melebihi batas surat', 'error'); return; }
+
+      const d = Store.get();
+      d.ziyadahBacaan.push({
+        id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId),
+        tanggal: Store.todayStr(), sAwal: sA, aAwal: +aaEl.value,
+        sAkhir: sK, aAkhir: +akEl.value, _created: Date.now()
+      });
+      await Store.save();
+      Store.log('Setor ziyadah bacaan ' + s.nama);
+      UI.toast('Setoran bacaan tersimpan', 'success');
+
+      document.getElementById('sec-bacaan').style.opacity = '0.5';
+      document.getElementById('sec-bacaan').style.borderLeftColor = 'var(--muted)';
+      document.querySelectorAll('#sec-bacaan input').forEach(el => el.disabled = true);
+      document.getElementById('btn-simpan-bacaan').style.display = 'none';
+      document.getElementById('bacaan-ok').style.display = 'inline';
+
+      document.getElementById('sec-hafalan').style.opacity = '1';
+      document.getElementById('sec-hafalan').style.borderLeftColor = 'var(--primary)';
+      document.querySelectorAll('#h-sa,#h-aa,#h-sk,#h-ak,#f-nilai,#f-cat').forEach(el => el.disabled = false);
+      document.getElementById('btn-simpan-hafalan').disabled = false;
+
+      bindAyatMax('h-sa', 'h-aa');
+      bindAyatMax('h-sk', 'h-ak');
+
+      const calc = () => {
+        const hsa = parseInt(document.getElementById('h-sa').value) || 0;
+        const hsk = parseInt(document.getElementById('h-sk').value) || 0;
+        const haa = +document.getElementById('h-aa').value;
+        const hak = +document.getElementById('h-ak').value;
+        const hh = computeHafalan(hsa, haa, hsk, hak);
+        document.getElementById('calc-preview').innerHTML = hh
+          ? `<b> Auto Hitung:</b> ${hh.ayahs} ayat · ${hh.pages} halaman · Juz ${hh.juzStart}${hh.juzRange > 1 ? '-' + hh.juzEnd : ''}`
+          : '<span class="muted">Range belum valid.</span>';
+      };
+      document.querySelectorAll('#h-sa,#h-aa,#h-sk,#h-ak').forEach(el => el.oninput = calc);
+      calc();
+
+      document.getElementById('riwayat-list').innerHTML = riwayatSingkat();
+      hSlide = setInterval(calc, 300);
     };
-    modal.modal.querySelectorAll('#h-sa,#h-aa,#h-sk,#h-ak').forEach(i => i.oninput = calc);
-    calc();
+
+    document.getElementById('btn-simpan-hafalan').onclick = async () => {
+      const sa = document.getElementById('h-sa').value;
+      const sk = document.getElementById('h-sk').value;
+      const sA = sa ? parseInt(sa) : defSA;
+      const sK = sk ? parseInt(sk) : defSK;
+      const aA = +document.getElementById('h-aa').value;
+      const aK = +document.getElementById('h-ak').value;
+      const sAyh = getSurah(sA); const sKyh = getSurah(sK);
+      if (sAyh && aA > sAyh.ayahs) { UI.toast('Awal ayat melebihi batas surat', 'error'); return; }
+      if (sKyh && aK > sKyh.ayahs) { UI.toast('Akhir ayat melebihi batas surat', 'error'); return; }
+      const h = computeHafalan(sA, aA, sK, aK);
+      if (!h) { UI.toast('Range ayat tidak valid', 'error'); return; }
+
+      const d = Store.get();
+      d.ziyadahHafalan.push({
+        id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId),
+        tanggal: Store.todayStr(), sAwal: sA, aAwal: aA,
+        sAkhir: sK, aAkhir: aK, nilai: +document.getElementById('f-nilai').value,
+        catatan: document.getElementById('f-cat').value.trim(), _created: Date.now()
+      });
+      const wUser = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);
+      if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
+      await Store.save();
+      Store.log('Setor ziyadah hafalan ' + s.nama);
+      if (hSlide) clearInterval(hSlide);
+      modal.close();
+      UI.toast('Tersimpan · ' + formatHafalan(h), 'success');
+      renderZiyadah();
+    };
   }
 
   /* ----- Mutqin ----- */
