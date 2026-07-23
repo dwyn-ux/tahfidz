@@ -332,9 +332,17 @@ const Ustadz = (() => {
   function ziyadahForm(santriId) {
     const s = Store.findSantri(santriId);
     const db = Store.get();
+    const t = Store.todayStr();
+    const bacaanToday = db.ziyadahBacaan.filter(z => z.santriId === santriId && z.tanggal === t).sort((a, b) => (b._created||0)-(a._created||0))[0];
+    const hafalanToday = db.ziyadahHafalan.some(z => z.santriId === santriId && z.tanggal === t);
+    const skipBacaan = !!bacaanToday && !hafalanToday;
+
     const last = Store.lastZiyadah(santriId);
     let defSA = 2, defAA = 1, defSK = 2, defAK = 5;
-    if (last) {
+    if (bacaanToday) {
+      defSA = bacaanToday.sAwal; defAA = bacaanToday.aAwal;
+      defSK = bacaanToday.sAkhir; defAK = bacaanToday.aAkhir;
+    } else if (last) {
       const n = nextHafalanPosition(last.sAkhir, last.aAkhir, db.settings.juzOrder);
       if (n) { defSA = n.surah; defAA = n.ayah; defSK = n.surah; defAK = n.ayah + 4; }
     }
@@ -355,37 +363,45 @@ const Ustadz = (() => {
 
     let hSlide = null;
 
+    const bacaanLocked = skipBacaan ? 'opacity:0.5;border-left:3px solid var(--muted)' : 'border-left:3px solid var(--primary)';
+    const bacaanDisabled = skipBacaan ? 'disabled' : '';
+    const btnBacaanHide = skipBacaan ? 'style="display:none"' : '';
+    const bacaanOkShow = skipBacaan ? 'style="display:inline"' : 'style="display:none"';
+    const hafalanActive = skipBacaan ? 'opacity:1;border-left:3px solid var(--primary)' : 'opacity:0.5;border-left:3px solid var(--muted)';
+    const hafalanDisabled = skipBacaan ? '' : 'disabled';
+    const btnHafalanDisabled = skipBacaan ? '' : 'disabled';
+
     const body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
-      ${UI.field('Tanggal', `<input class="clay-input" value="${Store.todayStr()}" disabled>`)}
+      ${UI.field('Tanggal', `<input class="clay-input" value="${t}" disabled>`)}
       <hr style="border:none;border-top:1px solid var(--border,#ddd);margin:12px 0">
-      <div id="sec-bacaan" class="clay-card pad-sm mb" style="background:var(--bg);border-left:3px solid var(--primary)">
+      <div id="sec-bacaan" class="clay-card pad-sm mb" style="background:var(--bg);${bacaanLocked}">
         <div class="section-title" style="font-size:14px;margin:0 0 8px 0">📖 Setoran Bacaan</div>
         <div class="row">
-          <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="b-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off">`)}</div>
-          <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="b-aa" type="number" min="1" max="${getSurah(defSA) ? getSurah(defSA).ayahs : 286}" value="${Math.min(defAA, getSurah(defSA) ? getSurah(defSA).ayahs : 286)}">`)}</div>
+          <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="b-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off" ${bacaanDisabled}>`)}</div>
+          <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="b-aa" type="number" min="1" max="${getSurah(defSA) ? getSurah(defSA).ayahs : 286}" value="${Math.min(defAA, getSurah(defSA) ? getSurah(defSA).ayahs : 286)}" ${bacaanDisabled}>`)}</div>
         </div>
         <div class="row">
-          <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="b-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off">`)}</div>
-          <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="b-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}">`)}</div>
+          <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="b-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off" ${bacaanDisabled}>`)}</div>
+          <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="b-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}" ${bacaanDisabled}>`)}</div>
         </div>
-        <button class="clay-btn primary" id="btn-simpan-bacaan" style="margin-top:8px">💾 Simpan Bacaan</button>
-        <span id="bacaan-ok" style="display:none;margin-top:8px;color:var(--green)">✓ Bacaan tersimpan</span>
+        <button class="clay-btn primary" id="btn-simpan-bacaan" style="margin-top:8px" ${btnBacaanHide}>💾 Simpan Bacaan</button>
+        <span id="bacaan-ok" ${bacaanOkShow} style="margin-top:8px;color:var(--green)">✓ Bacaan tersimpan</span>
       </div>
-      <div id="sec-hafalan" class="clay-card pad-sm mb" style="background:var(--bg);border-left:3px solid var(--muted);opacity:0.5">
+      <div id="sec-hafalan" class="clay-card pad-sm mb" style="background:var(--bg);${hafalanActive}">
         <div class="section-title" style="font-size:14px;margin:0 0 8px 0">📝 Setoran Hafalan</div>
         <div class="row">
-          <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="h-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off" disabled>`)}</div>
-          <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="h-aa" type="number" min="1" max="${getSurah(defSA) ? getSurah(defSA).ayahs : 286}" value="${Math.min(defAA, getSurah(defSA) ? getSurah(defSA).ayahs : 286)}" disabled>`)}</div>
+          <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="h-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off" ${hafalanDisabled}>`)}</div>
+          <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="h-aa" type="number" min="1" max="${getSurah(defSA) ? getSurah(defSA).ayahs : 286}" value="${Math.min(defAA, getSurah(defSA) ? getSurah(defSA).ayahs : 286)}" ${hafalanDisabled}>`)}</div>
         </div>
         <div class="row">
-          <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="h-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off" disabled>`)}</div>
-          <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="h-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}" disabled>`)}</div>
+          <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="h-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off" ${hafalanDisabled}>`)}</div>
+          <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="h-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}" ${hafalanDisabled}>`)}</div>
         </div>
         <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg);font-size:13px"></div>
-        ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80" disabled>`)}
-        ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat" disabled></textarea>`)}
-        <button class="clay-btn primary" id="btn-simpan-hafalan" style="margin-top:8px" disabled>💾 Simpan Hafalan</button>
+        ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80" ${hafalanDisabled}>`)}
+        ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat" ${hafalanDisabled}></textarea>`)}
+        <button class="clay-btn primary" id="btn-simpan-hafalan" style="margin-top:8px" ${btnHafalanDisabled}>💾 Simpan Hafalan</button>
       </div>
       <div class="clay-card pad-sm" style="background:var(--bg);font-size:13px"><b> Riwayat 3 setoran terakhir:</b> <div id="riwayat-list">${riwayatSingkat()}</div></div>`;
 
@@ -402,6 +418,28 @@ const Ustadz = (() => {
       bindAyatMax('b-sa', 'b-aa,b-ak');
       bindAyatMax('b-sk', 'b-aa,b-ak');
     }, 50);
+
+    if (skipBacaan) {
+      document.getElementById('sec-hafalan').style.opacity = '1';
+      document.getElementById('sec-hafalan').style.borderLeftColor = 'var(--primary)';
+      setTimeout(() => {
+        bindAyatMax('h-sa', 'h-aa');
+        bindAyatMax('h-sk', 'h-ak');
+        const calc = () => {
+          const hsa = parseInt(document.getElementById('h-sa').value) || 0;
+          const hsk = parseInt(document.getElementById('h-sk').value) || 0;
+          const haa = +document.getElementById('h-aa').value;
+          const hak = +document.getElementById('h-ak').value;
+          const hh = computeHafalan(hsa, haa, hsk, hak);
+          document.getElementById('calc-preview').innerHTML = hh
+            ? `<b> Auto Hitung:</b> ${hh.ayahs} ayat · ${hh.pages} halaman · Juz ${hh.juzStart}${hh.juzRange > 1 ? '-' + hh.juzEnd : ''}`
+            : '<span class="muted">Range belum valid.</span>';
+        };
+        document.querySelectorAll('#h-sa,#h-aa,#h-sk,#h-ak').forEach(el => el.oninput = calc);
+        calc();
+        hSlide = setInterval(calc, 300);
+      }, 50);
+    }
 
     document.getElementById('btn-simpan-bacaan').onclick = async () => {
       const sa = document.getElementById('b-sa').value;
