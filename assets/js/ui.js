@@ -76,7 +76,7 @@ const UI = (() => {
   function surahDatalistId() { return 'dl-surah'; }
 
   function surahDatalistHTML() {
-    return `<datalist id="dl-surah">${SURAHS.map(s => `<option value="${s.n}. ${esc(s.latin)}">${s.n}. ${esc(s.latin)} (${esc(s.arab)})</option>`).join('')}</datalist>`;
+    return `<datalist id="dl-surah">${SURAHS.map(s => `<option value="${s.n}. ${s.latin}">${s.n}. ${s.latin} (${s.arab})</option>`).join('')}</datalist>`;
   }
 
   /* Search bar — real-time, cross-entity */

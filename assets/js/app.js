@@ -73,6 +73,6 @@ const App = (() => {
 // Init datalist & boot
 function initDatalist() {
   const dl = document.getElementById('dl-surah');
-  if (dl) dl.innerHTML = SURAHS.map(s => `<option value="${s.n}. ${UI.esc(s.latin)}">${s.n}. ${UI.esc(s.latin)} (${s.arab})</option>`).join('');
+  if (dl) dl.innerHTML = SURAHS.map(s => `<option value="${s.n}. ${s.latin}">${s.n}. ${s.latin} (${s.arab})</option>`).join('');
 }
 window.addEventListener('DOMContentLoaded', () => { initDatalist(); App.start(); });
