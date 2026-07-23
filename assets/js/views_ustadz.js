@@ -307,10 +307,16 @@ const Ustadz = (() => {
   function renderZiyadah() {
     const db = Store.get();
     const santri = mySantri().filter(s => s.level === 'Ziyadah');
+    const t = Store.todayStr();
     const rows = santri.map(s => {
       const last = Store.lastZiyadah(s.id);
       const totalH = Store.totalHafalanSantri(s.id);
-      return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${last ? getSurah(last.sAkhir).latin + ':' + last.aAkhir : '<span class="muted">-</span>'}</td><td>${totalH ? formatHafalan(totalH) : '-'}</td><td><button class="clay-btn sm primary" data-setoran="${s.id}">+ Setoran</button></td></tr>`;
+      const bacaanToday = db.ziyadahBacaan.some(z => z.santriId === s.id && z.tanggal === t);
+      const hafalanToday = db.ziyadahHafalan.some(z => z.santriId === s.id && z.tanggal === t);
+      let badge = '';
+      if (hafalanToday) badge = ' <span class="badge green">Selesai ✓</span>';
+      else if (bacaanToday) badge = ' <span class="badge" style="background:var(--blue,#2196F3)">Bacaan ✓</span>';
+      return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${last ? getSurah(last.sAkhir).latin + ':' + last.aAkhir : '<span class="muted">-</span>'}</td><td>${totalH ? formatHafalan(totalH) : '-'}</td><td><button class="clay-btn sm primary" data-setoran="${s.id}">+ Setoran</button>${badge}</td></tr>`;
     }).join('');
     document.getElementById('tab-content').innerHTML = `
       <div class="clay-card">
