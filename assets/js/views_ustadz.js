@@ -705,44 +705,65 @@ const Ustadz = (() => {
   /* ---------------- Umum (Semua kelas) ---------------- */
   function renderUmum() {
     const db = Store.get();
-    const santri = db.santri;
+    const allSantri = db.santri.filter(s => s.status === 'Aktif');
+    let filterText = '';
     
-    let html = `
-      <div class="clay-card">
-        <div class="row" style="justify-content:space-between">
-          <div class="section-title" style="margin:0">Setoran Umum (${santri.length} santri)</div>
-        </div>
-        <div class="table-wrap mt">
-          <table class="clay-table">
-            <thead>
-              <tr><th>Santri</th><th>Kelas</th><th>Level</th><th>Total Hafalan</th><th>Nilai</th><th>Aksi</th></tr>
-            </thead>
-            <tbody>`;
+    function renderTable(santri) {
+      let html = `
+        <div class="clay-card">
+          <div class="row" style="justify-content:space-between">
+            <div class="section-title" style="margin:0">Setoran Umum (${santri.length} santri)</div>
+            <input class="clay-input" id="cari-santri" type="text" placeholder="Cari nama santri..." value="${UI.esc(filterText)}" style="max-width:260px" autocomplete="off" />
+          </div>
+          <div class="table-wrap mt">
+            <table class="clay-table">
+              <thead>
+                <tr><th>Santri</th><th>Kelas</th><th>Level</th><th>Total Hafalan</th><th>Nilai</th><th>Aksi</th></tr>
+              </thead>
+              <tbody>`;
       
-    if (!santri.length) {
-      html += '<tr><td colspan="6"><div class="empty">Tidak ada santri.</div></td></tr>';
+      if (!santri.length) {
+        html += '<tr><td colspan="6"><div class="empty">Tidak ada santri.</div></td></tr>';
+      }
+      santri.forEach(s => {
+        const totalH = Store.totalHafalanSantri(s.id);
+        const avg = Store.avgNilai(s.id);
+        let btnLabel = '+ Input', btnCls = 'primary';
+        if (s.level === 'Ziyadah') { btnLabel = '+ Setoran'; btnCls = 'secondary'; }
+        else if (s.level === 'Mutqin') { btnLabel = '+ Murajaah'; btnCls = 'success'; }
+        
+        html += `<tr>
+          <td><b>${UI.esc(s.nama)}</b><div class="muted" style="font-size:12px">${UI.esc(s.nis)}</div></td>
+          <td>${UI.esc(s.kelas)}</td>
+          <td><span class="badge ${s.level === 'Tahsin' ? 'blue' : s.level === 'Ziyadah' ? 'green' : 'warn'}">${UI.esc(s.level)}</span></td>
+          <td>${totalH ? formatHafalan(totalH) : '<span class="muted">-</span>'}</td>
+          <td>${avg ? '<b>' + avg + '</b>' : '<span class="muted">-</span>'}</td>
+          <td><button class="clay-btn sm ${btnCls}" data-input="${s.id}">${btnLabel}</button></td>
+        </tr>`;
+      });
+      
+      html += '</tbody></table></div></div>';
+      
+      document.getElementById('tab-content').innerHTML = html;
+      
+      const input = document.getElementById('cari-santri');
+      if (input) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+        input.oninput = () => {
+          filterText = input.value.trim().toLowerCase();
+          const filtered = allSantri.filter(s =>
+            s.nama.toLowerCase().includes(filterText) ||
+            (s.nis && s.nis.toString().toLowerCase().includes(filterText))
+          );
+          renderTable(filtered);
+        };
+      }
+      
+      document.querySelectorAll('[data-input]').forEach(b => b.onclick = () => umumInput(b.dataset.input));
     }
-    santri.forEach(s => {
-      const totalH = Store.totalHafalanSantri(s.id);
-      const avg = Store.avgNilai(s.id);
-      let btnLabel = '+ Input', btnCls = 'primary';
-      if (s.level === 'Ziyadah') { btnLabel = '+ Setoran'; btnCls = 'secondary'; }
-      else if (s.level === 'Mutqin') { btnLabel = '+ Murajaah'; btnCls = 'success'; }
-      
-      html += `<tr>
-        <td><b>${UI.esc(s.nama)}</b><div class="muted" style="font-size:12px">${UI.esc(s.nis)}</div></td>
-        <td>${UI.esc(s.kelas)}</td>
-        <td><span class="badge ${s.level === 'Tahsin' ? 'blue' : s.level === 'Ziyadah' ? 'green' : 'warn'}">${UI.esc(s.level)}</span></td>
-        <td>${totalH ? formatHafalan(totalH) : '<span class="muted">-</span>'}</td>
-        <td>${avg ? '<b>' + avg + '</b>' : '<span class="muted">-</span>'}</td>
-        <td><button class="clay-btn sm ${btnCls}" data-input="${s.id}">${btnLabel}</button></td>
-      </tr>`;
-    });
     
-    html += '</tbody></table></div></div>';
-    
-    document.getElementById('tab-content').innerHTML = html;
-    document.querySelectorAll('[data-input]').forEach(b => b.onclick = () => umumInput(b.dataset.input));
+    renderTable(allSantri);
   }
 
   function formatHafalan(h) {
