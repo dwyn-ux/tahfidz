@@ -705,7 +705,7 @@ const Ustadz = (() => {
   /* ---------------- Umum (Semua kelas) ---------------- */
   function renderUmum() {
     const db = Store.get();
-    const santri = mySantri();
+    const santri = db.santri;
     
     let html = `
       <div class="clay-card">
