@@ -207,12 +207,13 @@ const Ustadz = (() => {
     const c = ctx(); _scope = c.scope;
     const navItems = (c.role === 'admin') ? Admin.nav('ustadz_pembelajaran') : nav('ustadz_pembelajaran');
     Shared.shell(c.role, navItems, '');
-    Shared.setHeader('Pembelajaran', 'Tahsin · Ziyadah · Mutqin');
+    Shared.setHeader('Pembelajaran', 'Tahsin · Ziyadah · Mutqin · Umum');
     document.getElementById('view-content').innerHTML = `
       <div class="pill-tabs" id="tabs">
         <button class="pill active" data-tab="tahsin"> Tahsin</button>
         <button class="pill" data-tab="ziyadah"> Ziyadah</button>
         <button class="pill" data-tab="mutqin"> Mutqin</button>
+        <button class="pill" data-tab="umum"> Umum</button>
       </div>
       <div id="tab-content"></div>`;
     const tabs = document.getElementById('tabs');
@@ -220,7 +221,8 @@ const Ustadz = (() => {
       tabs.querySelectorAll('.pill').forEach(p => p.classList.toggle('active', p.dataset.tab === tab));
       if (tab === 'tahsin') renderTahsin();
       else if (tab === 'ziyadah') renderZiyadah();
-      else renderMutqin();
+      else if (tab === 'mutqin') renderMutqin();
+      else renderUmum();
     };
     tabs.querySelectorAll('.pill').forEach(p => p.onclick = () => render(p.dataset.tab));
     render('tahsin');
@@ -698,6 +700,154 @@ const Ustadz = (() => {
     };
     document.getElementById('f-bulan').onchange = apply;
     apply();
+  }
+
+  /* ---------------- Umum (Semua kelas) ---------------- */
+  function renderUmum() {
+    const db = Store.get();
+    const santri = mySantri();
+    
+    let html = `
+      <div class="clay-card">
+        <div class="row" style="justify-content:space-between">
+          <div class="section-title" style="margin:0">Setoran Umum (${santri.length} santri)</div>
+        </div>
+        <div class="table-wrap mt">
+          <table class="clay-table">
+            <thead>
+              <tr><th>Santri</th><th>Kelas</th><th>Level</th><th>Total Hafalan</th><th>Nilai</th><th>Aksi</th></tr>
+            </thead>
+            <tbody>`;
+      
+    if (!santri.length) {
+      html += '<tr><td colspan="6"><div class="empty">Tidak ada santri.</div></td></tr>';
+    }
+    santri.forEach(s => {
+      const totalH = Store.totalHafalanSantri(s.id);
+      const avg = Store.avgNilai(s.id);
+      let btnLabel = '+ Input', btnCls = 'primary';
+      if (s.level === 'Ziyadah') { btnLabel = '+ Setoran'; btnCls = 'secondary'; }
+      else if (s.level === 'Mutqin') { btnLabel = '+ Murajaah'; btnCls = 'success'; }
+      
+      html += `<tr>
+        <td><b>${UI.esc(s.nama)}</b><div class="muted" style="font-size:12px">${UI.esc(s.nis)}</div></td>
+        <td>${UI.esc(s.kelas)}</td>
+        <td><span class="badge ${s.level === 'Tahsin' ? 'blue' : s.level === 'Ziyadah' ? 'green' : 'warn'}">${UI.esc(s.level)}</span></td>
+        <td>${totalH ? formatHafalan(totalH) : '<span class="muted">-</span>'}</td>
+        <td>${avg ? '<b>' + avg + '</b>' : '<span class="muted">-</span>'}</td>
+        <td><button class="clay-btn sm ${btnCls}" data-input="${s.id}">${btnLabel}</button></td>
+      </tr>`;
+    });
+    
+    html += '</tbody></table></div></div>';
+    
+    document.getElementById('tab-content').innerHTML = html;
+    document.querySelectorAll('[data-input]').forEach(b => b.onclick = () => umumInput(b.dataset.input));
+  }
+
+  function formatHafalan(h) {
+    if (!h) return '-';
+    return `${h.ayahs} ayat · ${h.pages} hlm`;
+  }
+
+  function umumInput(santriId) {
+    const s = Store.findSantri(santriId);
+    if (!s) return;
+    const level = s.level;
+    
+    let body = `
+      ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
+      ${UI.field('Kelas', `<input class="clay-input" value="${UI.esc(s.kelas)}" disabled>`)}
+      ${UI.field('Halaqah', `<input class="clay-input" value="${UI.esc(s.halaqah)}" disabled>`)}
+      ${UI.field('Tanggal', `<input class="clay-input" id="f-tgl" type="date" value="${Store.todayStr()}">`)}`;
+    
+    if (level === 'Tahsin') {
+      body += `
+        <div class="row">
+          <div style="flex:1">${UI.field('Halaman Awal', `<input class="clay-input" id="f-ha" type="number" min="1" value="1">`)}</div>
+          <div style="flex:1">${UI.field('Halaman Akhir', `<input class="clay-input" id="f-hk" type="number" min="1" value="2">`)}</div>
+        </div>`;
+    } else if (level === 'Ziyadah') {
+      body += `
+        <div class="row">
+          <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="f-sa" list="dl-surah" type="text" placeholder="1. Al-Fatihah" autocomplete="off">`)}</div>
+          <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="f-aa" type="number" min="1" max="286" value="1">`)}</div>
+        </div>
+        <div class="row">
+          <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="f-sk" list="dl-surah" type="text" placeholder="2. Al-Baqarah" autocomplete="off">`)}</div>
+          <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="f-ak" type="number" min="1" max="286" value="5">`)}</div>
+        </div>`;
+    } else if (level === 'Mutqin') {
+      body += `
+        <div class="row">
+          <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="f-sa" list="dl-surah" type="text" placeholder="1. Al-Fatihah" autocomplete="off">`)}</div>
+          <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="f-aa" type="number" min="1" max="286" value="1">`)}</div>
+        </div>
+        <div class="row">
+          <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="f-sk" list="dl-surah" type="text" placeholder="2. Al-Baqarah" autocomplete="off">`)}</div>
+          <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="f-ak" type="number" min="1" max="286" value="5">`)}</div>
+        </div>
+        ${UI.field('Total Hafalan Mutqin (hlm)', `<input class="clay-input" id="f-total" type="number" min="0" value="0">`)}`;
+    }
+    
+    body += `
+      ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80">`)}
+      ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat"></textarea>`)}`;
+    
+    UI.openModal({
+      title: 'Input ' + level + ' - ' + s.nama,
+      sub: s.kelas + ' · ' + s.halaqah,
+      bodyHTML: body,
+      actions: [
+        { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
+        { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
+          const d = Store.get();
+          
+          let record;
+          if (level === 'Tahsin') {
+            record = {
+              id: Store.uid('ts'), santriId, ustadzId: ustadzIdFor(santriId),
+              tanggal: m.querySelector('#f-tgl').value,
+              halAwal: +m.querySelector('#f-ha').value, halAkhir: +m.querySelector('#f-hk').value,
+              nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim()
+            };
+            d.tahsin.push(record);
+          } else if (level === 'Ziyadah') {
+            const sA = parseInt(m.querySelector('#f-sa').value) || 2;
+            const sK = parseInt(m.querySelector('#f-sk').value) || 2;
+            record = {
+              id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId),
+              tanggal: m.querySelector('#f-tgl').value,
+              sAwal: sA, aAwal: +m.querySelector('#f-aa').value,
+              sAkhir: sK, aAkhir: +m.querySelector('#f-ak').value,
+              nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(),
+              _created: Date.now()
+            };
+            d.ziyadahHafalan.push(record);
+          } else if (level === 'Mutqin') {
+            const sA = parseInt(m.querySelector('#f-sa').value) || 2;
+            const sK = parseInt(m.querySelector('#f-sk').value) || 2;
+            record = {
+              id: Store.uid('m'), santriId, ustadzId: ustadzIdFor(santriId),
+              tanggal: m.querySelector('#f-tgl').value,
+              sAwal: sA, aAwal: +m.querySelector('#f-aa').value,
+              sAkhir: sK, aAkhir: +m.querySelector('#f-ak').value,
+              nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(),
+              totalHafalan: +m.querySelector('#f-total').value
+            };
+            d.mutqin.push(record);
+          }
+          
+          const w = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);
+          if (w) Store.addNotif(w.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + level + ')');
+          await Store.save();
+          Store.log('Input umum: ' + s.nama + ' (' + level + ')');
+          c();
+          UI.toast('Setoran ' + level + ' tersimpan', 'success');
+          renderUmum();
+        } }
+      ]
+    });
   }
 
   /* ---------------- Notifikasi ---------------- */
