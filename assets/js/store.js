@@ -158,6 +158,15 @@ const Store = (() => {
     return all[0] || null;
   }
 
+  function lastHafalan(santriId) {
+    const haf = db.ziyadahHafalan.filter(z => z.santriId === santriId).sort((a, b) => {
+      const d = b.tanggal.localeCompare(a.tanggal);
+      if (d !== 0) return d;
+      return (b._created || 0) - (a._created || 0);
+    });
+    return haf[0] || null;
+  }
+
   function totalHafalanSantri(santriId) {
     let ayahs = 0, pages = 0, juzMin = 30, juzMax = 1;
     const add = (rec) => {
@@ -251,6 +260,6 @@ const Store = (() => {
     load, save, get, reset, uid, log, nowISO, todayStr,
     setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout,
     recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahByName, search,
-    lastZiyadah, totalHafalanSantri, avgNilai, kehadiranBulan, addNotif, notifFor, clearNotifs, checkSetoranTerlewat
+    lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, addNotif, notifFor, clearNotifs, checkSetoranTerlewat
   };
 })();

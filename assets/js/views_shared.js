@@ -38,7 +38,6 @@ const Shared = (() => {
               <div class="sub" id="page-sub">${UI.esc(db.settings.namaLembaga)}</div>
             </div>
             <div class="actions" id="topbar-actions">
-              <div id="search-wrap"></div>
             </div>
           </div>
           <div id="view-content">${contentHTML}</div>
@@ -59,7 +58,6 @@ const Shared = (() => {
     document.querySelectorAll('.nav-item').forEach(b => {
       b.onclick = () => { App.navigate(b.dataset.view); };
     });
-    UI.renderSearch();
   }
 
   function setHeader(title, sub) {

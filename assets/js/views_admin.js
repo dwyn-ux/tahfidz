@@ -56,6 +56,18 @@ const Admin = (() => {
     ];
   }
 
+  function navUstadz(active) {
+    return [
+      { view: 'ustadz_dashboard', label: 'Dashboard', active: active === 'ustadz_dashboard' },
+      { view: 'ustadz_absensi', label: 'Absensi', active: active === 'ustadz_absensi' },
+      { view: 'ustadz_pembelajaran', label: 'Pembelajaran', active: active === 'ustadz_pembelajaran' },
+      { view: 'ustadz_riwayat', label: 'Riwayat', active: active === 'ustadz_riwayat' },
+      { view: 'ustadz_laporan', label: 'Laporan', active: active === 'ustadz_laporan' },
+      { view: 'ustadz_notif', label: 'Notifikasi', active: active === 'ustadz_notif' },
+      { view: 'quran', label: 'Al-Qur\'an', active: active === 'quran' }
+    ];
+  }
+
   /* ---------------- Dashboard ---------------- */
   function dashboard() {
     Store.checkSetoranTerlewat();
@@ -157,9 +169,12 @@ const Admin = (() => {
             <button class="clay-btn primary" id="btn-add">+ Tambah Santri</button>
           </div>
         </div>
+        <div class="row" style="margin-top:12px">
+          <input class="clay-input" id="search-santri" type="text" placeholder="Cari santri..." autocomplete="off" />
+        </div>
         <div class="table-wrap mt"><table class="clay-table">
           <thead><tr><th>Nama</th><th>JK</th><th>Level</th><th>Halaqah</th><th>Kelas</th><th>Status</th><th>Aksi</th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="7"><div class="empty">Belum ada santri.</div></td></tr>`}</tbody>
+          <tbody id="santri-table-body">${rows || `<tr><td colspan="7"><div class="empty">Belum ada santri.</div></td></tr>`}</tbody>
         </table></div>
       </div>`;
     document.getElementById('btn-add').onclick = () => santriForm();
@@ -175,6 +190,52 @@ const Admin = (() => {
         Store.recalcHalaqah(); Store.save(); Store.log('Hapus santri'); UI.toast('Santri dihapus'); santri();
       });
     });
+
+    const searchInput = document.getElementById('search-santri');
+    if (searchInput) {
+      let searchTimer = null;
+      searchInput.oninput = () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          const term = searchInput.value.toLowerCase().trim();
+          const rows = term ? db.santri.filter(s =>
+            s.nama.toLowerCase().includes(term) ||
+            (s.nis && s.nis.toString().includes(term)) ||
+            s.halaqah.toLowerCase().includes(term) ||
+            s.kelas.toLowerCase().includes(term) ||
+            s.level.toLowerCase().includes(term)
+          ) : db.santri;
+          const newRows = rows.map(s => `<tr>
+            <td><b>${UI.esc(s.nama)}</b><div class="muted">${UI.esc(s.nis)}</div></td>
+            <td>${UI.esc(s.jk)}</td>
+            <td>${UI.esc(s.level)}</td>
+            <td>${UI.esc(s.halaqah)}</td>
+            <td>${UI.esc(s.kelas)}</td>
+            <td><span class="badge ${s.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(s.status)}</span></td>
+            <td>
+              <button class="clay-btn sm" data-edit="${s.id}">✏️</button>
+              <button class="clay-btn sm danger" data-del="${s.id}">🗑</button>
+            </td>
+          </tr>`).join('');
+          document.getElementById('santri-table-body').innerHTML = newRows || `<tr><td colspan="7"><div class="empty">Tidak ada santri yang sesuai.</div></td></tr>`;
+          document.querySelectorAll('#santri-table-body [data-edit], #santri-table-body [data-del]').forEach(b => {
+            b.onclick = () => {
+              if (b.dataset.edit) santriForm(b.dataset.edit);
+              else {
+                UI.confirmDialog('Hapus Santri', 'Yakin ingin menghapus santri ini?', () => {
+                  const db = Store.get();
+                  const s = Store.findSantri(b.dataset.del);
+                  db.santri = db.santri.filter(x => x.id !== b.dataset.del);
+                  db.wali = db.wali.filter(w => w.santriId !== b.dataset.del);
+                  db.users = db.users.filter(u => !(u.role === 'wali' && s && u.refId === s.waliId));
+                  Store.recalcHalaqah(); Store.save(); Store.log('Hapus santri'); UI.toast('Santri dihapus'); santri();
+                });
+              }
+            };
+          });
+        }, 150);
+      };
+    }
   }
 
   function santriForm(id) {
