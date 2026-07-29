@@ -870,12 +870,10 @@ const Ustadz = (() => {
         ${UI.field('Total Hafalan Mutqin (hlm)', `<input class="clay-input" id="f-total" type="number" min="0" value="0">`)}`;
     }
     
-    body += `
-      ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80">`)}
-      ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat"></textarea>`)}`;
-    
-    if (level === 'Ziyadah') {
-      body = body.replace('${UI.field('Nilai', ...', '').replace('${UI.field('Catatan', ...', '');
+    if (level !== 'Ziyadah') {
+      body += `
+        ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80">`)}
+        ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat"></textarea>`)}`;
     }
 
     const modal = UI.openModal({
