@@ -267,11 +267,6 @@ const Admin = (() => {
         }, 150);
       };
     }
-            };
-          });
-        }, 150);
-      };
-    }
   }
 
   function santriForm(id) {
