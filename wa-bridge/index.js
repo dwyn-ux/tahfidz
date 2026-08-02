@@ -109,6 +109,7 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-WA-Key');
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   const url = new URL(req.url, 'http://localhost');
+  const pathname = url.pathname.replace(/^\/wa-bridge/, '');
   const authOk = req.headers['x-wa-key'] === WA_KEY || url.searchParams.get('key') === WA_KEY;
 
   const json = (code, data) => {
@@ -116,11 +117,11 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify(data));
   };
 
-  if (url.pathname === '/status') {
+  if (pathname === '/status') {
     return json(200, state);
   }
 
-  if (url.pathname === '/qr') {
+  if (pathname === '/qr') {
     if (state.qr) {
       const png = await QRCode.toBuffer(state.qr, { margin: 1, width: 300 });
       res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
@@ -129,7 +130,7 @@ const server = http.createServer(async (req, res) => {
     return json(200, { connected: state.connected, qr: null });
   }
 
-  if (url.pathname === '/send') {
+  if (pathname === '/send') {
     if (!authOk) return json(401, { error: 'Invalid X-WA-KEY' });
     if (req.method !== 'POST') return json(405, { error: 'POST only' });
     let body = '';
