@@ -365,6 +365,11 @@ const Admin = (() => {
               const pass = m.querySelector('#f-pass').value.trim();
               if (pass) waliUser.password = pass;
             }
+            const waliRec = db.wali.find(w => w.id === Store.findSantri(id).waliId);
+            if (waliRec) {
+              waliRec.nama = data.namaWali || waliRec.nama;
+              waliRec.noHp = data.noHpWali || waliRec.noHp;
+            }
             Store.log('Edit santri: ' + data.nama);
           } else {
             const waliId = Store.uid('w');

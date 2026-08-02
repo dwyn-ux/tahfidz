@@ -196,8 +196,62 @@ const Wali = (() => {
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">No HP</span><b>${w ? UI.esc(w.noHp) : '-'}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Username Login</span><b>${w ? UI.esc((db.users.find(u => u.refId === w.id) || {}).username || '-') : '-'}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Password</span><b>••••••••</b></div>
+          <div class="row mt" style="gap:8px">
+            <button class="clay-btn sm secondary" id="btn-edit-profil">✏️ Edit Profil</button>
+            <button class="clay-btn sm ghost" id="btn-ganti-pass">🔑 Ganti Password</button>
+          </div>
         </div>
       </div>`;
+
+    document.getElementById('btn-edit-profil').onclick = () => editProfilModal(w);
+    document.getElementById('btn-ganti-pass').onclick = () => gantiPassModal();
+  }
+
+  function editProfilModal(w) {
+    const body = `
+      ${UI.field('Nama Wali', `<input class="clay-input" id="p-nama" value="${w ? UI.esc(w.nama) : ''}">`)}
+      ${UI.field('No HP', `<input class="clay-input" id="p-hp" value="${w ? UI.esc(w.noHp) : ''}">`)}`;
+    UI.openModal({
+      title: 'Edit Profil', bodyHTML: body,
+      actions: [
+        { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
+        { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
+          const nama = m.querySelector('#p-nama').value.trim();
+          const noHp = m.querySelector('#p-hp').value.trim();
+          if (!nama) { UI.toast('Nama wajib diisi', 'error'); return; }
+          const db = Store.get();
+          const wali = Store.findWali(Store.getSession().refId);
+          if (wali) {
+            wali.nama = nama;
+            wali.noHp = noHp;
+          }
+          await Store.save(); Store.log('Edit profil wali'); c(); UI.toast('Profil tersimpan', 'success'); profil();
+        } }
+      ]
+    });
+  }
+
+  function gantiPassModal() {
+    const body = `
+      ${UI.field('Password Lama', `<input class="clay-input" id="p-old" type="password">`)}
+      ${UI.field('Password Baru', `<input class="clay-input" id="p-new" type="password">`)}
+      ${UI.field('Ulangi Password Baru', `<input class="clay-input" id="p-new2" type="password">`)}`;
+    UI.openModal({
+      title: 'Ganti Password', bodyHTML: body,
+      actions: [
+        { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
+        { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
+          const old = m.querySelector('#p-old').value;
+          const nw = m.querySelector('#p-new').value;
+          const nw2 = m.querySelector('#p-new2').value;
+          if (!old || !nw) { UI.toast('Isi password lama & baru', 'error'); return; }
+          if (nw !== nw2) { UI.toast('Password baru tidak sama', 'error'); return; }
+          const res = await Store.changePassword(old, nw);
+          if (!res.ok) { UI.toast(res.msg, 'error'); return; }
+          await Store.save(); c(); UI.toast('Password berhasil diganti', 'success');
+        } }
+      ]
+    });
   }
 
   return { nav, dashboard, perkembangan, absensi, catatan, profil };

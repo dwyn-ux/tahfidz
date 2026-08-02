@@ -79,6 +79,17 @@ const Store = (() => {
   }
   function logout() { clearSession(); }
 
+  async function changePassword(oldPass, newPass) {
+    try {
+      await api('password', { method: 'POST', body: { old: oldPass, new: newPass } });
+      const me = db.users.find(u => u.id === getSession().userId);
+      if (me) me.password = newPass;
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, msg: e.message || 'Gagal ganti password.' };
+    }
+  }
+
   /* ---------- Bootstrap (load all data) ---------- */
   async function load() {
     try {
@@ -258,7 +269,7 @@ const Store = (() => {
 
   return {
     load, save, get, reset, uid, log, nowISO, todayStr,
-    setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout,
+    setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout, changePassword,
     recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahByName, search,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, addNotif, notifFor, clearNotifs, checkSetoranTerlewat
   };
