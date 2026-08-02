@@ -861,6 +861,12 @@ const Admin = (() => {
           <div style="flex:1">${UI.field('URL Bridge (contoh: https://wa.example.com:3210)', `<input class="clay-input" id="s-wa-url" value="${UI.esc(s.waBridgeUrl)}" placeholder="https://...:3210">`)}</div>
           <div style="flex:1">${UI.field('Key Bridge (X-WA-Key)', `<input class="clay-input" id="s-wa-key" value="${UI.esc(s.waBridgeKey)}" placeholder="tahfidz-wa-bridge">`)}</div>
         </div>
+        <div class="row" style="margin-top:10px">
+          <label style="flex:1;display:flex;align-items:center;gap:8px;margin-top:12px">
+            <button class="clay-toggle ${s.waAuto ? 'on' : ''}" id="s-wa-auto"></button>
+            <span id="s-wa-auto-label" style="font-size:13px">${s.waAuto ? 'WhatsApp Otomatis: Aktif' : 'WhatsApp Otomatis: Nonaktif'}</span>
+          </label>
+        </div>
         <div class="row mt">
           <button class="clay-btn ghost" id="btn-wa-status">Cek Status</button>
           <button class="clay-btn ghost" id="btn-wa-test">Kirim Tes</button>
@@ -880,7 +886,7 @@ const Admin = (() => {
       document.getElementById('s-setoran-label').textContent = on ? 'Berkali-kali per hari' : 'Sekali sehari';
     };
 
-    ['s-notif-active', 's-notif-wali', 's-notif-ustadz'].forEach(id => {
+    ['s-notif-active', 's-notif-wali', 's-notif-ustadz', 's-wa-auto'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.onclick = function() {
         this.classList.toggle('on');
@@ -889,6 +895,7 @@ const Admin = (() => {
         if (id === 's-notif-active') label.textContent = on ? 'Notifikasi Aktif' : 'Notifikasi Nonaktif';
         else if (id === 's-notif-wali') label.textContent = on ? 'Kirim ke Wali: Ya' : 'Kirim ke Wali: Tidak';
         else if (id === 's-notif-ustadz') label.textContent = on ? 'Kirim ke Ustadz: Ya' : 'Kirim ke Ustadz: Tidak';
+        else if (id === 's-wa-auto') label.textContent = on ? 'WhatsApp Otomatis: Aktif' : 'WhatsApp Otomatis: Nonaktif';
       };
     });
 
@@ -922,6 +929,7 @@ const Admin = (() => {
       db.settings.notifMaxPerDay = parseInt(document.getElementById('s-notif-max').value) || 3;
       db.settings.waBridgeUrl = document.getElementById('s-wa-url').value.trim();
       db.settings.waBridgeKey = document.getElementById('s-wa-key').value.trim();
+      db.settings.waAuto = document.getElementById('s-wa-auto').classList.contains('on');
       db.settings.logo = _logoData || '';
       Store.save(); Store.log('Update settings'); UI.toast('Settings tersimpan', 'success');
     };
