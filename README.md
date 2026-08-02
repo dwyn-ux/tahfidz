@@ -13,9 +13,48 @@ Sangat mudah di-deploy di shared hosting.
 
 - **Admin**: dashboard, manajemen santri/ustadz/wali/halaqah, pengaturan lembaga, reset data.
 - **Ustadz**: input ziyadah hafalan, tahsin, kehadiran, catatan, rekap per santri.
-- **Wali**: pantau progress hafalan & kehadiran anak, lihat notifikasi.
+- **Wali**: pantau progress hafalan & kehadiran anak, lihat notifikasi, edit profil & ganti password.
 - **Perhitungan otomatis**: total hafalan (juz/halaman/ayat), rata-rata nilai, kehadiran bulanan,
   konversi ayat ↔ halaman ↔ juz berdasarkan data 114 surat Al-Qur'an.
+- **WhatsApp otomatis**: laporan capaian (tahsin/ziyadah/mutqin) terkirim otomatis ke WhatsApp wali
+  via WA Bridge (sesi WA admin, aman dari banned dengan delay antar pesan).
+
+---
+
+## WA Bridge (Laporan WhatsApp ke Wali)
+
+Aplikasi bisa mengirim laporan capaian hafalan otomatis ke WhatsApp wali lewat
+sesi WhatsApp admin (bukan nomor wali). Bridge berjalan sebagai service Node.js
+terpisah; aplikasi PHP/JS tinggal POST pesan ke bridge.
+
+**Cara pasang di server yang punya Node.js:**
+
+```bash
+cd wa-bridge
+npm install
+npm start                 # default port 3210, key: tahfidz-wa-bridge
+```
+
+**Scan QR sekali (sesi admin):** buka `http://SERVER:3210/qr` di browser,
+scan dengan WhatsApp Web (multi-device) di HP admin. Sesi tersimpan di
+`wa-bridge/session/`, tidak perlu scan ulang.
+
+**Endpoint bridge:**
+| Method | Path      | Fungsi |
+|--------|-----------|--------|
+| GET    | `/status` | status koneksi WA |
+| GET    | `/qr`     | QR PNG untuk scan |
+| POST   | `/send`   | kirim pesan `{to: "628xxx", message}` |
+
+Pesan antri dengan delay acak 6–12 detik antar pesan (anti-banned).
+Bisa diubah lewat env `WA_MIN_DELAY` / `WA_MAX_DELAY`.
+
+**Hubungkan ke aplikasi:** Admin → Settings → *WhatsApp Otomatis* → isi URL bridge
+(`https://wa.example.com:3210`), Key bridge, lalu Cek Status & Kirim Tes.
+Laporan tahsin/ziyadah/mutqin otomatis terkirim ke `noHpWali` saat setoran disimpan.
+
+> Keamanan: pasang reverse-proxy dengan HTTPS + jangan ekspos port bridge ke publik
+> tanpa proteksi (pakai `X-WA-Key` dan batasi akses).
 
 ---
 

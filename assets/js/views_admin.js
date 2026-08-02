@@ -851,6 +851,22 @@ const Admin = (() => {
           <div style="flex:1">${UI.field('Maks Notif per Hari', `<input class="clay-input" id="s-notif-max" type="number" min="1" max="20" value="${s.notifMaxPerDay || 3}">`)}</div>
         </div>
       </div>
+      <div class="clay-card mb">
+        <div class="section-title"> WhatsApp Otomatis (ke Wali)</div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">
+          Hubungkan ke WA Bridge (Node) agar laporan capaian terkirim otomatis ke WhatsApp wali.
+          <br>Bridge: <code>npm install && npm start</code> di folder <code>wa-bridge</code>, lalu scan QR sekali dari <code>/qr</code>.
+        </div>
+        <div class="row">
+          <div style="flex:1">${UI.field('URL Bridge (contoh: https://wa.example.com:3210)', `<input class="clay-input" id="s-wa-url" value="${UI.esc(s.waBridgeUrl)}" placeholder="https://...:3210">`)}</div>
+          <div style="flex:1">${UI.field('Key Bridge (X-WA-Key)', `<input class="clay-input" id="s-wa-key" value="${UI.esc(s.waBridgeKey)}" placeholder="tahfidz-wa-bridge">`)}</div>
+        </div>
+        <div class="row mt">
+          <button class="clay-btn ghost" id="btn-wa-status">Cek Status</button>
+          <button class="clay-btn ghost" id="btn-wa-test">Kirim Tes</button>
+        </div>
+        <div id="wa-status" class="mt" style="font-size:13px"></div>
+      </div>
       <div class="clay-card">
         <div class="row">
           <button class="clay-btn primary" id="btn-save"> Simpan</button>
@@ -904,6 +920,8 @@ const Admin = (() => {
       db.settings.notifWali = document.getElementById('s-notif-wali').classList.contains('on');
       db.settings.notifUstadz = document.getElementById('s-notif-ustadz').classList.contains('on');
       db.settings.notifMaxPerDay = parseInt(document.getElementById('s-notif-max').value) || 3;
+      db.settings.waBridgeUrl = document.getElementById('s-wa-url').value.trim();
+      db.settings.waBridgeKey = document.getElementById('s-wa-key').value.trim();
       db.settings.logo = _logoData || '';
       Store.save(); Store.log('Update settings'); UI.toast('Settings tersimpan', 'success');
     };
@@ -920,6 +938,39 @@ const Admin = (() => {
       UI.confirmDialog('Reset Data', 'Seluruh data akan dikembalikan ke demo awal.', () => {
         Store.reset(); UI.toast('Data direset', 'info'); App.start();
       });
+    };
+
+    const waStatusEl = document.getElementById('wa-status');
+    const waUrlEl = document.getElementById('s-wa-url');
+    const waKeyEl = document.getElementById('s-wa-key');
+    function waFetch(path, opts) {
+      return fetch(waUrlEl.value.trim().replace(/\/$/, '') + path, Object.assign({ headers: { 'X-WA-Key': waKeyEl.value.trim() || 'tahfidz-wa-bridge' } }, opts || {}));
+    }
+    document.getElementById('btn-wa-status').onclick = async () => {
+      waStatusEl.innerHTML = '<span class="muted">Memeriksa...</span>';
+      if (!waUrlEl.value.trim()) { waStatusEl.innerHTML = '<span style="color:var(--danger)">URL Bridge kosong.</span>'; return; }
+      try {
+        const r = await waFetch('/status');
+        const d = await r.json();
+        waStatusEl.innerHTML = d.connected
+          ? '<span style="color:var(--success)">✓ Terhubung' + (d.phone ? ' (' + UI.esc(d.phone) + ')' : '') + '</span>'
+          : '<span style="color:var(--warn)">Belum terhubung' + (d.qr ? ' — ada QR menunggu scan' : '') + '.</span> ' +
+            '<a href="' + UI.esc(waUrlEl.value.trim().replace(/\/$/, '')) + '/qr" target="_blank" style="color:var(--primary)">Buka QR</a>';
+      } catch (e) {
+        waStatusEl.innerHTML = '<span style="color:var(--danger)">Tidak bisa akses bridge: ' + UI.esc(e.message) + '</span>';
+      }
+    };
+    document.getElementById('btn-wa-test').onclick = async () => {
+      const nohp = prompt('Nomor WhatsApp tujuan tes (contoh: 0812xxx):');
+      if (!nohp) return;
+      waStatusEl.innerHTML = '<span class="muted">Mengirim...</span>';
+      try {
+        const r = await waFetch('/send', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WA-Key': waKeyEl.value.trim() || 'tahfidz-wa-bridge' }, body: JSON.stringify({ to: nohp, message: '🔔 Tes WhatsApp Bridge Tahfidzku. Pesan laporan capaian akan terkirim otomatis ke wali.' }) });
+        const d = await r.json();
+        waStatusEl.innerHTML = r.ok ? '<span style="color:var(--success)">✓ ' + (d.error ? UI.esc(d.error) : 'Pesan masuk antrian.') + '</span>' : '<span style="color:var(--danger)">' + UI.esc(d.error || 'Gagal') + '</span>';
+      } catch (e) {
+        waStatusEl.innerHTML = '<span style="color:var(--danger)">Gagal: ' + UI.esc(e.message) + '</span>';
+      }
     };
   }
 

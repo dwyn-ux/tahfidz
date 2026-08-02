@@ -171,7 +171,7 @@ function getSettings(): array {
     $stmt = pdo()->prepare('SELECT data FROM settings WHERE id = 1');
     $stmt->execute();
     $r = $stmt->fetch();
-    return $r ? json_decode($r['data'], true) : defaultSettings();
+    return $r ? array_merge(defaultSettings(), json_decode($r['data'], true)) : defaultSettings();
 }
 function saveSettings(array $s) {
     $data = json_encode($s, JSON_UNESCAPED_UNICODE);
@@ -190,6 +190,7 @@ function defaultSettings(): array {
         'defaultPasswordFormat' => '12345678',
         'logo' => '',
         'setoranMulti' => false,
+        'waBridgeUrl' => '', 'waBridgeKey' => '', 'waAuto' => false,
         'juzOrder' => [30,29,28,27,26,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
         'kelas' => ['TK Al-Qur\'an', 'SD', 'SMP', 'SMA'],
         'levelTahfidz' => ['Tahsin', 'Ziyadah', 'Mutqin'],

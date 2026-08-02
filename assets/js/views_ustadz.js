@@ -299,6 +299,7 @@ const Ustadz = (() => {
           db.tahsin.push({ id: Store.uid('ts'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: m.querySelector('#f-tgl').value, halAwal: +m.querySelector('#f-ha').value, halAkhir: +m.querySelector('#f-hk').value, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim() });
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (wUser) Store.addNotif(wUser.id, 'wali', 'Nilai Tahsin baru: ' + s.nama);
+          Store.waSendWali(santriId, '📖 Laporan Tahsin ' + s.nama + ': halaman ' + m.querySelector('#f-ha').value + '-' + m.querySelector('#f-hk').value + ', nilai ' + m.querySelector('#f-nilai').value + '. — ' + db.settings.namaLembaga);
           await Store.save(); Store.log('Input tahsin ' + s.nama); c(); UI.toast('Tersimpan', 'success'); renderTahsin();
         } }
       ]
@@ -527,6 +528,7 @@ const Ustadz = (() => {
       });
       const wUser = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);
       if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
+      Store.waSendWali(santriId, '📚 Setoran hafalan ' + s.nama + ' berhasil: ' + formatHafalan(h) + ' (' + getSurah(sA).latin + ':' + aA + ' - ' + getSurah(sK).latin + ':' + aK + '). Semangat terus! — ' + d.settings.namaLembaga);
       await Store.save();
       Store.log('Setor ziyadah hafalan ' + s.nama);
       if (hSlide) clearInterval(hSlide);
@@ -587,6 +589,7 @@ const Ustadz = (() => {
           db.mutqin.push({ id: Store.uid('m'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: +m.querySelector('#m-aa').value, sAkhir: sK, aAkhir: +m.querySelector('#m-ak').value, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(), totalHafalan: +m.querySelector('#m-total').value });
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (wUser) Store.addNotif(wUser.id, 'wali', 'Murajaah Mutqin: ' + s.nama);
+          Store.waSendWali(santriId, '🌟 Murajaah Mutqin ' + s.nama + ': ' + getSurah(sA).latin + ':' + m.querySelector('#m-aa').value + ' - ' + getSurah(sK).latin + ':' + m.querySelector('#m-ak').value + '. Total ' + m.querySelector('#m-total').value + ' halaman. — ' + db.settings.namaLembaga);
           await Store.save(); Store.log('Input mutqin ' + s.nama); c(); UI.toast('Tersimpan', 'success'); renderMutqin();
         } }
       ]
@@ -913,6 +916,7 @@ const Ustadz = (() => {
 
           const w = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (w) Store.addNotif(w.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + level + ')');
+          Store.waSendWali(santriId, '✅ Laporan setoran ' + s.nama + ' (' + level + ') tersimpan. Terima kasih. — ' + d.settings.namaLembaga);
           await Store.save();
           Store.log('Input umum: ' + s.nama + ' (' + level + ')');
           c();
@@ -1033,6 +1037,7 @@ const Ustadz = (() => {
         });
         const wUser = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);
         if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
+        Store.waSendWali(santriId, '📚 Setoran hafalan ' + s.nama + ' berhasil: ' + formatHafalan(h) + ' (' + getSurah(sA).latin + ':' + aA + ' - ' + getSurah(sK).latin + ':' + aK + '). Semangat terus! — ' + d.settings.namaLembaga);
         await Store.save();
         Store.log('Setor ziyadah hafalan ' + s.nama);
         if (hSlide) clearInterval(hSlide);

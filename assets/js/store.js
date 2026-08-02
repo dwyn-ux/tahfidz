@@ -21,7 +21,8 @@ const Store = (() => {
         jamBelajar: '07:00 - 09:00', tema: 'Claymorphism',
         defaultPasswordFormat: '12345678', logo: '', setoranMulti: false,
         juzOrder: [30,29,28,27,26,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
-        notifActive: true, notifMaxPerDay: 3, notifWali: true, notifUstadz: true
+        notifActive: true, notifMaxPerDay: 3, notifWali: true, notifUstadz: true,
+        waBridgeUrl: '', waBridgeKey: '', waAuto: false
       },
       users: [], santri: [], wali: [], ustadz: [], halaqah: [],
       kelas: ['TK Al-Qur\'an', 'SD', 'SMP', 'SMA'],
@@ -105,6 +106,27 @@ const Store = (() => {
   }
 
   function get() { return db; }
+
+  // Kirim pesan WhatsApp via WA bridge (jika dikonfigurasi). Fire-and-forget.
+  function waSend(to, message) {
+    const s = db.settings;
+    if (!s.waBridgeUrl || !to || !message) return Promise.resolve(false);
+    return fetch(s.waBridgeUrl + '/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WA-Key': s.waBridgeKey || '' },
+      body: JSON.stringify({ to, message })
+    }).then(r => r.ok).catch(() => false);
+  }
+
+  function waReady() { return !!(db.settings && db.settings.waBridgeUrl); }
+
+  // Kirim laporan ke no. WA wali dari santri (auto jika waAuto aktif). Fire-and-forget.
+  function waSendWali(santriId, message) {
+    if (!db.settings.waAuto) return Promise.resolve(false);
+    const s = db.santri.find(x => x.id === santriId);
+    if (!s || !s.noHpWali) return Promise.resolve(false);
+    return waSend(s.noHpWali, message);
+  }
   function save() {
     if (busy) return Promise.resolve();
     busy = true;
@@ -271,6 +293,7 @@ const Store = (() => {
     load, save, get, reset, uid, log, nowISO, todayStr,
     setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout, changePassword,
     recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahByName, search,
+    waSend, waReady, waSendWali,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, addNotif, notifFor, clearNotifs, checkSetoranTerlewat
   };
 })();
