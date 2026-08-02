@@ -12,9 +12,9 @@ const Admin = (() => {
     });
   }
 
-  function genWaliUsername(nama, noHp) {
-    const hp = noHp ? noHp.replace(/\D/g, '') : '';
-    return hp || (nama || 'wali').toLowerCase().replace(/\s/g, '');
+  function genWaliUsername(nama) {
+    const words = (nama || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(Boolean);
+    return words.slice(0, 2).join('') || 'wali';
   }
 
   function uniqueUsername(base, taken) {
@@ -234,7 +234,7 @@ const Admin = (() => {
             user = { id: Store.uid('usr'), username: '', password: WALI_PASS, role: 'wali', refId: s.waliId };
             db.users.push(user);
           }
-          const base = genWaliUsername(wali && wali.nama ? wali.nama : s.nama, wali ? wali.noHp : '');
+          const base = genWaliUsername(s.nama);
           user.username = uniqueUsername(base, taken);
           taken.add(user.username);
           user.password = WALI_PASS;
@@ -373,7 +373,7 @@ const Admin = (() => {
             // akun wali otomatis
             const wali = { id: waliId, nama: data.namaWali || data.nama, noHp: data.noHpWali, santriId: newS.id };
             db.wali.push(wali);
-            const uname = m.querySelector('#f-uname').value.trim() || genWaliUsername(data.namaWali || data.nama, data.noHpWali);
+            const uname = m.querySelector('#f-uname').value.trim() || genWaliUsername(data.nama);
             const pass = m.querySelector('#f-pass').value.trim() || WALI_PASS;
             db.users.push({ id: Store.uid('usr'), username: uname, password: pass, role: 'wali', refId: waliId });
             Store.log('Tambah santri + akun wali: ' + data.nama);
@@ -385,9 +385,7 @@ const Admin = (() => {
     });
     modal.modal.querySelector('#btn-gen-uname').onclick = () => {
       const nama = modal.modal.querySelector('#f-nama').value.trim();
-      const namaWali = modal.modal.querySelector('#f-wali').value.trim();
-      const hp = modal.modal.querySelector('#f-hpwali').value.trim();
-      const base = genWaliUsername(namaWali || nama, hp);
+      const base = genWaliUsername(nama);
       const taken = new Set(db.users.filter(u => u.username).map(u => u.username));
       modal.modal.querySelector('#f-uname').value = uniqueUsername(base, taken);
     };
@@ -430,7 +428,7 @@ const Admin = (() => {
             db.santri.push(newS);
             const wali = { id: waliId, nama: c[3], noHp: c[4], santriId: newS.id };
             db.wali.push(wali);
-            const uname = genWaliUsername(c[3] || c[0], c[4]);
+            const uname = genWaliUsername(c[0]);
             db.users.push({ id: Store.uid('usr'), username: uname, password: WALI_PASS, role: 'wali', refId: waliId });
             count++;
           });
@@ -881,6 +879,7 @@ const Admin = (() => {
         const dataUrl = ev.target.result;
         document.getElementById('s-logo-preview').innerHTML = `<img src="${UI.esc(dataUrl)}" style="max-width:100%;max-height:100%">`;
         _logoData = dataUrl;
+        setFavicon(dataUrl);
       };
       reader.readAsDataURL(file);
     };

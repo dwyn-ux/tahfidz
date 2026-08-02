@@ -64,11 +64,21 @@ const App = (() => {
       Auth.renderLogin();
       return;
     }
+    setFavicon();
     navigate(defaultRoute[role]);
   }
 
   return { start, navigate };
 })();
+
+function setFavicon(dataUrl) {
+  const link = document.getElementById('favicon');
+  if (!link) return;
+  if (dataUrl) { link.href = dataUrl; return; }
+  const db = Store.get();
+  const logo = db.settings && db.settings.logo;
+  if (logo) link.href = logo;
+}
 
 // Init datalist & boot
 function initDatalist() {
