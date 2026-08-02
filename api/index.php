@@ -134,8 +134,15 @@ switch ($action) {
             foreach ($b['users'] as $usr) {
                 if (empty($usr['id'])) continue;
                 if (in_array($usr['id'], $existingIds, true)) {
-                    $stmt = pdo()->prepare('UPDATE users SET username=?, role=?, refId=? WHERE id=?');
-                    $stmt->execute([$usr['username'] ?? '', $usr['role'] ?? 'wali', $usr['refId'] ?? null, $usr['id']]);
+                    // update username/role/refId; update password only if it's a new plaintext value
+                    $passSql = '';
+                    $params = [];
+                    if (!empty($usr['password']) && !preg_match('/^\$2[aby]\$/', $usr['password'])) {
+                        $passSql = ', password=?';
+                        $params[] = password_hash($usr['password'], PASSWORD_DEFAULT);
+                    }
+                    $stmt = pdo()->prepare('UPDATE users SET username=?, role=?, refId=?' . $passSql . ' WHERE id=?');
+                    $stmt->execute(array_merge([$usr['username'] ?? '', $usr['role'] ?? 'wali', $usr['refId'] ?? null], $params, [$usr['id']]));
                 } else {
                     $pass = !empty($usr['password']) ? password_hash($usr['password'], PASSWORD_DEFAULT) : password_hash('12345678', PASSWORD_DEFAULT);
                     $stmt = pdo()->prepare(insertIgnoreSQL('users', ['id', 'username', 'password', 'role', 'refId']));

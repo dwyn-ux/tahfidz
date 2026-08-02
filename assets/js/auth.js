@@ -16,6 +16,7 @@ const Auth = (() => {
             <input class="clay-input" id="login-user" placeholder="admin / ustadz1 / 0812111111" />
             <label class="field-label">Password</label>
             <input class="clay-input" id="login-pass" type="password" placeholder="••••••••" />
+            <div id="login-error" style="display:none;margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(220,38,38,.1);color:var(--danger);font-size:13px"></div>
             <div class="auth-roles" id="role-pick">
               <div class="role ${selectedRole === 'admin' ? 'active' : ''}" data-r="admin"> Admin</div>
               <div class="role ${selectedRole === 'ustadz' ? 'active' : ''}" data-r="ustadz"> Ustadz</div>
@@ -42,20 +43,33 @@ const Auth = (() => {
       e.preventDefault();
       const u = app.querySelector('#login-user').value.trim();
       const p = app.querySelector('#login-pass').value;
+      const errBox = app.querySelector('#login-error');
+      errBox.style.display = 'none';
       const btn = e.target.querySelector('button[type=submit]');
       btn.disabled = true; btn.textContent = 'Memproses...';
       const res = await Store.login(u, p);
       btn.disabled = false; btn.textContent = 'Masuk';
-      if (!res.ok) { UI.toast(res.msg, 'error'); return; }
+      if (!res.ok) {
+        errBox.textContent = '❌ ' + res.msg;
+        errBox.style.display = 'block';
+        UI.toast(res.msg, 'error');
+        return;
+      }
       if (res.user.role !== selectedRole) {
-        UI.toast('Peran tidak sesuai dengan akun ini.', 'error');
+        const msg = 'Peran tidak sesuai. Pilih peran ' + (res.user.role === 'admin' ? 'Admin' : res.user.role === 'ustadz' ? 'Ustadz' : 'Wali') + ' untuk akun ini.';
+        errBox.textContent = '❌ ' + msg;
+        errBox.style.display = 'block';
+        UI.toast(msg, 'error');
         Store.clearSession();
         return;
       }
       try {
         await Store.load();
       } catch (err) {
-        UI.toast('Gagal memuat data: ' + (err.message || ''), 'error');
+        const msg = 'Gagal memuat data: ' + (err.message || '');
+        errBox.textContent = '❌ ' + msg;
+        errBox.style.display = 'block';
+        UI.toast(msg, 'error');
         return;
       }
       UI.toast('Login berhasil', 'success');
