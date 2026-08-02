@@ -148,18 +148,24 @@ const Admin = (() => {
     Shared.shell('admin', nav('admin_santri'), '');
     Shared.setHeader('Manajemen Santri', 'Kelola data santri & akun wali otomatis');
     const db = Store.get();
-    const rows = db.santri.map(s => `<tr>
-      <td><b>${UI.esc(s.nama)}</b><div class="muted">${UI.esc(s.nis)}</div></td>
-      <td>${UI.esc(s.jk)}</td>
-      <td>${UI.esc(s.level)}</td>
-      <td>${UI.esc(s.halaqah)}</td>
-      <td>${UI.esc(s.kelas)}</td>
-      <td><span class="badge ${s.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(s.status)}</span></td>
-      <td>
-        <button class="clay-btn sm" data-edit="${s.id}">✏️</button>
-        <button class="clay-btn sm danger" data-del="${s.id}">🗑</button>
-      </td>
-    </tr>`).join('');
+    const rows = db.santri.map(s => {
+      const waliUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
+      const username = waliUser ? waliUser.username : '-';
+      return `<tr>
+        <td><b>${UI.esc(s.nama)}</b><div class="muted">${UI.esc(s.nis)}</div></td>
+        <td>${UI.esc(s.jk)}</td>
+        <td>${UI.esc(s.level)}</td>
+        <td>${UI.esc(s.halaqah)}</td>
+        <td>${UI.esc(s.kelas)}</td>
+        <td><span class="badge ${s.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(s.status)}</span></td>
+        <td><code>${UI.esc(username)}</code></td>
+        <td>
+          <button class="clay-btn sm" data-edit="${s.id}">✏️</button>
+          <button class="clay-btn sm danger" data-del="${s.id}">🗑</button>
+          <button class="clay-btn sm secondary" data-reset="${s.waliId}">🔑 Reset</button>
+        </td>
+      </tr>`;
+    }).join('');
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card">
         <div class="row" style="justify-content:space-between">
@@ -173,8 +179,8 @@ const Admin = (() => {
           <input class="clay-input" id="search-santri" type="text" placeholder="Cari santri..." autocomplete="off" />
         </div>
         <div class="table-wrap mt"><table class="clay-table">
-          <thead><tr><th>Nama</th><th>JK</th><th>Level</th><th>Halaqah</th><th>Kelas</th><th>Status</th><th>Aksi</th></tr></thead>
-          <tbody id="santri-table-body">${rows || `<tr><td colspan="7"><div class="empty">Belum ada santri.</div></td></tr>`}</tbody>
+          <thead><tr><th>Nama</th><th>JK</th><th>Level</th><th>Halaqah</th><th>Kelas</th><th>Status</th><th>Username Login</th><th>Aksi</th></tr></thead>
+          <tbody id="santri-table-body">${rows || `<tr><td colspan="8"><div class="empty">Belum ada santri.</div></td></tr>`}</tbody>
         </table></div>
       </div>`;
     document.getElementById('btn-add').onclick = () => santriForm();
@@ -188,6 +194,16 @@ const Admin = (() => {
         db.wali = db.wali.filter(w => w.santriId !== b.dataset.del);
         db.users = db.users.filter(u => !(u.role === 'wali' && s && u.refId === s.waliId));
         Store.recalcHalaqah(); Store.save(); Store.log('Hapus santri'); UI.toast('Santri dihapus'); santri();
+      });
+    });
+    document.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => {
+      UI.confirmDialog('Reset Password', 'Yakin reset password akun wali ini ke default?', () => {
+        const db = Store.get();
+        const wUser = db.users.find(u => u.role === 'wali' && u.refId === b.dataset.reset);
+        if (wUser) {
+          wUser.password = db.settings.defaultPasswordFormat;
+          Store.save(); UI.toast('Password direset ke default', 'success'); santri();
+        }
       });
     });
 
@@ -205,23 +221,29 @@ const Admin = (() => {
             s.kelas.toLowerCase().includes(term) ||
             s.level.toLowerCase().includes(term)
           ) : db.santri;
-          const newRows = rows.map(s => `<tr>
-            <td><b>${UI.esc(s.nama)}</b><div class="muted">${UI.esc(s.nis)}</div></td>
-            <td>${UI.esc(s.jk)}</td>
-            <td>${UI.esc(s.level)}</td>
-            <td>${UI.esc(s.halaqah)}</td>
-            <td>${UI.esc(s.kelas)}</td>
-            <td><span class="badge ${s.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(s.status)}</span></td>
-            <td>
-              <button class="clay-btn sm" data-edit="${s.id}">✏️</button>
-              <button class="clay-btn sm danger" data-del="${s.id}">🗑</button>
-            </td>
-          </tr>`).join('');
-          document.getElementById('santri-table-body').innerHTML = newRows || `<tr><td colspan="7"><div class="empty">Tidak ada santri yang sesuai.</div></td></tr>`;
-          document.querySelectorAll('#santri-table-body [data-edit], #santri-table-body [data-del]').forEach(b => {
+          const newRows = rows.map(s => {
+            const waliUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
+            const username = waliUser ? waliUser.username : '-';
+            return `<tr>
+              <td><b>${UI.esc(s.nama)}</b><div class="muted">${UI.esc(s.nis)}</div></td>
+              <td>${UI.esc(s.jk)}</td>
+              <td>${UI.esc(s.level)}</td>
+              <td>${UI.esc(s.halaqah)}</td>
+              <td>${UI.esc(s.kelas)}</td>
+              <td><span class="badge ${s.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(s.status)}</span></td>
+              <td><code>${UI.esc(username)}</code></td>
+              <td>
+                <button class="clay-btn sm" data-edit="${s.id}">✏️</button>
+                <button class="clay-btn sm danger" data-del="${s.id}">🗑</button>
+                <button class="clay-btn sm secondary" data-reset="${s.waliId}">🔑 Reset</button>
+              </td>
+            </tr>`;
+          }).join('');
+          document.getElementById('santri-table-body').innerHTML = newRows || `<tr><td colspan="8"><div class="empty">Tidak ada santri yang sesuai.</div></td></tr>`;
+          document.querySelectorAll('#santri-table-body [data-edit], #santri-table-body [data-del], #santri-table-body [data-reset]').forEach(b => {
             b.onclick = () => {
               if (b.dataset.edit) santriForm(b.dataset.edit);
-              else {
+              else if (b.dataset.del) {
                 UI.confirmDialog('Hapus Santri', 'Yakin ingin menghapus santri ini?', () => {
                   const db = Store.get();
                   const s = Store.findSantri(b.dataset.del);
@@ -230,7 +252,21 @@ const Admin = (() => {
                   db.users = db.users.filter(u => !(u.role === 'wali' && s && u.refId === s.waliId));
                   Store.recalcHalaqah(); Store.save(); Store.log('Hapus santri'); UI.toast('Santri dihapus'); santri();
                 });
+              } else if (b.dataset.reset) {
+                UI.confirmDialog('Reset Password', 'Yakin reset password akun wali ini ke default?', () => {
+                  const db = Store.get();
+                  const wUser = db.users.find(u => u.role === 'wali' && u.refId === b.dataset.reset);
+                  if (wUser) {
+                    wUser.password = db.settings.defaultPasswordFormat;
+                    Store.save(); UI.toast('Password direset ke default', 'success'); santri();
+                  }
+                });
               }
+            };
+          });
+        }, 150);
+      };
+    }
             };
           });
         }, 150);
