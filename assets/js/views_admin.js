@@ -17,6 +17,13 @@ const Admin = (() => {
     return hp || (nama || 'wali').toLowerCase().replace(/\s/g, '');
   }
 
+  function uniqueUsername(base, taken) {
+    if (!taken.has(base)) return base;
+    let i = 2;
+    while (taken.has(base + i)) i++;
+    return base + i;
+  }
+
   function bindImportFile(modal, headers) {
     const input = modal.querySelector('#imp-file');
     const textarea = modal.querySelector('#imp-data');
@@ -217,6 +224,8 @@ const Admin = (() => {
     document.getElementById('btn-gen-bulk').onclick = () => {
       UI.confirmDialog('Generate Username', 'Generate username & reset password semua akun wali ke ' + WALI_PASS + '?', () => {
         const db = Store.get();
+        const taken = new Set(db.users.filter(u => u.role !== 'wali').map(u => u.username));
+        db.users.filter(u => u.role === 'wali').forEach(u => taken.add(u.username));
         let n = 0;
         db.santri.forEach(s => {
           const wali = db.wali.find(w => w.id === s.waliId);
@@ -225,7 +234,9 @@ const Admin = (() => {
             user = { id: Store.uid('usr'), username: '', password: WALI_PASS, role: 'wali', refId: s.waliId };
             db.users.push(user);
           }
-          user.username = genWaliUsername(wali ? wali.nama : '', wali ? wali.noHp : '');
+          const base = genWaliUsername(wali && wali.nama ? wali.nama : s.nama, wali ? wali.noHp : '');
+          user.username = uniqueUsername(base, taken);
+          taken.add(user.username);
           user.password = WALI_PASS;
           n++;
         });
@@ -376,7 +387,9 @@ const Admin = (() => {
       const nama = modal.modal.querySelector('#f-nama').value.trim();
       const namaWali = modal.modal.querySelector('#f-wali').value.trim();
       const hp = modal.modal.querySelector('#f-hpwali').value.trim();
-      modal.modal.querySelector('#f-uname').value = genWaliUsername(namaWali || nama, hp);
+      const base = genWaliUsername(namaWali || nama, hp);
+      const taken = new Set(db.users.filter(u => u.username).map(u => u.username));
+      modal.modal.querySelector('#f-uname').value = uniqueUsername(base, taken);
     };
   }
 
