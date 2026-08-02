@@ -27,6 +27,13 @@ let sending = false;
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+// Baileys default pakai pino (berat). Logger minimal ini memangkas overhead.
+const silentLogger = {
+  trace: () => {}, debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, fatal: () => {},
+  child: () => silentLogger,
+  level: 'silent'
+};
+
 async function startWA() {
   fs.mkdirSync(SESSION_DIR, { recursive: true });
   const { state: authState, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
@@ -37,7 +44,10 @@ async function startWA() {
     auth: authState,
     printQRInTerminal: true,
     markOnlineOnConnect: false,
-    syncFullHistory: false
+    syncFullHistory: false,
+    logger: silentLogger,
+    generateHighQualityLinkPreview: false,
+    browser: ['Chrome', 'chrome', '']
   });
 
   sock.ev.on('creds.update', saveCreds);
@@ -59,10 +69,6 @@ async function startWA() {
       console.log('[WA] connected as', sock.user?.id);
       flush();
     }
-  });
-
-  sock.ev.on('messages.upsert', (m) => {
-    // broadcast read tidak perlu; abaikan untuk anti-deteksi
   });
 }
 
