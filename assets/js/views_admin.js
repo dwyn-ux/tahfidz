@@ -3,11 +3,18 @@
    ============================================================ */
 const Admin = (() => {
 
+  const WALI_PASS = 'Santri123!';
+
   function parseImportRows(raw) {
     return raw.trim().split(/\r?\n/).filter(Boolean).map(line => {
       const separator = line.includes('\t') ? '\t' : ',';
       return line.split(separator).map(value => value.trim());
     });
+  }
+
+  function genWaliUsername(nama, noHp) {
+    const hp = noHp ? noHp.replace(/\D/g, '') : '';
+    return hp || (nama || 'wali').toLowerCase().replace(/\s/g, '');
   }
 
   function bindImportFile(modal, headers) {
@@ -171,6 +178,7 @@ const Admin = (() => {
         <div class="row" style="justify-content:space-between">
           <div class="section-title" style="margin:0">Daftar Santri (${db.santri.length})</div>
           <div class="row">
+            <button class="clay-btn ghost" id="btn-gen-bulk">⚙️ Generate Username</button>
             <button class="clay-btn ghost" id="btn-import">Import Excel</button>
             <button class="clay-btn primary" id="btn-add">+ Tambah Santri</button>
           </div>
@@ -197,15 +205,33 @@ const Admin = (() => {
       });
     });
     document.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => {
-      UI.confirmDialog('Reset Password', 'Yakin reset password akun wali ini ke default?', () => {
+      UI.confirmDialog('Reset Password', 'Yakin reset password akun wali ini ke ' + WALI_PASS + '?', () => {
         const db = Store.get();
         const wUser = db.users.find(u => u.role === 'wali' && u.refId === b.dataset.reset);
         if (wUser) {
-          wUser.password = db.settings.defaultPasswordFormat;
-          Store.save(); UI.toast('Password direset ke default', 'success'); santri();
+          wUser.password = WALI_PASS;
+          Store.save(); UI.toast('Password direset ke ' + WALI_PASS, 'success'); santri();
         }
       });
     });
+    document.getElementById('btn-gen-bulk').onclick = () => {
+      UI.confirmDialog('Generate Username', 'Generate username & reset password semua akun wali ke ' + WALI_PASS + '?', () => {
+        const db = Store.get();
+        let n = 0;
+        db.santri.forEach(s => {
+          const wali = db.wali.find(w => w.id === s.waliId);
+          let user = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
+          if (!user) {
+            user = { id: Store.uid('usr'), username: '', password: WALI_PASS, role: 'wali', refId: s.waliId };
+            db.users.push(user);
+          }
+          user.username = genWaliUsername(wali ? wali.nama : '', wali ? wali.noHp : '');
+          user.password = WALI_PASS;
+          n++;
+        });
+        Store.save(); Store.log('Generate username wali'); UI.toast('Generate ' + n + ' akun wali', 'success'); santri();
+      });
+    };
 
     const searchInput = document.getElementById('search-santri');
     if (searchInput) {
@@ -253,12 +279,12 @@ const Admin = (() => {
                   Store.recalcHalaqah(); Store.save(); Store.log('Hapus santri'); UI.toast('Santri dihapus'); santri();
                 });
               } else if (b.dataset.reset) {
-                UI.confirmDialog('Reset Password', 'Yakin reset password akun wali ini ke default?', () => {
+                UI.confirmDialog('Reset Password', 'Yakin reset password akun wali ini ke ' + WALI_PASS + '?', () => {
                   const db = Store.get();
                   const wUser = db.users.find(u => u.role === 'wali' && u.refId === b.dataset.reset);
                   if (wUser) {
-                    wUser.password = db.settings.defaultPasswordFormat;
-                    Store.save(); UI.toast('Password direset ke default', 'success'); santri();
+                    wUser.password = WALI_PASS;
+                    Store.save(); UI.toast('Password direset ke ' + WALI_PASS, 'success'); santri();
                   }
                 });
               }
@@ -286,6 +312,11 @@ const Admin = (() => {
       </div>
       ${UI.field('No HP Wali', `<input class="clay-input" id="f-hpwali" value="${s ? UI.esc(s.noHpWali) : ''}">`)}
       <div class="row">
+        <div style="flex:1">${UI.field('Username', `<input class="clay-input" id="f-uname" value="${s ? UI.esc((db.users.find(u => u.role === 'wali' && u.refId === s.waliId) || {}).username || '') : ''}" placeholder="Otomatis dari HP/nama wali">`)}</div>
+        <div style="flex:1">${UI.field('Password', `<input class="clay-input" id="f-pass" value="${s ? '' : WALI_PASS}" placeholder="Kosongkan jika tidak diubah">`)}</div>
+      </div>
+      <button class="clay-btn sm secondary" id="btn-gen-uname" type="button">⚙️ Generate Username</button>
+      <div class="row mt">
         <div style="flex:1">${UI.field('Status', `<select class="clay-select" id="f-status"><option ${s && s.status === 'Aktif' ? 'selected' : ''}>Aktif</option><option ${s && s.status === 'Nonaktif' ? 'selected' : ''}>Nonaktif</option></select>`)}</div>
         <div style="flex:1">${UI.field('Level', `<select class="clay-select" id="f-level">${UI.optionsFromList(db.levelTahfidz.map(l => ({ v: l, l })), 'v', 'l', s ? s.level : 'Tahsin')}</select>`)}</div>
       </div>
@@ -293,7 +324,7 @@ const Admin = (() => {
         <div style="flex:1">${UI.field('Kelas', `<select class="clay-select" id="f-kelas">${UI.optionsFromList(db.kelas.map(k => ({ v: k, l: k })), 'v', 'l', s ? s.kelas : db.kelas[0])}</select>`)}</div>
         <div style="flex:1">${UI.field('Halaqah', `<select class="clay-select" id="f-halaqah">${UI.optionsFromList(db.halaqah.map(h => ({ v: h.nama, l: h.nama })), 'v', 'l', s ? s.halaqah : (db.halaqah[0] && db.halaqah[0].nama))}</select>`)}</div>
       </div>`;
-    UI.openModal({
+    const modal = UI.openModal({
       title: id ? 'Edit Santri' : 'Tambah Santri', sub: id ? '' : 'Akun wali otomatis dibuat',
       bodyHTML: body,
       actions: [
@@ -317,6 +348,12 @@ const Admin = (() => {
           if (!data.nama) { UI.toast('Nama wajib diisi', 'error'); return; }
           if (id) {
             Object.assign(Store.findSantri(id), data);
+            const waliUser = db.users.find(u => u.role === 'wali' && u.refId === Store.findSantri(id).waliId);
+            if (waliUser) {
+              waliUser.username = m.querySelector('#f-uname').value.trim() || waliUser.username;
+              const pass = m.querySelector('#f-pass').value.trim();
+              if (pass) waliUser.password = pass;
+            }
             Store.log('Edit santri: ' + data.nama);
           } else {
             const waliId = Store.uid('w');
@@ -325,8 +362,9 @@ const Admin = (() => {
             // akun wali otomatis
             const wali = { id: waliId, nama: data.namaWali || data.nama, noHp: data.noHpWali, santriId: newS.id };
             db.wali.push(wali);
-            const uname = (data.noHpWali && data.noHpWali.replace(/\D/g, '')) || (data.namaWali || data.nama).toLowerCase().replace(/\s/g, '');
-            db.users.push({ id: Store.uid('usr'), username: uname, password: db.settings.defaultPasswordFormat, role: 'wali', refId: waliId });
+            const uname = m.querySelector('#f-uname').value.trim() || genWaliUsername(data.namaWali || data.nama, data.noHpWali);
+            const pass = m.querySelector('#f-pass').value.trim() || WALI_PASS;
+            db.users.push({ id: Store.uid('usr'), username: uname, password: pass, role: 'wali', refId: waliId });
             Store.log('Tambah santri + akun wali: ' + data.nama);
             Store.addNotif(db.users.find(u => u.role === 'admin')?.id, 'admin', 'Santri baru ditambahkan: ' + data.nama);
           }
@@ -334,6 +372,12 @@ const Admin = (() => {
         } }
       ]
     });
+    modal.modal.querySelector('#btn-gen-uname').onclick = () => {
+      const nama = modal.modal.querySelector('#f-nama').value.trim();
+      const namaWali = modal.modal.querySelector('#f-wali').value.trim();
+      const hp = modal.modal.querySelector('#f-hpwali').value.trim();
+      modal.modal.querySelector('#f-uname').value = genWaliUsername(namaWali || nama, hp);
+    };
   }
 
   /* ---------------- Bulk Import Santri ---------------- */
@@ -373,8 +417,8 @@ const Admin = (() => {
             db.santri.push(newS);
             const wali = { id: waliId, nama: c[3], noHp: c[4], santriId: newS.id };
             db.wali.push(wali);
-            const uname = (c[4] && c[4].replace(/\D/g, '')) || (c[3] || c[0]).toLowerCase().replace(/\s/g, '');
-            db.users.push({ id: Store.uid('usr'), username: uname, password: db.settings.defaultPasswordFormat, role: 'wali', refId: waliId });
+            const uname = genWaliUsername(c[3] || c[0], c[4]);
+            db.users.push({ id: Store.uid('usr'), username: uname, password: WALI_PASS, role: 'wali', refId: waliId });
             count++;
           });
           Store.recalcHalaqah(); Store.save(); Store.log('Import ' + count + ' santri');
