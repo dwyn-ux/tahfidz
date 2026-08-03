@@ -120,16 +120,21 @@ const Store = (() => {
     if (!s.waBridgeUrl) { waLog({ to, status: 'skipped', detail: 'URL bridge belum diatur (Settings → WhatsApp Otomatis)' }); return Promise.resolve(false); }
     if (!to) { waLog({ to: null, status: 'skipped', detail: 'Nomor tujuan kosong' }); return Promise.resolve(false); }
     if (!message) { waLog({ to, status: 'skipped', detail: 'Pesan kosong' }); return Promise.resolve(false); }
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 10000);
     return fetch(s.waBridgeUrl.replace(/\/$/, '') + '/send', {
       method: 'POST',
+      signal: ctrl.signal,
       headers: { 'Content-Type': 'application/json', 'X-WA-Key': s.waBridgeKey || '' },
       body: JSON.stringify({ to, message })
     }).then(async (r) => {
+      clearTimeout(timer);
       let detail = '';
       try { const d = await r.json(); detail = d.error || JSON.stringify(d); } catch (e) { detail = ''; }
       waLog({ to, status: r.ok ? 'queued' : 'error', detail: detail || ('HTTP ' + r.status), message });
       return r.ok;
     }).catch(e => {
+      clearTimeout(timer);
       waLog({ to, status: 'error', detail: 'Fetch gagal: ' + (e && e.message || e), message });
       return false;
     });
