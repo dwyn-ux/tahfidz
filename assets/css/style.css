@@ -13,9 +13,9 @@
   --text: #1f2937;
   --text-soft: #6b7280;
   --card: #ffffff;
-  --shadow-clay: 8px 8px 20px #d1d9d4, -8px -8px 20px #ffffff;
-  --shadow-clay-sm: 4px 4px 10px #d1d9d4, -4px -4px 10px #ffffff;
-  --shadow-clay-inset: inset 4px 4px 10px #d1d9d4, inset -4px -4px 10px #ffffff;
+  --shadow-clay: none;
+  --shadow-clay-sm: none;
+  --shadow-clay-inset: none;
   --radius-xl: 28px;
   --radius-lg: 20px;
   --radius-md: 14px;
