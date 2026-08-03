@@ -12,7 +12,13 @@ switch ($action) {
     /* ---------------- AUTH ---------------- */
     case 'login':
         $b = body();
-        $u = getUserByUsername($b['username'] ?? '');
+        $username = $b['username'] ?? '';
+        // Rate limit: 5 attempts per 5 minutes per IP
+        $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+        if (!rateLimit('login_' . $ip, 5, 300)) {
+            err('Terlalu banyak percobaan login. Coba lagi dalam 5 menit.', 429);
+        }
+        $u = getUserByUsername($username);
         if (!$u || !password_verify($b['password'] ?? '', $u['password'])) {
             err('Username atau password salah.', 401);
         }
@@ -32,26 +38,42 @@ switch ($action) {
         $stmt->execute([$u['uid']]);
         $row = $stmt->fetch();
         if (!password_verify($b['old'] ?? '', $row['password'])) err('Password lama salah.', 400);
+        // Validate new password length
+        $newPass = $b['new'] ?? '';
+        if (strlen($newPass) < 6) err('Password baru minimal 6 karakter.', 400);
         $stmt = pdo()->prepare('UPDATE users SET password = ? WHERE id = ?');
-        $stmt->execute([password_hash($b['new'], PASSWORD_DEFAULT), $u['uid']]);
+        $stmt->execute([password_hash($newPass, PASSWORD_DEFAULT), $u['uid']]);
         send(['ok' => true]);
         break;
 
-    /* ---------------- BOOTSTRAP (all data) ---------------- */
+    /* ---------------- BOOTSTRAP (all data, role-filtered) ---------------- */
     case 'bootstrap':
         $u = requireAuth();
         send(['user' => ['id' => $u['uid'], 'role' => $u['role'], 'refId' => $u['refId']], 'db' => bootstrapData($u)]);
         break;
 
-    /* ---------------- RECORDS CRUD ---------------- */
+    /* ---------------- RECORDS CRUD (role-restricted) ---------------- */
     case 'records':
         $u = requireAuth();
         $type = preg_replace('/[^a-zA-Z]/', '', $_GET['type'] ?? '');
         if (!$type) err('type required', 400);
 
+        // Define allowed record types per role
+        $ustadzWritable = ['kehadiran','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
+
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+            // All roles can GET (but bootstrap already filters for wali)
             send(getRecords($type));
         }
+
+        // Write operations (POST/PUT/DELETE): restrict by role
+        if ($u['role'] === 'wali') {
+            err('Forbidden: Wali tidak dapat mengubah data.', 403);
+        }
+        if ($u['role'] === 'ustadz' && !in_array($type, $ustadzWritable, true)) {
+            err('Forbidden: Ustadz hanya dapat mengubah data pembelajaran.', 403);
+        }
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $b = body();
             $id = $b['id'] ?? uid($type);
@@ -76,10 +98,9 @@ switch ($action) {
         err('Method not allowed', 405);
         break;
 
-    /* ---------------- SETTINGS ---------------- */
+    /* ---------------- SETTINGS (admin only) ---------------- */
     case 'settings':
-        $u = requireAuth();
-        if ($u['role'] !== 'admin') err('Forbidden', 403);
+        $u = requireAdmin();
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             send(getSettings());
         }
@@ -93,8 +114,7 @@ switch ($action) {
 
     /* ---------------- RESET (admin reseed) ---------------- */
     case 'reset':
-        $u = requireAuth();
-        if ($u['role'] !== 'admin') err('Forbidden', 403);
+        $u = requireAdmin();
         // clear all records + settings, keep users
         pdo()->exec('DELETE FROM records');
         pdo()->exec('DELETE FROM settings');
@@ -102,12 +122,22 @@ switch ($action) {
         send(['ok' => true]);
         break;
 
-    /* ---------------- SAVE (persist full db) ---------------- */
+    /* ---------------- SAVE (persist full db, role-restricted) ---------------- */
     case 'save':
         $u = requireAuth();
         $b = body();
-        $types = ['santri','wali','ustadz','halaqah','kehadiran','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
-        foreach ($types as $t) {
+
+        // Define allowed types per role
+        $adminTypes = ['santri','wali','ustadz','halaqah','kehadiran','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
+        $ustadzTypes = ['kehadiran','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
+
+        if ($u['role'] === 'wali') {
+            err('Forbidden: Wali tidak dapat menyimpan perubahan.', 403);
+        }
+
+        $allowedTypes = ($u['role'] === 'admin') ? $adminTypes : $ustadzTypes;
+
+        foreach ($allowedTypes as $t) {
             if (!isset($b[$t]) || !is_array($b[$t])) continue;
             $keep = [];
             foreach ($b[$t] as $rec) {
@@ -122,11 +152,14 @@ switch ($action) {
                 if (!in_array($row['id'], $keep, true)) delRecord($t, $row['id']);
             }
         }
-        if (isset($b['settings']) && is_array($b['settings'])) {
+
+        // Settings: admin only
+        if ($u['role'] === 'admin' && isset($b['settings']) && is_array($b['settings'])) {
             saveSettings($b['settings']);
         }
-        // users: upsert (insert new + update existing); password only on insert
-        if (isset($b['users']) && is_array($b['users'])) {
+
+        // Users: admin only
+        if ($u['role'] === 'admin' && isset($b['users']) && is_array($b['users'])) {
             $existingIds = [];
             $stmtAll = pdo()->query('SELECT id FROM users');
             foreach ($stmtAll->fetchAll() as $row) $existingIds[] = $row['id'];

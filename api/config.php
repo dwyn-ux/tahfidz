@@ -4,35 +4,86 @@
  * Shared hosting friendly: no composer, no build step.
  *
  * SETUP:
- *  1. Edit DB_* constants below to match your hosting database.
- *  2. Change APP_SECRET to a random string.
+ *  1. Copy .env.example to .env and edit DB_* constants + APP_SECRET.
+ *  2. Or edit the defaults below to match your hosting database.
  *  3. Upload everything, then open install.php once to create tables + seed.
  *  4. Delete install.php after first run (or keep it protected).
  */
 
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'tahfidzku');
-define('DB_USER', 'root');
-define('DB_PASS', '');
-define('DB_CHARSET', 'utf8mb4');
+/* ---------------- .env loader (simple, no dependencies) ---------------- */
+function loadEnv(): array {
+    $env = [];
+    $envFile = __DIR__ . '/.env';
+    if (file_exists($envFile)) {
+        foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+            $line = trim($line);
+            if ($line === '' || $line[0] === '#') continue;
+            if (strpos($line, '=') === false) continue;
+            [$k, $v] = explode('=', $line, 2);
+            $env[trim($k)] = trim($v);
+        }
+    }
+    return $env;
+}
+$ENV = loadEnv();
+
+define('DB_HOST', $ENV['DB_HOST'] ?? 'localhost');
+define('DB_NAME', $ENV['DB_NAME'] ?? 'tahfidzku');
+define('DB_USER', $ENV['DB_USER'] ?? 'root');
+define('DB_PASS', $ENV['DB_PASS'] ?? '');
+define('DB_CHARSET', $ENV['DB_CHARSET'] ?? 'utf8mb4');
 
 // DB_DRIVER: 'mysql' (shared hosting) or 'sqlite' (local dev, no MySQL needed)
-define('DB_DRIVER', 'sqlite');
+define('DB_DRIVER', $ENV['DB_DRIVER'] ?? 'sqlite');
 // SQLite file (used only when DB_DRIVER === 'sqlite')
 define('DB_SQLITE_PATH', __DIR__ . '/tahfidzku.sqlite');
 
-// IMPORTANT: change this to a long random string in production!
-define('APP_SECRET', 'tahfidzku-secret-change-in-production-1234567890');
+/* ---------------- APP_SECRET (HMAC signing key) ----------------
+ * Loaded from .env. If not set, a random secret is generated and
+ * persisted to .secret file. NEVER use the old hardcoded default. */
+$secret = $ENV['APP_SECRET'] ?? '';
+if (!$secret || strlen($secret) < 32) {
+    $secretFile = __DIR__ . '/.secret';
+    if (file_exists($secretFile)) {
+        $secret = trim(file_get_contents($secretFile));
+    }
+    if (!$secret || strlen($secret) < 32) {
+        $secret = bin2hex(random_bytes(32));
+        file_put_contents($secretFile, $secret);
+    }
+}
+define('APP_SECRET', $secret);
 
-/* ---------------- CORS (restrict in production) ---------------- */
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Headers: Content-Type, Authorization');
-header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+/* ---------------- CORS (configurable, restrict in production) ----------------
+ * Set CORS_ALLOW_ORIGIN in .env to your domain, e.g. https://tahfidzku.com
+ * Use comma-separated for multiple origins. Default: same-origin only. */
+$allowedOrigins = array_filter(array_map('trim', explode(',', $ENV['CORS_ALLOW_ORIGIN'] ?? '')));
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+if (!empty($allowedOrigins) && in_array($origin, $allowedOrigins, true)) {
+    header('Access-Control-Allow-Origin: ' . $origin);
+    header('Access-Control-Allow-Headers: Content-Type, Authorization');
+    header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+    header('Vary: Origin');
+} elseif (!empty($allowedOrigins)) {
+    // Origins configured but request origin not allowed — deny CORS
+    http_response_code(403);
+    echo json_encode(['error' => 'Origin not allowed'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+// If no origins configured, same-origin requests work without CORS headers.
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
 header('Content-Type: application/json; charset=utf-8');
+
+/* ---------------- Security headers ---------------- */
+header('X-Content-Type-Options: nosniff');
+header('X-Frame-Options: SAMEORIGIN');
+header('Referrer-Policy: strict-origin-when-cross-origin');
+if (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+}
 
 /* ---------------- PDO ---------------- */
 function pdo(): PDO {
@@ -98,6 +149,27 @@ function uid($prefix = 'id') {
 }
 function nowISO() { return gmdate('Y-m-d\TH:i:s\Z'); }
 
+/* ---------------- Rate limiting (file-based, no dependencies) ----------------
+ * Tracks request count per key within a time window.
+ * Returns true if allowed, false if rate-limited. */
+function rateLimit(string $key, int $max, int $windowSec): bool {
+    $file = sys_get_temp_dir() . '/tahfidzku_rl_' . md5($key);
+    $now = time();
+    $data = ['count' => 0, 'reset' => $now + $windowSec];
+    if (file_exists($file)) {
+        $raw = file_get_contents($file);
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded) && isset($decoded['reset'])) {
+            if ($now < $decoded['reset']) {
+                $data = $decoded;
+            }
+        }
+    }
+    $data['count']++;
+    file_put_contents($file, json_encode($data), LOCK_EX);
+    return $data['count'] <= $max;
+}
+
 /* ---------------- Token (HMAC, stateless) ---------------- */
 function b64url($s) { return rtrim(strtr(base64_encode($s), '+/', '-_'), '='); }
 function b64url_decode($s) { return base64_decode(strtr($s, '-_', '+/')); }
@@ -130,6 +202,14 @@ function requireAuth() {
     $u = authUser();
     if (!$u) err('Unauthorized', 401);
     return $u;
+}
+function requireRole($role) {
+    $u = requireAuth();
+    if ($u['role'] !== $role) err('Forbidden', 403);
+    return $u;
+}
+function requireAdmin() {
+    return requireRole('admin');
 }
 
 /* ---------------- Generic record store ----------------
@@ -199,6 +279,14 @@ function defaultSettings(): array {
     ];
 }
 
+/** Return settings with sensitive fields stripped for non-admin users. */
+function publicSettings(array $s, string $role): array {
+    if ($role === 'admin') return $s;
+    // Non-admin: remove WhatsApp bridge credentials
+    unset($s['waBridgeUrl'], $s['waBridgeKey']);
+    return $s;
+}
+
 /* ---------------- Users ---------------- */
 function getUserByUsername($username) {
     $stmt = pdo()->prepare('SELECT * FROM users WHERE username = ?');
@@ -209,31 +297,129 @@ function publicUser($u) {
     return ['id' => $u['id'], 'username' => $u['username'], 'role' => $u['role'], 'refId' => $u['refId']];
 }
 
-/* ---------------- Bootstrap (all data for current user) ---------------- */
+/* ---------------- Bootstrap (role-filtered data for current user) ---------------- */
 function bootstrapData($user) {
+    $settings = publicSettings(getSettings(), $user['role']);
+
+    // Admin: return everything (same as before)
+    if ($user['role'] === 'admin') {
+        $db = [
+            'settings' => $settings,
+            'users' => [],
+            'santri' => getRecords('santri'),
+            'wali' => getRecords('wali'),
+            'ustadz' => getRecords('ustadz'),
+            'halaqah' => getRecords('halaqah'),
+            'kelas' => getSettings()['kelas'],
+            'levelTahfidz' => getSettings()['levelTahfidz'],
+            'kehadiran' => getRecords('kehadiran'),
+            'tahsin' => getRecords('tahsin'),
+            'ziyadahBacaan' => getRecords('ziyadahBacaan'),
+            'ziyadahHafalan' => getRecords('ziyadahHafalan'),
+            'mutqin' => getRecords('mutqin'),
+            'catatan' => getRecords('catatan'),
+            'tahunAjaran' => getSettings()['tahunAjaranList'],
+            'semester' => getSettings()['semesterList'],
+            'notifikasi' => getRecords('notifikasi'),
+            'logAktivitas' => getRecords('logAktivitas'),
+            'logWa' => getRecords('logWa'),
+        ];
+        $stmt = pdo()->query('SELECT id, username, role, refId FROM users');
+        $db['users'] = $stmt->fetchAll();
+        return $db;
+    }
+
+    // Ustadz: return all data (needed for Halaqah Umum mode) but filtered settings
+    if ($user['role'] === 'ustadz') {
+        $db = [
+            'settings' => $settings,
+            'users' => [],
+            'santri' => getRecords('santri'),
+            'wali' => getRecords('wali'),
+            'ustadz' => getRecords('ustadz'),
+            'halaqah' => getRecords('halaqah'),
+            'kelas' => getSettings()['kelas'],
+            'levelTahfidz' => getSettings()['levelTahfidz'],
+            'kehadiran' => getRecords('kehadiran'),
+            'tahsin' => getRecords('tahsin'),
+            'ziyadahBacaan' => getRecords('ziyadahBacaan'),
+            'ziyadahHafalan' => getRecords('ziyadahHafalan'),
+            'mutqin' => getRecords('mutqin'),
+            'catatan' => getRecords('catatan'),
+            'tahunAjaran' => getSettings()['tahunAjaranList'],
+            'semester' => getSettings()['semesterList'],
+            'notifikasi' => array_values(array_filter(getRecords('notifikasi'), fn($n) => $n['userId'] === $user['uid'])),
+            'logAktivitas' => getRecords('logAktivitas'),
+            'logWa' => getRecords('logWa'),
+        ];
+        // Ustadz sees only their own user account + admin accounts (for reference)
+        $stmt = pdo()->query('SELECT id, username, role, refId FROM users');
+        $allUsers = $stmt->fetchAll();
+        $db['users'] = array_values(array_filter($allUsers, fn($u) => $u['id'] === $user['uid'] || $u['role'] === 'admin'));
+        return $db;
+    }
+
+    // Wali: return ONLY their child's data (read-only, privacy-protected)
+    $wali = $user['refId'] ? getRecord('wali', $user['refId']) : null;
+    $santriId = $wali['santriId'] ?? null;
+
+    $santri = getRecords('santri');
+    $kehadiran = getRecords('kehadiran');
+    $tahsin = getRecords('tahsin');
+    $ziyadahBacaan = getRecords('ziyadahBacaan');
+    $ziyadahHafalan = getRecords('ziyadahHafalan');
+    $mutqin = getRecords('mutqin');
+    $catatan = getRecords('catatan');
+    $notifikasi = getRecords('notifikasi');
+
+    if ($santriId) {
+        $santri = array_values(array_filter($santri, fn($s) => $s['id'] === $santriId));
+        $kehadiran = array_values(array_filter($kehadiran, fn($k) => $k['santriId'] === $santriId));
+        $tahsin = array_values(array_filter($tahsin, fn($t) => $t['santriId'] === $santriId));
+        $ziyadahBacaan = array_values(array_filter($ziyadahBacaan, fn($z) => $z['santriId'] === $santriId));
+        $ziyadahHafalan = array_values(array_filter($ziyadahHafalan, fn($z) => $z['santriId'] === $santriId));
+        $mutqin = array_values(array_filter($mutqin, fn($m) => $m['santriId'] === $santriId));
+        $catatan = array_values(array_filter($catatan, fn($c) => $c['santriId'] === $santriId));
+    } else {
+        $santri = []; $kehadiran = []; $tahsin = []; $ziyadahBacaan = [];
+        $ziyadahHafalan = []; $mutqin = []; $catatan = [];
+    }
+
+    // Wali sees only their own notifications
+    $notifikasi = array_values(array_filter($notifikasi, fn($n) => $n['userId'] === $user['uid']));
+
+    // Wali sees their own wali record + their child's ustadz (name only)
+    $waliRecords = $wali ? [$wali] : [];
+    $ustadzRecords = [];
+    if (!empty($santri)) {
+        $halaqahName = $santri[0]['halaqah'] ?? '';
+        $halaqahRecords = getRecords('halaqah');
+        $halaqahObj = array_values(array_filter($halaqahRecords, fn($h) => $h['nama'] === $halaqahName));
+        $ustadzName = $halaqahObj[0]['ustadz'] ?? '';
+        $allUstadz = getRecords('ustadz');
+        $ustadzRecords = array_values(array_filter($allUstadz, fn($u) => $u['nama'] === $ustadzName));
+    }
+
     $db = [
-        'settings' => getSettings(),
-        'users' => [], // filled below (without passwords)
-        'santri' => getRecords('santri'),
-        'wali' => getRecords('wali'),
-        'ustadz' => getRecords('ustadz'),
-        'halaqah' => getRecords('halaqah'),
+        'settings' => $settings,
+        'users' => [['id' => $user['uid'], 'username' => '', 'role' => 'wali', 'refId' => $user['refId']]],
+        'santri' => $santri,
+        'wali' => $waliRecords,
+        'ustadz' => $ustadzRecords,
+        'halaqah' => [],
         'kelas' => getSettings()['kelas'],
         'levelTahfidz' => getSettings()['levelTahfidz'],
-        'kehadiran' => getRecords('kehadiran'),
-        'tahsin' => getRecords('tahsin'),
-        'ziyadahBacaan' => getRecords('ziyadahBacaan'),
-        'ziyadahHafalan' => getRecords('ziyadahHafalan'),
-        'mutqin' => getRecords('mutqin'),
-        'catatan' => getRecords('catatan'),
+        'kehadiran' => $kehadiran,
+        'tahsin' => $tahsin,
+        'ziyadahBacaan' => $ziyadahBacaan,
+        'ziyadahHafalan' => $ziyadahHafalan,
+        'mutqin' => $mutqin,
+        'catatan' => $catatan,
         'tahunAjaran' => getSettings()['tahunAjaranList'],
         'semester' => getSettings()['semesterList'],
-        'notifikasi' => getRecords('notifikasi'),
-        'logAktivitas' => getRecords('logAktivitas'),
-        'logWa' => getRecords('logWa'),
+        'notifikasi' => $notifikasi,
+        'logAktivitas' => [],
+        'logWa' => [],
     ];
-    // users without passwords (admin may view accounts)
-    $stmt = pdo()->query('SELECT id, username, role, refId FROM users');
-    $db['users'] = $stmt->fetchAll();
     return $db;
 }

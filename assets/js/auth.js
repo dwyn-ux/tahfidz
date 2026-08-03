@@ -25,7 +25,7 @@ const Auth = (() => {
             <button class="clay-btn primary" style="width:100%;margin-top:18px;justify-content:center" type="submit">Masuk</button>
           </form>
           <div class="muted" style="font-size:12px;margin-top:14px;text-align:center">
-            Demo: <b>admin / admin123</b> · <b>ustadz1 / 12345678</b> · <b>0812111111 / 12345678</b>
+            Hubungi admin untuk mendapatkan akun.
           </div>
           <button class="clay-btn ghost" id="open-quran" style="width:100%;margin-top:14px;justify-content:center"> Baca Al-Qur'an (Mushaf & Terjemah)</button>
         </div>

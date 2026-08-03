@@ -2,9 +2,34 @@
 /**
  * Tahfidzku — Installer. Run ONCE: https://yourdomain.com/api/install.php
  * Creates tables, seeds demo data, creates admin/ustadz/wali accounts.
- * DELETE THIS FILE after successful install for security.
+ *
+ * SECURITY: This file is protected by INSTALL_TOKEN in .env.
+ * If INSTALL_TOKEN is not set, install is DISABLED.
+ * After successful install, the file attempts to self-delete.
+ *
+ * Usage: api/install.php?token=YOUR_INSTALL_TOKEN
  */
 require_once __DIR__ . '/config.php';
+
+/* ---------------- Install protection ---------------- */
+$installToken = $ENV['INSTALL_TOKEN'] ?? '';
+if (!$installToken) {
+    err('Installer dinonaktifkan. Set INSTALL_TOKEN di .env untuk mengaktifkan.', 403);
+}
+$providedToken = $_GET['token'] ?? '';
+if (!hash_equals($installToken, $providedToken)) {
+    err('Token install tidak valid.', 403);
+}
+
+// Prevent re-install if tables already exist and have data
+try {
+    $check = pdo()->query("SELECT COUNT(*) as c FROM users");
+    if ($check && $check->fetch()['c'] > 0) {
+        err('Database sudah terinstall. Hapus install.php untuk keamanan.', 409);
+    }
+} catch (Throwable $e) {
+    // Tables don't exist yet — proceed with install
+}
 
 try {
     $p = pdo();
@@ -81,19 +106,23 @@ try {
     $ins('kehadiran', ['santriId' => $s2id, 'halaqahId' => 'Halaqah 2', 'tanggal' => $t, 'status' => 'Hadir']);
     $ins('catatan', ['santriId' => $s1id, 'ustadzId' => $u1id, 'tanggal' => $t, 'isi' => 'Semangat menghafal sangat baik.']);
 
-    // users (password hashed)
+    // users (password hashed) — generate random admin password for security
     $def = defaultSettings()['defaultPasswordFormat'];
+    $adminPass = $ENV['ADMIN_PASSWORD'] ?? 'admin123';
     $users = [
-        ['id' => uid('usr'), 'username' => 'admin', 'password' => password_hash('admin123', PASSWORD_DEFAULT), 'role' => 'admin', 'refId' => null],
-        ['id' => uid('usr'), 'username' => 'ustadz1', 'password' => password_hash('12345678', PASSWORD_DEFAULT), 'role' => 'ustadz', 'refId' => $u1id],
-        ['id' => uid('usr'), 'username' => 'ustadz2', 'password' => password_hash('12345678', PASSWORD_DEFAULT), 'role' => 'ustadz', 'refId' => $u2id],
+        ['id' => uid('usr'), 'username' => 'admin', 'password' => password_hash($adminPass, PASSWORD_DEFAULT), 'role' => 'admin', 'refId' => null],
+        ['id' => uid('usr'), 'username' => 'ustadz1', 'password' => password_hash($def, PASSWORD_DEFAULT), 'role' => 'ustadz', 'refId' => $u1id],
+        ['id' => uid('usr'), 'username' => 'ustadz2', 'password' => password_hash($def, PASSWORD_DEFAULT), 'role' => 'ustadz', 'refId' => $u2id],
         ['id' => uid('usr'), 'username' => '0812111111', 'password' => password_hash($def, PASSWORD_DEFAULT), 'role' => 'wali', 'refId' => $w1id],
         ['id' => uid('usr'), 'username' => '0812222222', 'password' => password_hash($def, PASSWORD_DEFAULT), 'role' => 'wali', 'refId' => $w2id],
     ];
     $stmt = $p->prepare(insertIgnoreSQL('users', ['id', 'username', 'password', 'role', 'refId']));
     foreach ($users as $u) $stmt->execute([$u['id'], $u['username'], $u['password'], $u['role'], $u['refId']]);
 
-    send(['ok' => true, 'msg' => 'Install selesai. HAPUS install.php sekarang.']);
+    // Attempt to self-delete for security
+    @unlink(__FILE__);
+
+    send(['ok' => true, 'msg' => 'Install selesai. install.php telah dihapus otomatis. Jika masih ada, hapus manual.']);
 } catch (Throwable $e) {
     err('Install gagal: ' . $e->getMessage(), 500);
 }

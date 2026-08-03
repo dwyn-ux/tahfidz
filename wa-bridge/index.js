@@ -2,19 +2,34 @@
    Tahfidzku — WA Bridge (Baileys multi-device)
    Jalankan: npm install && npm start
    Endpoint:
-     GET  /status          -> { connected, phone, qr }
-     GET  /qr              -> QR sebagai PNG (untuk scan sekali)
+     GET  /status          -> { connected, phone, qr } (auth required)
+     GET  /qr              -> QR sebagai PNG (auth required)
      POST /send            -> { to: "628xxx", message: "..." } (queued, delay antar pesan)
-   Auth: header X-WA-KEY harus sama dengan WA_KEY (default: tahfidz-wa-bridge)
+   Auth: header X-WA-KEY harus sama dengan WA_KEY (env var, wajib di-set)
    ============================================================ */
 const http = require('http');
 const path = require('path');
 const QRCode = require('qrcode');
 const fs = require('fs');
+const crypto = require('crypto');
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 
 const PORT = process.env.PORT || 3210;
-const WA_KEY = process.env.WA_KEY || 'tahfidz-wa-bridge';
+const WA_KEY = process.env.WA_KEY || '';
+
+// SECURITY: Refuse to start if WA_KEY is not set or is the old default
+if (!WA_KEY || WA_KEY === 'tahfidz-wa-bridge') {
+  // Generate a random key and print it for the user to configure
+  const generated = crypto.randomBytes(16).toString('hex');
+  console.error('========================================');
+  console.error('ERROR: WA_KEY tidak di-set atau masih default!');
+  console.error('Set environment variable WA_KEY dengan nilai acak.');
+  console.error(`Contoh: WA_KEY=${generated} npm start`);
+  console.error('Lalu set nilai yang sama di Settings → WhatsApp Otomatis → waBridgeKey');
+  console.error('========================================');
+  process.exit(1);
+}
+
 const SESSION_DIR = path.join(__dirname, 'session');
 // anti-banned: jeda antar pesan (detik) + jitter
 const MIN_DELAY = Number(process.env.WA_MIN_DELAY || 6);
@@ -110,7 +125,13 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   const url = new URL(req.url, 'http://localhost');
   const pathname = url.pathname.replace(/^\/wa-bridge/, '');
+
+  // Auth check for ALL endpoints
   const authOk = req.headers['x-wa-key'] === WA_KEY || url.searchParams.get('key') === WA_KEY;
+  if (!authOk) {
+    res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify({ error: 'Invalid or missing X-WA-KEY' }));
+  }
 
   const json = (code, data) => {
     res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -131,7 +152,6 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (pathname === '/send') {
-    if (!authOk) return json(401, { error: 'Invalid X-WA-KEY' });
     if (req.method !== 'POST') return json(405, { error: 'POST only' });
     let body = '';
     req.on('data', c => body += c);
@@ -155,7 +175,8 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[WA bridge] listening on :${PORT} — key: ${WA_KEY}`);
+  console.log(`[WA bridge] listening on :${PORT}`);
   console.log(`[WA bridge] status: /status | QR: /qr | send: POST /send`);
+  console.log(`[WA bridge] All endpoints require X-WA-Key header`);
   startWA();
 });

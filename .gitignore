@@ -1,6 +1,10 @@
 # Local database (regenerated via install.php)
 api/tahfidzku.sqlite
 
+# Secrets — NEVER commit these
+api/.env
+api/.secret
+
 # Test scripts
 api_test/
 

@@ -267,7 +267,7 @@ const Shared = (() => {
           <thead>
             <tr>
               <th class="center">Tanggal</th>
-              ${santri.map(st => `<th class="center">${st.nama}</th>`).join('')}
+              ${santri.map(st => `<th class="center">${UI.esc(st.nama)}</th>`).join('')}
             </tr>
           </thead>
           <tbody>

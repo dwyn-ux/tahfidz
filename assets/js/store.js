@@ -83,8 +83,7 @@ const Store = (() => {
   async function changePassword(oldPass, newPass) {
     try {
       await api('password', { method: 'POST', body: { old: oldPass, new: newPass } });
-      const me = db.users.find(u => u.id === getSession().userId);
-      if (me) me.password = newPass;
+      // Do NOT store plaintext password in memory — just mark as changed
       return { ok: true };
     } catch (e) {
       return { ok: false, msg: e.message || 'Gagal ganti password.' };
