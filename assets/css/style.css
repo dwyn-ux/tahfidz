@@ -76,7 +76,6 @@ h1, h2, h3, h4, .brand { font-family: 'Poppins', sans-serif; }
 .nav-item:hover { background: var(--bg); color: var(--text); }
 .nav-item.active {
   background: var(--primary); color: #fff;
-  box-shadow: var(--shadow-clay-sm);
 }
 /* .nav-item .ico removed — icons removed from nav */
 .sidebar .spacer { flex: 1; }
@@ -109,12 +108,12 @@ h1, h2, h3, h4, .brand { font-family: 'Poppins', sans-serif; }
   border: none; cursor: pointer; font-family: 'Poppins', sans-serif;
   font-weight: 600; font-size: 14px; padding: 12px 20px;
   border-radius: var(--radius-md); background: var(--card);
-  box-shadow: var(--shadow-clay-sm); color: var(--text);
+  color: var(--text);
   display: inline-flex; align-items: center; gap: 8px;
   transition: all .15s ease;
 }
 .clay-btn:hover { transform: translateY(-1px); }
-.clay-btn:active { box-shadow: var(--shadow-clay-inset); transform: translateY(0); }
+.clay-btn:active { transform: translateY(0); }
 .clay-btn.primary { background: var(--primary); color: #fff; }
 .clay-btn.secondary { background: var(--secondary); color: #fff; }
 .clay-btn.danger { background: var(--danger); color: #fff; }
@@ -135,14 +134,14 @@ label.field-label { display: block; font-size: 13px; font-weight: 600; margin: 1
 
 .clay-toggle {
   width: 52px; height: 30px; border-radius: 20px; background: var(--bg);
-  box-shadow: var(--shadow-clay-inset); position: relative; cursor: pointer;
+  position: relative; cursor: pointer;
   border: none; transition: background .2s;
 }
 .clay-toggle.on { background: var(--primary); }
 .clay-toggle::after {
   content: ''; position: absolute; top: 3px; left: 3px;
   width: 24px; height: 24px; border-radius: 50%; background: #fff;
-  box-shadow: var(--shadow-clay-sm); transition: left .2s;
+  transition: left .2s;
 }
 .clay-toggle.on::after { left: 25px; }
 
@@ -150,7 +149,7 @@ label.field-label { display: block; font-size: 13px; font-weight: 600; margin: 1
   position: fixed; right: 28px; bottom: 28px; z-index: 40;
   width: 60px; height: 60px; border-radius: 50%; border: none;
   background: var(--primary); color: #fff; font-size: 28px; cursor: pointer;
-  box-shadow: var(--shadow-clay); display: grid; place-items: center;
+  display: grid; place-items: center;
 }
 .fab:hover { transform: translateY(-2px); }
 
@@ -295,7 +294,7 @@ label.field-label { display: block; font-size: 13px; font-weight: 600; margin: 1
 .auth-roles { display: flex; gap: 10px; margin-top: 16px; }
 .auth-roles .role {
   flex: 1; text-align: center; padding: 12px; border-radius: var(--radius-md);
-  background: var(--bg); box-shadow: var(--shadow-clay-inset); cursor: pointer; font-size: 13px; font-weight: 600;
+  background: var(--bg); cursor: pointer; font-size: 13px; font-weight: 600;
 }
 .auth-roles .role.active { background: var(--primary); color: #fff; }
 
@@ -305,7 +304,7 @@ label.field-label { display: block; font-size: 13px; font-weight: 600; margin: 1
 .empty { text-align: center; color: var(--text-soft); padding: 40px 0; }
 .pill-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .pill {
-  padding: 8px 16px; border-radius: 20px; background: var(--bg); box-shadow: var(--shadow-clay-inset);
+  padding: 8px 16px; border-radius: 20px; background: var(--bg);
   cursor: pointer; font-size: 13px; font-weight: 600; border: none; color: var(--text-soft);
 }
 .pill.active { background: var(--primary); color: #fff; }
@@ -349,7 +348,7 @@ label.field-label { display: block; font-size: 13px; font-weight: 600; margin: 1
 }
 .menu-toggle {
   display: none; width: 44px; height: 44px; border-radius: 14px;
-  border: none; background: var(--card); box-shadow: var(--shadow-clay-sm);
+  border: none; background: var(--card);
   font-size: 20px; cursor: pointer; place-items: center;
 }
 .scrim { display: none; }
