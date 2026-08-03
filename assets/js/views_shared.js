@@ -105,46 +105,58 @@ const Shared = (() => {
   }
 
   /* ---------- Peta hafalan (shared: ustadz & wali) ---------- */
-  // Estimasi halaman global (1..604) untuk satu posisi surah:ayat,
-  // lewat interpolasi linier di dalam rentang halaman surah.
-  function pageForAyah(sn, ayah) {
+  // Posisi halaman (float, 0-based) untuk satu surah:ayat via interpolasi linier.
+  // hlm. 1 = [0,1), hlm. 2 = [1,2), dst. Ayat pertama = tepi atas halaman awal
+  // surat, ayat terakhir = tepi bawah halaman akhir surat (agar 1 surat penuh = 1 halaman).
+  function pagePos(sn, ayah) {
     const s = getSurah(sn);
     if (!s) return null;
     const nxt = getSurah(sn + 1);
     const endPage = nxt ? nxt.page - 1 : 604;
     const span = Math.max(1, endPage - s.page + 1);
-    const ratio = Math.min(1, Math.max(0, (Number(ayah) - 1) / s.ayahs));
-    return Math.min(endPage, s.page + Math.floor(ratio * span));
+    const top = s.page - 1;
+    const bottom = s.page - 1 + span;
+    ayah = Number(ayah);
+    if (!ayah || ayah <= 1) return top;
+    if (ayah >= s.ayahs) return bottom;
+    const ratio = (ayah - 1) / (s.ayahs - 1);
+    return top + span * ratio;
   }
 
-  // Himpunan halaman yang pernah disetorkan santri (ziyadahHafalan + mutqin).
-  function setoranPages(santriId) {
+  // Status tiap halaman (1..600): 'full' hijau, 'part' kuning, sisanya abu-abu.
+  // Halaman penuh = ada setoran yang menutupi seluruh interval [g-1,g).
+  function hafalanStates(santriId) {
     const db = Store.get();
-    const pages = new Set();
-    const add = (rec) => {
-      const p1 = pageForAyah(rec.sAwal, rec.aAwal);
-      const p2 = pageForAyah(rec.sAkhir, rec.aAkhir);
-      if (!p1 || !p2) return;
-      const lo = Math.min(p1, p2), hi = Math.max(p1, p2);
-      for (let p = lo; p <= hi; p++) pages.add(p);
-    };
-    db.ziyadahHafalan.filter(r => r.santriId === santriId).forEach(add);
-    db.mutqin.filter(r => r.santriId === santriId).forEach(add);
-    return pages;
+    const full = new Set(), part = new Set();
+    const ranges = [...db.ziyadahHafalan, ...db.mutqin]
+      .filter(r => r.santriId === santriId)
+      .map(r => {
+        const a = pagePos(r.sAwal, r.aAwal), b = pagePos(r.sAkhir, r.aAkhir);
+        return (a === null || b === null) ? null : [Math.min(a, b), Math.max(a, b)];
+      })
+      .filter(Boolean);
+    for (let g = 1; g <= 600; g++) {
+      const lo = g - 1, hi = g;
+      if (ranges.some(r => r[0] <= lo && r[1] >= hi)) full.add(g);
+      else if (ranges.some(r => r[1] > lo && r[0] < hi)) part.add(g);
+    }
+    return { full, part };
   }
 
   // Peta hafalan ala GitHub: 30 baris juz x 20 kolom halaman.
   function hafalanMapHTML(santriId) {
-    const covered = setoranPages(santriId);
+    const { full, part } = hafalanStates(santriId);
     let html = '';
     for (let juz = 1; juz <= 30; juz++) {
       html += '<div style="display:flex;align-items:center;gap:3px;margin-bottom:2px">' +
         '<span style="width:38px;font-size:10px;color:var(--muted)">Juz ' + juz + '</span>';
       for (let pg = 1; pg <= 20; pg++) {
         const g = (juz - 1) * 20 + pg;
-        const ok = covered.has(g);
-        html += '<span title="Juz ' + juz + ' · hal. ' + pg + (ok ? ' · sudah disetor' : ' · belum') + '" ' +
-          'style="width:11px;height:11px;border-radius:2px;flex:0 0 11px;background:' + (ok ? 'var(--success)' : 'var(--warn)') + '"></span>';
+        let color = 'var(--muted)', tip = 'belum disetor';
+        if (full.has(g)) { color = 'var(--success)'; tip = 'selesai disetor'; }
+        else if (part.has(g)) { color = 'var(--warn)'; tip = 'disetor sebagian'; }
+        html += '<span title="Juz ' + juz + ' · hal. ' + pg + ' · ' + tip + '" ' +
+          'style="width:11px;height:11px;border-radius:2px;flex:0 0 11px;background:' + color + '"></span>';
       }
       html += '</div>';
     }

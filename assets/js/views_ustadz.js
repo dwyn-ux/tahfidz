@@ -417,7 +417,7 @@ const Ustadz = (() => {
         ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat" ${hafalanDisabled}></textarea>`)}
         <button class="clay-btn primary" id="btn-simpan-hafalan" style="margin-top:8px" ${btnHafalanDisabled}>💾 Simpan Hafalan</button>
       </div>
-      <div class="clay-card pad-sm" style="background:var(--bg)"><b>Peta Hafalan</b> <span class="muted" style="font-size:11px">· hijau = sudah disetor, kuning = belum</span><div id="hafalan-map" style="margin-top:8px;overflow:auto;max-height:300px">${Shared.hafalanMapHTML(santriId)}</div></div>
+      <div class="clay-card pad-sm" style="background:var(--bg)"><b>Peta Hafalan</b> <span class="muted" style="font-size:11px">· abu-abu = belum disetor · kuning = disetor sebagian · hijau = selesai 1 halaman</span><div id="hafalan-map" style="margin-top:8px;overflow:auto;max-height:300px">${Shared.hafalanMapHTML(santriId)}</div></div>
       <div class="clay-card pad-sm" style="background:var(--bg);font-size:13px"><b> Riwayat 3 setoran terakhir:</b> <div id="riwayat-list">${riwayatSingkat()}</div></div>`;
 
     const modal = UI.openModal({

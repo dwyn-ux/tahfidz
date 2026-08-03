@@ -119,7 +119,7 @@ const Wali = (() => {
       </div>
       <div class="clay-card mt">
         <div class="section-title"> Peta Hafalan</div>
-        <div class="muted" style="font-size:12px;margin-bottom:8px">Hijau = halaman sudah disetor · Kuning = belum disetor</div>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">Abu-abu = belum disetor · Kuning = disetor sebagian · Hijau = selesai 1 halaman</div>
         <div style="overflow:auto;max-height:340px">${Shared.hafalanMapHTML(s.id)}</div>
       </div>
       <div class="clay-card mt">
