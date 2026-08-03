@@ -105,40 +105,40 @@ const Shared = (() => {
   }
 
   /* ---------- Peta hafalan (shared: ustadz & wali) ---------- */
-  // Posisi halaman (float, 0-based) untuk satu surah:ayat via interpolasi linier.
-  // hlm. 1 = [0,1), hlm. 2 = [1,2), dst. Ayat pertama = tepi atas halaman awal
-  // surat, ayat terakhir = tepi bawah halaman akhir surat (agar 1 surat penuh = 1 halaman).
-  function pagePos(sn, ayah) {
-    const s = getSurah(sn);
-    if (!s) return null;
-    const nxt = getSurah(sn + 1);
-    const endPage = nxt ? nxt.page - 1 : 604;
-    const span = Math.max(1, endPage - s.page + 1);
-    const top = s.page - 1;
-    const bottom = s.page - 1 + span;
-    ayah = Number(ayah);
-    if (!ayah || ayah <= 1) return top;
-    if (ayah >= s.ayahs) return bottom;
-    const ratio = (ayah - 1) / (s.ayahs - 1);
-    return top + span * ratio;
+  // Rank global ayat (1..total) dari surat:ayat — basis deteksi penuh/sebagian. real dari PAGE_START.
+  const _rankOf = (() => {
+    let cum = [0];
+    for (let i = 1; i <= 114; i++) cum[i] = cum[i - 1] + getSurah(i).ayahs;
+    return (s, a) => cum[Number(s) - 1] + Number(a);
+  })();
+
+  // Rentang rank ayat sebuah halaman g: [start, end] dari peta halaman↔ayat nyata.
+  function pageRankRange(g) {
+    const st = PAGE_START[g];
+    if (!st) return null;
+    const lo = _rankOf(st[0], st[1]);
+    const nx = PAGE_START[g + 1];
+    const hi = nx ? _rankOf(nx[0], nx[1]) - 1 : _rankOf(114, getSurah(114).ayahs);
+    return [lo, hi];
   }
 
   // Status tiap halaman (1..600): 'full' hijau, 'part' kuning, sisanya abu-abu.
-  // Halaman penuh = ada setoran yang menutupi seluruh interval [g-1,g).
+  // Hijau = ada setoran yang menutupi SELURUH rentang ayat halaman itu (sesuai peta asli).
   function hafalanStates(santriId) {
     const db = Store.get();
     const full = new Set(), part = new Set();
     const ranges = [...db.ziyadahHafalan, ...db.mutqin]
       .filter(r => r.santriId === santriId)
       .map(r => {
-        const a = pagePos(r.sAwal, r.aAwal), b = pagePos(r.sAkhir, r.aAkhir);
-        return (a === null || b === null) ? null : [Math.min(a, b), Math.max(a, b)];
+        const lo = _rankOf(r.sAwal, r.aAwal), hi = _rankOf(r.sAkhir, r.aAkhir);
+        return lo <= hi ? [lo, hi] : [hi, lo];
       })
       .filter(Boolean);
     for (let g = 1; g <= 600; g++) {
-      const lo = g - 1, hi = g;
-      if (ranges.some(r => r[0] <= lo && r[1] >= hi)) full.add(g);
-      else if (ranges.some(r => r[1] > lo && r[0] < hi)) part.add(g);
+      const pr = pageRankRange(g);
+      if (!pr) continue;
+      if (ranges.some(r => r[0] <= pr[0] && r[1] >= pr[1])) full.add(g);
+      else if (ranges.some(r => r[1] >= pr[0] && r[0] <= pr[1])) part.add(g);
     }
     return { full, part };
   }
