@@ -106,7 +106,7 @@ switch ($action) {
     case 'save':
         $u = requireAuth();
         $b = body();
-        $types = ['santri','wali','ustadz','halaqah','kehadiran','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas'];
+        $types = ['santri','wali','ustadz','halaqah','kehadiran','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
         foreach ($types as $t) {
             if (!isset($b[$t]) || !is_array($b[$t])) continue;
             $keep = [];

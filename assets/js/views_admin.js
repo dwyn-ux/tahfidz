@@ -873,6 +873,17 @@ const Admin = (() => {
         </div>
         <div id="wa-status" class="mt" style="font-size:13px"></div>
       </div>
+      <div class="clay-card mb">
+        <div class="row" style="align-items:center">
+          <div class="section-title" style="margin:0">Log WhatsApp</div>
+          <button class="clay-btn ghost" id="btn-wa-log-refresh" style="margin-left:auto">Muat Ulang</button>
+        </div>
+        <div class="muted" style="font-size:12px;margin:6px 0 10px">
+          Riwayat pengiriman WA (terakhir 100, auto-refresh 5 detik). Status: <b style="color:var(--success)">queued</b> = masuk antrian bridge,
+          <b style="color:var(--warn)">skipped</b> = dilewati (lihat detail), <b style="color:var(--danger)">error</b> = gagal (lihat detail).
+        </div>
+        <div id="wa-log" style="font-size:12px;max-height:280px;overflow:auto"></div>
+      </div>
       <div class="clay-card">
         <div class="row">
           <button class="clay-btn primary" id="btn-save"> Simpan</button>
@@ -972,14 +983,42 @@ const Admin = (() => {
       const nohp = prompt('Nomor WhatsApp tujuan tes (contoh: 0812xxx):');
       if (!nohp) return;
       waStatusEl.innerHTML = '<span class="muted">Mengirim...</span>';
+      const msg = '🔔 Tes WhatsApp Bridge Tahfidzku. Pesan laporan capaian akan terkirim otomatis ke wali.';
       try {
-        const r = await waFetch('/send', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WA-Key': waKeyEl.value.trim() || 'tahfidz-wa-bridge' }, body: JSON.stringify({ to: nohp, message: '🔔 Tes WhatsApp Bridge Tahfidzku. Pesan laporan capaian akan terkirim otomatis ke wali.' }) });
+        const r = await waFetch('/send', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WA-Key': waKeyEl.value.trim() || 'tahfidz-wa-bridge' }, body: JSON.stringify({ to: nohp, message: msg }) });
         const d = await r.json();
+        Store.waLog({ to: nohp, status: r.ok ? 'queued' : 'error', detail: r.ok ? (d.error || 'Pesan masuk antrian.') : (d.error || ('HTTP ' + r.status)), message: msg });
         waStatusEl.innerHTML = r.ok ? '<span style="color:var(--success)">✓ ' + (d.error ? UI.esc(d.error) : 'Pesan masuk antrian.') + '</span>' : '<span style="color:var(--danger)">' + UI.esc(d.error || 'Gagal') + '</span>';
       } catch (e) {
+        Store.waLog({ to: nohp, status: 'error', detail: 'Fetch gagal: ' + (e && e.message || e), message: msg });
         waStatusEl.innerHTML = '<span style="color:var(--danger)">Gagal: ' + UI.esc(e.message) + '</span>';
       }
     };
+
+    function renderWaLog() {
+      const el = document.getElementById('wa-log');
+      if (!el) return;
+      const logs = (Store.get().logWa || []).slice(0, 50);
+      if (!logs.length) { el.innerHTML = '<span class="muted">Belum ada pengiriman.</span>'; return; }
+      el.innerHTML = logs.map(l => {
+        const status = l.status || '?';
+        const color = status === 'queued' ? 'var(--success)' : status === 'skipped' ? 'var(--warn)' : 'var(--danger)';
+        const tgl = (l.tanggal || '').replace('T', ' ').slice(5, 19);
+        const detail = l.detail ? '<div style="color:var(--danger);margin-top:2px">' + UI.esc(l.detail) + '</div>' : '';
+        const msg = l.message ? '<div class="muted" style="margin-top:2px">' + UI.esc(l.message) + '</div>' : '';
+        return '<div style="padding:6px 0;border-bottom:1px solid var(--line,#eee)">' +
+          '<span style="color:' + color + ';font-weight:600">' + UI.esc(status) + '</span> ' +
+          '<span class="muted">' + UI.esc(tgl) + '</span> → <b>' + UI.esc(l.to || '-') + '</b>' +
+          detail + msg + '</div>';
+      }).join('');
+    }
+    renderWaLog();
+    const waLogTimer = setInterval(() => {
+      if (!document.getElementById('wa-log')) { clearInterval(waLogTimer); return; }
+      renderWaLog();
+    }, 5000);
+    const waLogBtn = document.getElementById('btn-wa-log-refresh');
+    if (waLogBtn) waLogBtn.onclick = renderWaLog;
   }
 
   return { nav, dashboard, santri, ustadz, halaqah, master, riwayat, laporan, notif, settings, importSantriDialog };

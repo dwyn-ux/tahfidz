@@ -230,6 +230,7 @@ function bootstrapData($user) {
         'semester' => getSettings()['semesterList'],
         'notifikasi' => getRecords('notifikasi'),
         'logAktivitas' => getRecords('logAktivitas'),
+        'logWa' => getRecords('logWa'),
     ];
     // users without passwords (admin may view accounts)
     $stmt = pdo()->query('SELECT id, username, role, refId FROM users');

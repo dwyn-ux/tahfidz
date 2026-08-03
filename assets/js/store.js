@@ -29,7 +29,7 @@ const Store = (() => {
       levelTahfidz: ['Tahsin', 'Ziyadah', 'Mutqin'],
       kehadiran: [], tahsin: [], ziyadahBacaan: [], ziyadahHafalan: [], mutqin: [], catatan: [],
       tahunAjaran: ['2024/2025', '2025/2026', '2026/2027'], semester: ['Ganjil', 'Genap'],
-      notifikasi: [], logAktivitas: [], setoranNotif: []
+      notifikasi: [], logAktivitas: [], logWa: [], setoranNotif: []
     };
   }
 
@@ -108,23 +108,41 @@ const Store = (() => {
   function get() { return db; }
 
   // Kirim pesan WhatsApp via WA bridge (jika dikonfigurasi). Fire-and-forget.
+  // Setiap percobaan dicatat ke db.logWa (status: queued/skipped/error).
+  function waLog(entry) {
+    if (!db.logWa) db.logWa = [];
+    db.logWa.unshift(Object.assign({ id: uid('wa'), tanggal: nowISO(), message: entry.message ? String(entry.message).slice(0, 150) : '' }, entry));
+    if (db.logWa.length > 100) db.logWa.length = 100;
+    save();
+  }
   function waSend(to, message) {
     const s = db.settings;
-    if (!s.waBridgeUrl || !to || !message) return Promise.resolve(false);
-    return fetch(s.waBridgeUrl + '/send', {
+    if (!s.waBridgeUrl) { waLog({ to, status: 'skipped', detail: 'URL bridge belum diatur (Settings → WhatsApp Otomatis)' }); return Promise.resolve(false); }
+    if (!to) { waLog({ to: null, status: 'skipped', detail: 'Nomor tujuan kosong' }); return Promise.resolve(false); }
+    if (!message) { waLog({ to, status: 'skipped', detail: 'Pesan kosong' }); return Promise.resolve(false); }
+    return fetch(s.waBridgeUrl.replace(/\/$/, '') + '/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-WA-Key': s.waBridgeKey || '' },
       body: JSON.stringify({ to, message })
-    }).then(r => r.ok).catch(() => false);
+    }).then(async (r) => {
+      let detail = '';
+      try { const d = await r.json(); detail = d.error || JSON.stringify(d); } catch (e) { detail = ''; }
+      waLog({ to, status: r.ok ? 'queued' : 'error', detail: detail || ('HTTP ' + r.status), message });
+      return r.ok;
+    }).catch(e => {
+      waLog({ to, status: 'error', detail: 'Fetch gagal: ' + (e && e.message || e), message });
+      return false;
+    });
   }
 
   function waReady() { return !!(db.settings && db.settings.waBridgeUrl); }
 
   // Kirim laporan ke no. WA wali dari santri (auto jika waAuto aktif). Fire-and-forget.
   function waSendWali(santriId, message) {
-    if (!db.settings.waAuto) return Promise.resolve(false);
     const s = db.santri.find(x => x.id === santriId);
-    if (!s || !s.noHpWali) return Promise.resolve(false);
+    if (!s) { waLog({ to: null, status: 'skipped', detail: 'Santri tidak ditemukan', message }); return Promise.resolve(false); }
+    if (!db.settings.waAuto) { waLog({ to: s.noHpWali, status: 'skipped', detail: 'WhatsApp Otomatis nonaktif', message }); return Promise.resolve(false); }
+    if (!s.noHpWali) { waLog({ to: null, status: 'skipped', detail: 'Santri tanpa no. HP wali', message }); return Promise.resolve(false); }
     return waSend(s.noHpWali, message);
   }
   function save() {
@@ -293,7 +311,7 @@ const Store = (() => {
     load, save, get, reset, uid, log, nowISO, todayStr,
     setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout, changePassword,
     recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahByName, search,
-    waSend, waReady, waSendWali,
+    waSend, waLog, waReady, waSendWali,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, addNotif, notifFor, clearNotifs, checkSetoranTerlewat
   };
 })();
