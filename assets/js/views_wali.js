@@ -118,6 +118,11 @@ const Wali = (() => {
         ${chartData.length ? Shared.barChart(chartData, Math.max(1, ...chartData.map(d => d.value))) : '<div class="empty">Belum ada data setoran.</div>'}
       </div>
       <div class="clay-card mt">
+        <div class="section-title"> Peta Hafalan</div>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">Hijau = halaman sudah disetor · Kuning = belum disetor</div>
+        <div style="overflow:auto;max-height:340px">${Shared.hafalanMapHTML(s.id)}</div>
+      </div>
+      <div class="clay-card mt">
         <div class="section-title"> Tahsin</div>
         <div class="table-wrap"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Halaman</th><th>Nilai</th><th>Catatan</th></tr></thead><tbody>${tahsinRows || '<tr><td colspan="4"><div class="empty">Belum ada.</div></td></tr>'}</tbody></table></div>
       </div>

@@ -285,52 +285,6 @@ const Ustadz = (() => {
     surahInput.oninput = update;
   }
 
-  // Estimasi halaman global (1..604) untuk satu posisi surah:ayat,
-  // lewat interpolasi linier di dalam rentang halaman surah.
-  function pageForAyah(sn, ayah) {
-    const s = getSurah(sn);
-    if (!s) return null;
-    const nxt = getSurah(sn + 1);
-    const endPage = nxt ? nxt.page - 1 : 604;
-    const span = Math.max(1, endPage - s.page + 1);
-    const ratio = Math.min(1, Math.max(0, (Number(ayah) - 1) / s.ayahs));
-    return Math.min(endPage, s.page + Math.floor(ratio * span));
-  }
-
-  // Himpunan halaman yang pernah disetorkan santri (ziyadahHafalan + mutqin).
-  function setoranPages(santriId) {
-    const db = Store.get();
-    const pages = new Set();
-    const add = (rec) => {
-      const p1 = pageForAyah(rec.sAwal, rec.aAwal);
-      const p2 = pageForAyah(rec.sAkhir, rec.aAkhir);
-      if (!p1 || !p2) return;
-      const lo = Math.min(p1, p2), hi = Math.max(p1, p2);
-      for (let p = lo; p <= hi; p++) pages.add(p);
-    };
-    db.ziyadahHafalan.filter(r => r.santriId === santriId).forEach(add);
-    db.mutqin.filter(r => r.santriId === santriId).forEach(add);
-    return pages;
-  }
-
-  // Peta hafalan ala GitHub: 30 baris juz x 20 kolom halaman.
-  function hafalanMapHTML(santriId) {
-    const covered = setoranPages(santriId);
-    let html = '';
-    for (let juz = 1; juz <= 30; juz++) {
-      html += '<div style="display:flex;align-items:center;gap:3px;margin-bottom:2px">' +
-        '<span style="width:38px;font-size:10px;color:var(--muted)">Juz ' + juz + '</span>';
-      for (let pg = 1; pg <= 20; pg++) {
-        const g = (juz - 1) * 20 + pg;
-        const ok = covered.has(g);
-        html += '<span title="Juz ' + juz + ' · hal. ' + pg + (ok ? ' · sudah disetor' : ' · belum') + '" ' +
-          'style="width:11px;height:11px;border-radius:2px;flex:0 0 11px;background:' + (ok ? 'var(--success)' : 'var(--warn)') + '"></span>';
-      }
-      html += '</div>';
-    }
-    return html;
-  }
-
   function tahsinForm(santriId) {
     const s = Store.findSantri(santriId);
     const body = `
@@ -463,7 +417,7 @@ const Ustadz = (() => {
         ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat" ${hafalanDisabled}></textarea>`)}
         <button class="clay-btn primary" id="btn-simpan-hafalan" style="margin-top:8px" ${btnHafalanDisabled}>💾 Simpan Hafalan</button>
       </div>
-      <div class="clay-card pad-sm" style="background:var(--bg)"><b>Peta Hafalan</b> <span class="muted" style="font-size:11px">· hijau = sudah disetor, kuning = belum</span><div id="hafalan-map" style="margin-top:8px;overflow:auto;max-height:300px">${hafalanMapHTML(santriId)}</div></div>
+      <div class="clay-card pad-sm" style="background:var(--bg)"><b>Peta Hafalan</b> <span class="muted" style="font-size:11px">· hijau = sudah disetor, kuning = belum</span><div id="hafalan-map" style="margin-top:8px;overflow:auto;max-height:300px">${Shared.hafalanMapHTML(santriId)}</div></div>
       <div class="clay-card pad-sm" style="background:var(--bg);font-size:13px"><b> Riwayat 3 setoran terakhir:</b> <div id="riwayat-list">${riwayatSingkat()}</div></div>`;
 
     const modal = UI.openModal({
