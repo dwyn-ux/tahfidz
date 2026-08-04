@@ -67,16 +67,20 @@ define('APP_SECRET', $secret);
  * Use comma-separated for multiple origins. Default: same-origin only. */
 $allowedOrigins = array_filter(array_map('trim', explode(',', isset($envVars['CORS_ALLOW_ORIGIN']) ? $envVars['CORS_ALLOW_ORIGIN'] : '')));
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-if (!empty($allowedOrigins) && in_array($origin, $allowedOrigins, true)) {
-    header('Access-Control-Allow-Origin: ' . $origin);
-    header('Access-Control-Allow-Headers: Content-Type, Authorization');
-    header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-    header('Vary: Origin');
-} elseif (!empty($allowedOrigins)) {
-    // Origins configured but request origin not allowed — deny CORS
-    http_response_code(403);
-    echo json_encode(['error' => 'Origin not allowed'], JSON_UNESCAPED_UNICODE);
-    exit;
+// Only check CORS when Origin header is present (browser requests).
+// CLI/curl requests don't have Origin and should always be allowed.
+if ($origin !== '') {
+    if (!empty($allowedOrigins) && in_array($origin, $allowedOrigins, true)) {
+        header('Access-Control-Allow-Origin: ' . $origin);
+        header('Access-Control-Allow-Headers: Content-Type, Authorization');
+        header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+        header('Vary: Origin');
+    } elseif (!empty($allowedOrigins)) {
+        // Origins configured but request origin not allowed — deny CORS
+        http_response_code(403);
+        echo json_encode(['error' => 'Origin not allowed'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 }
 // If no origins configured, same-origin requests work without CORS headers.
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
