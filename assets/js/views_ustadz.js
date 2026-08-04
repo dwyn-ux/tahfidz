@@ -143,7 +143,7 @@ const Ustadz = (() => {
               <button class="clay-btn sm ${cur === 'Alfa' ? 'danger' : 'ghost'}" data-st="Alfa"> Alfa</button>
             </div>
           </td>
-          <td><span class="badge ${cur === 'Hadir' ? 'green' : cur === 'Izin' ? 'warn' : cur === 'Sakit' ? 'blue' : 'danger'}">${cur}</span></td>
+          <td><span class="badge ${cur === 'Hadir' ? 'green' : cur === 'Izin' ? 'warn' : cur === 'Sakit' ? 'blue' : 'danger'}">${UI.esc(cur)}</span></td>
         </tr>`;
       }).join('');
 

@@ -315,7 +315,7 @@ const Admin = (() => {
         <div style="flex:1">${UI.field('NIS', `<input class="clay-input" id="f-nis" value="${s ? UI.esc(s.nis) : ''}">`)}</div>
         <div style="flex:1">${UI.field('Jenis Kelamin', `<select class="clay-select" id="f-jk"><option ${s && s.jk === 'L' ? 'selected' : ''}>L</option><option ${s && s.jk === 'P' ? 'selected' : ''}>P</option></select>`)}</div>
       </div>
-      ${UI.field('Tanggal Lahir', `<input class="clay-input" id="f-tgl" type="date" value="${s ? s.tglLahir : ''}">`)}
+      ${UI.field('Tanggal Lahir', `<input class="clay-input" id="f-tgl" type="date" value="${s ? UI.esc(s.tglLahir) : ''}">`)}
       ${UI.field('Alamat', `<input class="clay-input" id="f-alamat" value="${s ? UI.esc(s.alamat) : ''}">`)}
       <div class="row">
         <div style="flex:1">${UI.field('No HP Santri', `<input class="clay-input" id="f-hp" value="${s ? UI.esc(s.noHp) : ''}">`)}</div>
@@ -803,7 +803,7 @@ const Admin = (() => {
         <div class="row">
           <div style="flex:0 0 120px;text-align:center">
             <div id="s-logo-preview" style="width:100px;height:100px;border-radius:14px;background:var(--bg);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;overflow:hidden">
-              ${s.logo ? `<img src="${UI.esc(s.logo)}" style="max-width:100%;max-height:100%">` : '<span style="font-size:32px;color:var(--text-soft)">+</span>'}
+              ${UI.safeUrl(s.logo) ? `<img src="${UI.esc(UI.safeUrl(s.logo))}" style="max-width:100%;max-height:100%">` : '<span style="font-size:32px;color:var(--text-soft)">+</span>'}
             </div>
             <label class="clay-btn sm ghost" style="font-size:12px;cursor:pointer">Upload Logo
               <input type="file" id="s-logo-upload" accept="image/*" style="display:none">
@@ -974,7 +974,7 @@ const Admin = (() => {
         waStatusEl.innerHTML = d.connected
           ? '<span style="color:var(--success)">✓ Terhubung' + (d.phone ? ' (' + UI.esc(d.phone) + ')' : '') + '</span>'
           : '<span style="color:var(--warn)">Belum terhubung' + (d.qr ? ' — ada QR menunggu scan' : '') + '.</span> ' +
-            '<a href="' + UI.esc(waUrlEl.value.trim().replace(/\/$/, '')) + '/qr" target="_blank" style="color:var(--primary)">Buka QR</a>';
+            '<a href="' + UI.esc(UI.safeUrl(waUrlEl.value.trim().replace(/\/$/, ''))) + '/qr" target="_blank" style="color:var(--primary)">Buka QR</a>';
       } catch (e) {
         waStatusEl.innerHTML = '<span style="color:var(--danger)">Tidak bisa akses bridge: ' + UI.esc(e.message) + '</span>';
       }

@@ -10,6 +10,11 @@ const UI = (() => {
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
+  function safeUrl(s) {
+    const v = String(s == null ? '' : s);
+    if (!v) return '';
+    return /^(https?:|data:image\/|\/|\.\/|\.\.\/)/i.test(v) ? v : '';
+  }
   function fmtDate(iso) {
     if (!iso) return '-';
     const d = new Date(iso.length <= 10 ? iso : iso);
@@ -79,5 +84,5 @@ const UI = (() => {
     return `<datalist id="dl-surah">${SURAHS.map(s => `<option value="${s.n}. ${s.latin}">${s.n}. ${s.latin} (${s.arab})</option>`).join('')}</datalist>`;
   }
 
-  return { el, esc, fmtDate, fmtDateTime, toast, openModal, confirmDialog, field, optionsFromList, surahOptions };
+  return { el, esc, safeUrl, fmtDate, fmtDateTime, toast, openModal, confirmDialog, field, optionsFromList, surahOptions };
 })();

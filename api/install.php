@@ -11,14 +11,18 @@
  */
 require_once __DIR__ . '/config.php';
 
-/* ---------------- Install protection ---------------- */
-$installToken = isset($envVars['INSTALL_TOKEN']) ? $envVars['INSTALL_TOKEN'] : '';
-if (!$installToken) {
+/* ---------------- Install protection ----------------
+ * Web access requires INSTALL_TOKEN from .env. CLI (php api/install.php) is allowed
+ * without a token — it's not reachable over HTTP. */
+if (PHP_SAPI === 'cli') {
+    $providedToken = $installToken; // treat as authenticated
+} elseif (!$installToken) {
     err('Installer dinonaktifkan. Set INSTALL_TOKEN di .env untuk mengaktifkan.', 403);
-}
-$providedToken = $_GET['token'] ?? '';
-if (!hash_equals($installToken, $providedToken)) {
-    err('Token install tidak valid.', 403);
+} else {
+    $providedToken = $_GET['token'] ?? '';
+    if (!hash_equals($installToken, $providedToken)) {
+        err('Token install tidak valid.', 403);
+    }
 }
 
 // Prevent re-install if tables already exist and have data

@@ -32,7 +32,8 @@ terpisah; aplikasi PHP/JS tinggal POST pesan ke bridge.
 ```bash
 cd wa-bridge
 npm install
-npm start                 # default port 3210, key: tahfidz-wa-bridge
+export WA_KEY=$(openssl rand -hex 16)   # WAJIB di-set, nilai acak
+npm start                 # default port 3210
 ```
 
 **Scan QR sekali (sesi admin):** buka `http://SERVER:3210/qr` di browser,
@@ -64,26 +65,34 @@ Laporan tahsin/ziyadah/mutqin otomatis terkirim ke `noHpWali` saat setoran disim
    - Buat database, mis. `tahfidzku`
    - Buat user dan berikan hak akses penuh ke database tersebut.
 
-2. **Edit konfigurasi** `api/config.php`:
-   ```php
-   define('DB_HOST', 'localhost');
-   define('DB_NAME', 'tahfidzku');   // ganti dengan nama DB Anda
-   define('DB_USER', 'user_db');     // ganti dengan user DB
-   define('DB_PASS', 'password_db'); // ganti dengan password DB
-   define('APP_SECRET', 'GANTI_DENGAN_STRING_ACAK_PANJANG'); // wajib diubah!
+2. **Edit konfigurasi** `api/.env` (copy dari `api/.env.example`):
+   ```bash
+   DB_DRIVER=mysql
+   DB_HOST=localhost
+   DB_NAME=tahfidzku            # ganti dengan nama DB Anda
+   DB_USER=user_db              # ganti dengan user DB
+   DB_PASS=password_db          # ganti dengan password DB
+   APP_SECRET=<string acak >= 32 karakter>   # WAJIB diisi, contoh: php -r "echo bin2hex(random_bytes(32));"
+   CORS_ALLOW_ORIGIN=https://domain-anda.com
+   INSTALL_TOKEN=<string acak>  # dipakai sekali untuk menjalankan installer
+   ADMIN_PASSWORD=<password admin awal>
    ```
 
 3. **Upload semua file** ke `public_html` (atau subfolder) hosting Anda.
 
 4. **Jalankan installer sekali saja** lewat browser:
    ```
-   https://domain-anda.com/api/install.php
+   https://domain-anda.com/api/install.php?token=ISI_INSTALL_TOKEN
    ```
-   Ini akan membuat tabel dan mengisi data demo.
+   Ini akan membuat tabel dan mengisi data demo, lalu menghapus `install.php` otomatis.
 
-5. **HAPUS `api/install.php`** setelah berhasil (untuk keamanan).
+5. **HAPUS `api/install.php`** jika masih ada (untuk keamanan).
 
 6. **Buka aplikasi**: `https://domain-anda.com/index.html`
+
+> File `api/.htaccess` ikut ter-upload dan akan melindungi `api/.env`, `api/.secret`,
+> dan file database dari akses web, serta meneruskan header `Authorization`
+> (diperlukan untuk login di PHP-FPM/FastCGI).
 
 ---
 
@@ -130,9 +139,10 @@ tahfidzku/
   tabel `users` untuk autentikasi, dan `settings` untuk konfigurasi lembaga.
   Model ini memetakan 1:1 ke struktur data frontend sehingga migrasi dari localStorage mulus.
 - **Autentikasi**: token HMAC-SHA256 (gaya JWT) di header `Authorization: Bearer`.
-  Password di-hash dengan `password_hash()`.
-- **CORS**: saat ini `Access-Control-Allow-Origin: *`. Untuk produksi, batasi ke domain Anda
-  di `api/config.php`.
+  Password di-hash dengan `password_hash()`. Kunci token dari `APP_SECRET` di `.env`
+  (jika kosong, otomatis dibuat dan disimpan di `api/.secret`; folder `api/` harus bisa ditulis).
+- **CORS**: konfigurasi lewat `CORS_ALLOW_ORIGIN` di `api/.env` (daftar origin, pisah koma).
+  Kosongkan untuk same-origin only (rekomendasi).
 - **Backup**: cukup ekspor database MySQL secara berkala.
 
 ---

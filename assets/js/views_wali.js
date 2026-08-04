@@ -146,7 +146,7 @@ const Wali = (() => {
     const kehadiran = db.kehadiran.filter(k => k.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal));
     const counts = { Hadir: 0, Izin: 0, Sakit: 0, Alfa: 0 };
     kehadiran.forEach(k => counts[k.status]++);
-    const rows = kehadiran.slice(0, 30).map(k => `<tr><td>${UI.fmtDate(k.tanggal)}</td><td>${k.sesi ? '<span class="pill sm" style="font-size:11px;padding:2px 8px">' + k.sesi + '</span>' : ''}</td><td><span class="badge ${k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : 'danger'}">${k.status}</span></td></tr>`).join('');
+    const rows = kehadiran.slice(0, 30).map(k => `<tr><td>${UI.fmtDate(k.tanggal)}</td><td>${k.sesi ? '<span class="pill sm" style="font-size:11px;padding:2px 8px">' + UI.esc(k.sesi) + '</span>' : ''}</td><td><span class="badge ${k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : 'danger'}">${UI.esc(k.status)}</span></td></tr>`).join('');
     document.getElementById('view-content').innerHTML = `
       <div class="grid kpi">
         ${Shared.statCard('', counts.Hadir, 'Hadir', '#22C55E')}

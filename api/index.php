@@ -13,13 +13,15 @@ switch ($action) {
     case 'login':
         $b = body();
         $username = $b['username'] ?? '';
-        // Rate limit: 5 attempts per 5 minutes per IP
+        // Rate limit: 5 FAILED attempts per 5 minutes per (IP + username)
         $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-        if (!rateLimit('login_' . $ip, 5, 300)) {
-            err('Terlalu banyak percobaan login. Coba lagi dalam 5 menit.', 429);
+        $rlKey = 'login_fail_' . $ip . '|' . strtolower($username);
+        if (!rateCheck($rlKey, 5, 300)) {
+            err('Terlalu banyak percobaan login gagal. Coba lagi dalam 5 menit.', 429);
         }
         $u = getUserByUsername($username);
         if (!$u || !password_verify($b['password'] ?? '', $u['password'])) {
+            rateLimit($rlKey, 5, 300); // count only failed attempts
             err('Username atau password salah.', 401);
         }
         $pub = publicUser($u);
@@ -62,7 +64,12 @@ switch ($action) {
         $ustadzWritable = ['kehadiran','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
 
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-            // All roles can GET (but bootstrap already filters for wali)
+            if ($u['role'] === 'wali') {
+                err('Forbidden: Wali hanya dapat mengakses data sendiri (via bootstrap).', 403);
+            }
+            if ($u['role'] === 'ustadz' && !in_array($type, $ustadzWritable, true)) {
+                err('Forbidden: Ustadz hanya dapat membaca data pembelajaran.', 403);
+            }
             send(getRecords($type));
         }
 
@@ -132,10 +139,28 @@ switch ($action) {
         $ustadzTypes = ['kehadiran','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
 
         if ($u['role'] === 'wali') {
-            err('Forbidden: Wali tidak dapat menyimpan perubahan.', 403);
+            // Wali is read-only EXCEPT their own wali record (nama/noHp, Profil page).
+            if (isset($b['wali']) && is_array($b['wali']) && $u['refId']) {
+                $w = getRecord('wali', $u['refId']);
+                if ($w) {
+                    foreach ($b['wali'] as $rec) {
+                        if (($rec['id'] ?? null) === $u['refId']) {
+                            foreach (['nama', 'noHp'] as $f) {
+                                if (array_key_exists($f, $rec)) $w[$f] = $rec[$f];
+                            }
+                            putRecord('wali', $u['refId'], $w);
+                        }
+                    }
+                }
+            }
+            send(['ok' => true]);
+            break;
         }
 
         $allowedTypes = ($u['role'] === 'admin') ? $adminTypes : $ustadzTypes;
+        // Ustadz bootstrap filters notifikasi/log to their own, so a full-payload
+        // reconcile would DELETE other users' notifications. Never delete those here.
+        $noReconcile = ($u['role'] === 'ustadz') ? ['notifikasi', 'logAktivitas', 'logWa'] : [];
 
         foreach ($allowedTypes as $t) {
             if (!isset($b[$t]) || !is_array($b[$t])) continue;
@@ -146,6 +171,7 @@ switch ($action) {
                 putRecord($t, $id, $rec);
             }
             // reconcile deletions: remove server rows not in payload
+            if (in_array($t, $noReconcile, true)) continue;
             $stmt = pdo()->prepare('SELECT id FROM records WHERE type = ?');
             $stmt->execute([$t]);
             foreach ($stmt->fetchAll() as $row) {

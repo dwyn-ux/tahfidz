@@ -10,9 +10,9 @@
  *  4. Delete install.php after first run (or keep it protected).
  */
 
-// Temporarily show errors for debugging (comment out in production)
-ini_set('display_errors', '1');
-ini_set('display_startup_errors', '1');
+// Errors go to the server log, never shown to users (display_errors leaks internals).
+ini_set('display_errors', '0');
+ini_set('display_startup_errors', '0');
 error_reporting(E_ALL);
 
 /* ---------------- .env loader (simple, no dependencies) ---------------- */
@@ -53,11 +53,19 @@ $secret = isset($envVars['APP_SECRET']) ? $envVars['APP_SECRET'] : '';
 if (!$secret || strlen($secret) < 32) {
     $secretFile = __DIR__ . '/.secret';
     if (file_exists($secretFile)) {
-        $secret = trim(file_get_contents($secretFile));
+        $secret = trim(@file_get_contents($secretFile));
     }
     if (!$secret || strlen($secret) < 32) {
         $secret = bin2hex(random_bytes(32));
-        file_put_contents($secretFile, $secret);
+        // If we can't persist the secret, it would rotate on every request and
+        // invalidate every token (login appears broken). Fail loudly instead.
+        if (@file_put_contents($secretFile, $secret, LOCK_EX) === false) {
+            error_log('[tahfidzku] Gagal menulis ' . $secretFile . ' — set APP_SECRET di api/.env');
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(500);
+            echo json_encode(['error' => 'Konfigurasi server salah: set APP_SECRET di api/.env (atau buat folder api/ dapat ditulis).'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
     }
 }
 define('APP_SECRET', $secret);
@@ -162,8 +170,19 @@ function uid($prefix = 'id') {
 function nowISO() { return gmdate('Y-m-d\TH:i:s\Z'); }
 
 /* ---------------- Rate limiting (file-based, no dependencies) ----------------
- * Tracks request count per key within a time window.
- * Returns true if allowed, false if rate-limited. */
+ * rateCheck: read-only, returns true if allowed.
+ * rateLimit: increments counter, returns true if still allowed.
+ * Count only FAILED logins so a legit user's successful attempts never lock them out. */
+function rateCheck(string $key, int $max, int $windowSec): bool {
+    $file = sys_get_temp_dir() . '/tahfidzku_rl_' . md5($key);
+    if (file_exists($file)) {
+        $decoded = json_decode(file_get_contents($file), true);
+        if (is_array($decoded) && isset($decoded['reset']) && time() < $decoded['reset']) {
+            return ($decoded['count'] ?? 0) < $max;
+        }
+    }
+    return true;
+}
 function rateLimit(string $key, int $max, int $windowSec): bool {
     $file = sys_get_temp_dir() . '/tahfidzku_rl_' . md5($key);
     $now = time();
@@ -206,6 +225,14 @@ function parseToken($t) {
 }
 function authUser() {
     $h = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+    // Some Apache/PHP-FPM setups don't expose HTTP_AUTHORIZATION.
+    // Fall back to getallheaders() (Apache/CLI) and REDIRECT_HTTP_AUTHORIZATION.
+    if ($h === '' && function_exists('getallheaders')) {
+        foreach (getallheaders() as $k => $v) {
+            if (strcasecmp($k, 'Authorization') === 0) { $h = $v; break; }
+        }
+    }
+    if ($h === '') $h = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
     if (strpos($h, 'Bearer ') === 0) $t = substr($h, 7);
     else $t = null;
     return parseToken($t);

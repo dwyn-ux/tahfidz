@@ -21,7 +21,7 @@ const Shared = (() => {
       <div class="app-shell">
         <div class="scrim" id="scrim"></div>
         <aside class="sidebar" id="sidebar">
-          <div class="brand"><span class="logo">${db.settings.logo ? `<img src="${UI.esc(db.settings.logo)}" style="width:100%;height:100%;object-fit:cover;border-radius:14px">` : ''}</span> Tahfidzku</div>
+          <div class="brand"><span class="logo">${UI.safeUrl(db.settings.logo) ? `<img src="${UI.esc(UI.safeUrl(db.settings.logo))}" style="width:100%;height:100%;object-fit:cover;border-radius:14px">` : ''}</span> Tahfidzku</div>
           ${nav}
           <div class="spacer"></div>
           <div class="user-box">
@@ -192,7 +192,7 @@ const Shared = (() => {
         hapus: (session && (session.role === 'ustadz' || session.role === 'admin')) ? `<button class="clay-btn sm ghost" data-hapus="mutqin" data-id="${m.id}" style="padding:2px 8px;font-size:11px;color:var(--danger)">Hapus</button>` : ''
       });
     });
-    db.kehadiran.filter(k => k.santriId === santriId).forEach(k => items.push({ t: k.tanggal, html: `Kehadiran ${k.sesi || ''}: <span class="badge ${k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : 'danger'}">${k.status}</span>`, hapus: '' }));
+    db.kehadiran.filter(k => k.santriId === santriId).forEach(k => items.push({ t: k.tanggal, html: `Kehadiran ${UI.esc(k.sesi || '')}: <span class="badge ${k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : 'danger'}">${UI.esc(k.status)}</span>`, hapus: '' }));
     db.catatan.filter(c => c.santriId === santriId).forEach(c => items.push({ t: c.tanggal, html: `<b>Catatan Ustadz:</b> ${UI.esc(c.isi)}`, hapus: '' }));
 
     items.sort((a, b) => b.t.localeCompare(a.t));
@@ -280,7 +280,7 @@ const Shared = (() => {
                 let badge = k ? (k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : 'danger') : 'gray';
                 let info = s ? (s.tipe || '') : '-';
                 cols += `<td style="padding:4px 6px">
-                  <span class="badge ${badge}" style="font-size:10px;padding:1px 5px">${status}</span>
+                  <span class="badge ${badge}" style="font-size:10px;padding:1px 5px">${UI.esc(status)}</span>
                   ${info !== '-' ? `<div class="muted" style="font-size:10px;line-height:1.2">${info}</div>` : ''}
                 </td>`;
               });
