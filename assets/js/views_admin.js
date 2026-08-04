@@ -859,7 +859,7 @@ const Admin = (() => {
         </div>
         <div class="row">
           <div style="flex:1">${UI.field('URL Bridge (contoh: https://wa.example.com:3210)', `<input class="clay-input" id="s-wa-url" value="${UI.esc(s.waBridgeUrl)}" placeholder="https://...:3210">`)}</div>
-          <div style="flex:1">${UI.field('Key Bridge (X-WA-Key)', `<input class="clay-input" id="s-wa-key" value="${UI.esc(s.waBridgeKey)}" placeholder="tahfidz-wa-bridge">`)}</div>
+          <div style="flex:1">${UI.field('Key Bridge (X-WA-Key)', `<input class="clay-input" id="s-wa-key" value="${UI.esc(s.waBridgeKey)}" placeholder="nilai acak dari WA_KEY di server bridge">`)}</div>
         </div>
         <div class="row" style="margin-top:10px">
           <label style="flex:1;display:flex;align-items:center;gap:8px;margin-top:12px">
@@ -965,15 +965,26 @@ const Admin = (() => {
     function waFetch(path, opts) {
       return fetch(waUrlEl.value.trim().replace(/\/$/, '') + path, Object.assign({ headers: { 'X-WA-Key': waKeyEl.value.trim() || 'tahfidz-wa-bridge' } }, opts || {}));
     }
+    async function waFetchJson(path, opts) {
+      const r = await waFetch(path, opts);
+      const text = await r.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+      return { ok: r.ok, status: r.status, data, raw: text };
+    }
     document.getElementById('btn-wa-status').onclick = async () => {
       waStatusEl.innerHTML = '<span class="muted">Memeriksa...</span>';
       if (!waUrlEl.value.trim()) { waStatusEl.innerHTML = '<span style="color:var(--danger)">URL Bridge kosong.</span>'; return; }
       try {
-        const r = await waFetch('/status');
-        const d = await r.json();
-        waStatusEl.innerHTML = d.connected
-          ? '<span style="color:var(--success)">✓ Terhubung' + (d.phone ? ' (' + UI.esc(d.phone) + ')' : '') + '</span>'
-          : '<span style="color:var(--warn)">Belum terhubung' + (d.qr ? ' — ada QR menunggu scan' : '') + '.</span> ' +
+        const { ok, status, data, raw } = await waFetchJson('/status');
+        if (!ok || !data) {
+          const hint = /<!DOCTYPE|html/i.test(raw) ? ' — URL salah atau bridge tidak jalan (server balas halaman web, bukan JSON)' : (raw ? ' — ' + raw.slice(0, 80) : '');
+          waStatusEl.innerHTML = '<span style="color:var(--danger)">Tidak bisa akses bridge (HTTP ' + status + ')' + UI.esc(hint) + '.</span>';
+          return;
+        }
+        waStatusEl.innerHTML = data.connected
+          ? '<span style="color:var(--success)">✓ Terhubung' + (data.phone ? ' (' + UI.esc(data.phone) + ')' : '') + '</span>'
+          : '<span style="color:var(--warn)">Belum terhubung' + (data.qr ? ' — ada QR menunggu scan' : '') + '.</span> ' +
             '<a href="' + UI.esc(UI.safeUrl(waUrlEl.value.trim().replace(/\/$/, ''))) + '/qr" target="_blank" style="color:var(--primary)">Buka QR</a>';
       } catch (e) {
         waStatusEl.innerHTML = '<span style="color:var(--danger)">Tidak bisa akses bridge: ' + UI.esc(e.message) + '</span>';
@@ -985,10 +996,10 @@ const Admin = (() => {
       waStatusEl.innerHTML = '<span class="muted">Mengirim...</span>';
       const msg = '🔔 Tes WhatsApp Bridge Tahfidzku. Pesan laporan capaian akan terkirim otomatis ke wali.';
       try {
-        const r = await waFetch('/send', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WA-Key': waKeyEl.value.trim() || 'tahfidz-wa-bridge' }, body: JSON.stringify({ to: nohp, message: msg }) });
-        const d = await r.json();
-        Store.waLog({ to: nohp, status: r.ok ? 'queued' : 'error', detail: r.ok ? (d.error || 'Pesan masuk antrian.') : (d.error || ('HTTP ' + r.status)), message: msg });
-        waStatusEl.innerHTML = r.ok ? '<span style="color:var(--success)">✓ ' + (d.error ? UI.esc(d.error) : 'Pesan masuk antrian.') + '</span>' : '<span style="color:var(--danger)">' + UI.esc(d.error || 'Gagal') + '</span>';
+        const { ok, status, data, raw } = await waFetchJson('/send', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WA-Key': waKeyEl.value.trim() || 'tahfidz-wa-bridge' }, body: JSON.stringify({ to: nohp, message: msg }) });
+        const detail = ok ? ((data && data.error) || 'Pesan masuk antrian.') : ((data && data.error) || ('HTTP ' + status + (/<!DOCTYPE|html/i.test(raw) ? ' — URL salah / bridge tidak jalan' : '')));
+        Store.waLog({ to: nohp, status: ok ? 'queued' : 'error', detail, message: msg });
+        waStatusEl.innerHTML = ok ? '<span style="color:var(--success)">✓ ' + UI.esc(detail) + '</span>' : '<span style="color:var(--danger)">' + UI.esc(detail) + '</span>';
       } catch (e) {
         Store.waLog({ to: nohp, status: 'error', detail: 'Fetch gagal: ' + (e && e.message || e), message: msg });
         waStatusEl.innerHTML = '<span style="color:var(--danger)">Gagal: ' + UI.esc(e.message) + '</span>';
