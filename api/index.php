@@ -7,6 +7,7 @@ require_once __DIR__ . '/config.php';
 
 $action = $_GET['action'] ?? '';
 
+try {
 switch ($action) {
 
     /* ---------------- AUTH ---------------- */
@@ -222,6 +223,11 @@ switch ($action) {
 
     default:
         err('Unknown action', 404);
+}
+} catch (Throwable $e) {
+    // Log the real error (web-inaccessible api/error.log) but never leak it to clients.
+    error_log('[tahfidzku] ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+    err('Terjadi kesalahan server. Cek api/error.log.', 500);
 }
 
 function getUserById($id) {

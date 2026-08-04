@@ -13,6 +13,8 @@
 // Errors go to the server log, never shown to users (display_errors leaks internals).
 ini_set('display_errors', '0');
 ini_set('display_startup_errors', '0');
+ini_set('log_errors', '1');
+ini_set('error_log', __DIR__ . '/error.log');
 error_reporting(E_ALL);
 
 /* ---------------- .env loader (simple, no dependencies) ---------------- */
