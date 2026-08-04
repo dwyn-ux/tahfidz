@@ -43,11 +43,15 @@ const Store = (() => {
       headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined
     });
+    const text = await res.text();
     let data = null;
-    try { data = await res.json(); } catch (e) { data = null; }
+    try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
     if (!res.ok) {
-      const msg = (data && data.error) ? data.error : ('HTTP ' + res.status);
+      const msg = (data && data.error) ? data.error : ('HTTP ' + res.status + (text ? ' — ' + text.slice(0, 150) : ''));
       throw new Error(msg);
+    }
+    if (!data) {
+      throw new Error('Respons server tidak valid (bukan JSON): ' + (text.slice(0, 150) || '(kosong)'));
     }
     return data;
   }

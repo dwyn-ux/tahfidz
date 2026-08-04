@@ -1,12 +1,31 @@
 # Tahfidzku — Apache hardening (shared hosting)
 
-# Block web access to dotfiles (.env, .secret) and SQLite DB files
-<FilesMatch "^\.">
-    Require all denied
-</FilesMatch>
-<FilesMatch "\.(sqlite|sqlite3|db|log)$">
-    Require all denied
-</FilesMatch>
+# Block web access to dotfiles (.env, .secret) and SQLite/DB files.
+# IfModule guards keep this from 500-ing on Apache 2.2 or hosts with AllowOverride limits.
+
+# Apache 2.4+
+<IfModule mod_authz_core.c>
+    <FilesMatch "^\.">
+        Require all denied
+    </FilesMatch>
+    <FilesMatch "\.(sqlite|sqlite3|db|log)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+# Apache 2.2 fallback
+<IfModule mod_access_compat.c>
+    <FilesMatch "^\.">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+    <FilesMatch "\.(sqlite|sqlite3|db|log)$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
 
 # Forward Authorization header so PHP-FPM/FastCGI sees it (Bearer tokens)
-SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+<IfModule mod_env.c>
+    SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+</IfModule>
