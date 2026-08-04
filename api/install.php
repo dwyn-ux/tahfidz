@@ -12,7 +12,7 @@
 require_once __DIR__ . '/config.php';
 
 /* ---------------- Install protection ---------------- */
-$installToken = $ENV['INSTALL_TOKEN'] ?? '';
+$installToken = isset($envVars['INSTALL_TOKEN']) ? $envVars['INSTALL_TOKEN'] : '';
 if (!$installToken) {
     err('Installer dinonaktifkan. Set INSTALL_TOKEN di .env untuk mengaktifkan.', 403);
 }
@@ -108,7 +108,7 @@ try {
 
     // users (password hashed) — generate random admin password for security
     $def = defaultSettings()['defaultPasswordFormat'];
-    $adminPass = $ENV['ADMIN_PASSWORD'] ?? 'admin123';
+$adminPass = isset($envVars['ADMIN_PASSWORD']) ? $envVars['ADMIN_PASSWORD'] : 'admin123';
     $users = [
         ['id' => uid('usr'), 'username' => 'admin', 'password' => password_hash($adminPass, PASSWORD_DEFAULT), 'role' => 'admin', 'refId' => null],
         ['id' => uid('usr'), 'username' => 'ustadz1', 'password' => password_hash($def, PASSWORD_DEFAULT), 'role' => 'ustadz', 'refId' => $u1id],

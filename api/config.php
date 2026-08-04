@@ -10,38 +10,46 @@
  *  4. Delete install.php after first run (or keep it protected).
  */
 
+// Temporarily show errors for debugging (comment out in production)
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+error_reporting(E_ALL);
+
 /* ---------------- .env loader (simple, no dependencies) ---------------- */
-function loadEnv(): array {
+function loadEnvArr(): array {
     $env = [];
     $envFile = __DIR__ . '/.env';
     if (file_exists($envFile)) {
-        foreach (file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if ($lines === false) return $env;
+        foreach ($lines as $line) {
             $line = trim($line);
             if ($line === '' || $line[0] === '#') continue;
             if (strpos($line, '=') === false) continue;
-            [$k, $v] = explode('=', $line, 2);
-            $env[trim($k)] = trim($v);
+            $parts = explode('=', $line, 2);
+            if (count($parts) !== 2) continue;
+            $env[trim($parts[0])] = trim($parts[1]);
         }
     }
     return $env;
 }
-$ENV = loadEnv();
+$envVars = loadEnvArr();
 
-define('DB_HOST', $ENV['DB_HOST'] ?? 'localhost');
-define('DB_NAME', $ENV['DB_NAME'] ?? 'tahfidzku');
-define('DB_USER', $ENV['DB_USER'] ?? 'root');
-define('DB_PASS', $ENV['DB_PASS'] ?? '');
-define('DB_CHARSET', $ENV['DB_CHARSET'] ?? 'utf8mb4');
+define('DB_HOST', isset($envVars['DB_HOST']) ? $envVars['DB_HOST'] : 'localhost');
+define('DB_NAME', isset($envVars['DB_NAME']) ? $envVars['DB_NAME'] : 'tahfidzku');
+define('DB_USER', isset($envVars['DB_USER']) ? $envVars['DB_USER'] : 'root');
+define('DB_PASS', isset($envVars['DB_PASS']) ? $envVars['DB_PASS'] : '');
+define('DB_CHARSET', isset($envVars['DB_CHARSET']) ? $envVars['DB_CHARSET'] : 'utf8mb4');
 
 // DB_DRIVER: 'mysql' (shared hosting) or 'sqlite' (local dev, no MySQL needed)
-define('DB_DRIVER', $ENV['DB_DRIVER'] ?? 'sqlite');
+define('DB_DRIVER', isset($envVars['DB_DRIVER']) ? $envVars['DB_DRIVER'] : 'sqlite');
 // SQLite file (used only when DB_DRIVER === 'sqlite')
 define('DB_SQLITE_PATH', __DIR__ . '/tahfidzku.sqlite');
 
 /* ---------------- APP_SECRET (HMAC signing key) ----------------
  * Loaded from .env. If not set, a random secret is generated and
  * persisted to .secret file. NEVER use the old hardcoded default. */
-$secret = $ENV['APP_SECRET'] ?? '';
+$secret = isset($envVars['APP_SECRET']) ? $envVars['APP_SECRET'] : '';
 if (!$secret || strlen($secret) < 32) {
     $secretFile = __DIR__ . '/.secret';
     if (file_exists($secretFile)) {
@@ -57,7 +65,7 @@ define('APP_SECRET', $secret);
 /* ---------------- CORS (configurable, restrict in production) ----------------
  * Set CORS_ALLOW_ORIGIN in .env to your domain, e.g. https://tahfidzku.com
  * Use comma-separated for multiple origins. Default: same-origin only. */
-$allowedOrigins = array_filter(array_map('trim', explode(',', $ENV['CORS_ALLOW_ORIGIN'] ?? '')));
+$allowedOrigins = array_filter(array_map('trim', explode(',', isset($envVars['CORS_ALLOW_ORIGIN']) ? $envVars['CORS_ALLOW_ORIGIN'] : '')));
 $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if (!empty($allowedOrigins) && in_array($origin, $allowedOrigins, true)) {
     header('Access-Control-Allow-Origin: ' . $origin);
