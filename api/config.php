@@ -30,7 +30,13 @@ function loadEnvArr(): array {
             if (strpos($line, '=') === false) continue;
             $parts = explode('=', $line, 2);
             if (count($parts) !== 2) continue;
-            $env[trim($parts[0])] = trim($parts[1]);
+            $value = trim($parts[1]);
+            // Strip surrounding quotes (allows DB_PASS="x!y#z" style values)
+            $vlen = strlen($value);
+            if ($vlen >= 2 && (($value[0] === '"' && $value[$vlen - 1] === '"') || ($value[0] === "'" && $value[$vlen - 1] === "'"))) {
+                $value = substr($value, 1, -1);
+            }
+            $env[trim($parts[0])] = $value;
         }
     }
     return $env;
