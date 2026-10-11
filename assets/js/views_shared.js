@@ -320,10 +320,11 @@ const Shared = (() => {
       const hadirSubuh = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Subuh').length;
       const hadirMaghrib = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Maghrib').length;
       const hadirIsya = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Isya').length;
-      const totalHadir = hadirSubuh + hadirMaghrib + hadirIsya;
+      const hadirTalim = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Ta’lim Malam').length;
+      const totalHadir = hadirSubuh + hadirMaghrib + hadirIsya + hadirTalim;
       const totalK = kehadiran.length;
       const pct = totalK ? Math.round((totalHadir / totalK) * 100) : 0;
-      return { no: i + 1, s, hafalan: h, nilai: Store.avgNilai(s.id), hadirSubuh, hadirMaghrib, hadirIsya, hadir: totalHadir, totalK, pct };
+      return { no: i + 1, s, hafalan: h, nilai: Store.avgNilai(s.id), hadirSubuh, hadirMaghrib, hadirIsya, hadirTalim, hadir: totalHadir, totalK, pct };
     });
   }
 
@@ -341,7 +342,7 @@ const Shared = (() => {
       <td class="center">${r.hafalan ? r.hafalan.pages + ' hlm' : '-'}</td>
       <td class="center">${r.hafalan ? (r.hafalan.juzRange === 1 ? 'Juz ' + r.hafalan.juzStart : r.hafalan.juzStart + '–' + r.hafalan.juzEnd) : '-'}</td>
       <td class="center">${r.nilai ? r.nilai : '-'}</td>
-      <td class="center" style="font-size:12px">${r.hadirSubuh} ${r.hadirMaghrib} ${r.hadirIsya}</td>
+      <td class="center" style="font-size:12px">${r.hadirSubuh} ${r.hadirMaghrib} ${r.hadirIsya} ${r.hadirTalim}</td>
       <td class="center">${r.hadir}/${r.totalK} (${r.pct}%)</td>
       <td><span class="badge ${r.s.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(r.s.status)}</span></td>
     </tr>`).join('');
@@ -349,7 +350,7 @@ const Shared = (() => {
       <div class="section-title"> Laporan Santri — ${UI.esc(bulanLabel(bulan))}</div>
       <div class="table-wrap">
         <table class="clay-table" id="laporan-table">
-          <thead><tr><th class="center">No</th><th>Santri</th><th>NIS</th><th>Halaqah</th><th>Level</th><th class="center">JK</th><th class="center">Total Hafalan</th><th class="center">Juz</th><th class="center">Rata² Nilai</th><th class="center">Per Sesi</th><th class="center">Kehadiran (${UI.esc(bulanLabel(bulan))})</th><th>Status</th></tr></thead>
+          <thead><tr><th class="center">No</th><th>Santri</th><th>NIS</th><th>Halaqah</th><th>Level</th><th class="center">JK</th><th class="center">Total Hafalan</th><th class="center">Juz</th><th class="center">Rata² Nilai</th><th class="center">S/M/I/T</th><th class="center">Kehadiran (${UI.esc(bulanLabel(bulan))})</th><th>Status</th></tr></thead>
           <tbody>${body || `<tr><td colspan="12"><div class="empty">Tidak ada data.</div></td></tr>`}</tbody>
         </table>
       </div>
@@ -399,6 +400,7 @@ const Shared = (() => {
       <td class="center">${r.hadirSubuh}</td>
       <td class="center">${r.hadirMaghrib}</td>
       <td class="center">${r.hadirIsya}</td>
+      <td class="center">${r.hadirTalim}</td>
       <td class="center">${r.hadir}</td>
       <td class="center">${r.totalK}</td>
       <td class="center">${r.pct}%</td>
@@ -421,7 +423,7 @@ const Shared = (() => {
     <thead><tr>
       <th class="center">No</th><th>Nama Santri</th><th>NIS</th><th>Halaqah</th><th>Level</th><th class="center">JK</th>
       <th class="center">Total Hafalan (hlm)</th><th class="center">Juz</th><th class="center">Rata² Nilai</th>
-      <th class="center">Subuh</th><th class="center">Maghrib</th><th class="center">Isya</th>
+      <th class="center">Subuh</th><th class="center">Maghrib</th><th class="center">Isya</th><th class="center">Ta’lim Malam</th>
       <th class="center">Total Hadir</th><th class="center">Total Kehadiran</th><th class="center">%</th><th>Status</th>
     </tr></thead>
     <tbody>${rowsHtml}</tbody>

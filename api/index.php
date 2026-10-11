@@ -62,7 +62,7 @@ switch ($action) {
         if (!$type) err('type required', 400);
 
         // Define allowed record types per role
-        $ustadzWritable = ['kehadiran','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
+        $ustadzWritable = ['kehadiran','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
 
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             if ($u['role'] === 'wali') {
@@ -136,8 +136,8 @@ switch ($action) {
         $b = body();
 
         // Define allowed types per role
-        $adminTypes = ['santri','wali','ustadz','halaqah','kehadiran','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
-        $ustadzTypes = ['kehadiran','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
+        $adminTypes = ['santri','wali','ustadz','halaqah','kehadiran','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
+        $ustadzTypes = ['kehadiran','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
 
         if ($u['role'] === 'wali') {
             // Wali is read-only EXCEPT their own wali record (nama/noHp, Profil page).
@@ -217,6 +217,11 @@ switch ($action) {
                     pdo()->prepare('DELETE FROM users WHERE id = ?')->execute([$eid]);
                 }
             }
+        }
+        // Attendance notifications are generated server-side so ustadz do not
+        // need access to guardian account data, and corrections stay deduplicated.
+        if (isset($b['kehadiran']) && is_array($b['kehadiran'])) {
+            syncAttendanceWaliNotifications();
         }
         send(['ok' => true]);
         break;

@@ -24,6 +24,45 @@ const Admin = (() => {
     return base + i;
   }
 
+  // Satu penugasan ustadz harus punya satu sumber kebenaran. Data lama hanya
+  // menyimpan nama, sedangkan data baru juga menyimpan ID agar aman saat nama
+  // ustadz diubah.
+  function assignUstadzToHalaqah(db, ustadzId, halaqahName) {
+    const ustadz = db.ustadz.find(u => u.id === ustadzId);
+    if (!ustadz) return;
+    db.halaqah.forEach(h => {
+      if (h.ustadzId === ustadzId || h.ustadz === ustadz.nama) {
+        h.ustadz = '';
+        h.ustadzId = '';
+      }
+    });
+    ustadz.halaqah = '';
+    if (!halaqahName) return;
+    const halaqah = db.halaqah.find(h => h.nama === halaqahName);
+    if (!halaqah) return;
+    const previous = db.ustadz.find(u => u.id !== ustadzId && (u.id === halaqah.ustadzId || u.nama === halaqah.ustadz));
+    if (previous) previous.halaqah = '';
+    halaqah.ustadz = ustadz.nama;
+    halaqah.ustadzId = ustadz.id;
+    ustadz.halaqah = halaqah.nama;
+  }
+
+  function syncHalaqahUstadz(db, halaqah, ustadzId) {
+    const selected = db.ustadz.find(u => u.id === ustadzId);
+    const old = db.ustadz.find(u => u.id === halaqah.ustadzId || u.nama === halaqah.ustadz);
+    if (old && (!selected || old.id !== selected.id)) old.halaqah = '';
+    if (!selected) { halaqah.ustadz = ''; halaqah.ustadzId = ''; return; }
+    db.halaqah.forEach(h => {
+      if (h.id !== halaqah.id && (h.ustadzId === selected.id || h.ustadz === selected.nama)) {
+        h.ustadz = '';
+        h.ustadzId = '';
+      }
+    });
+    halaqah.ustadz = selected.nama;
+    halaqah.ustadzId = selected.id;
+    selected.halaqah = halaqah.nama;
+  }
+
   function bindImportFile(modal, headers) {
     const input = modal.querySelector('#imp-file');
     const textarea = modal.querySelector('#imp-data');
@@ -61,6 +100,7 @@ const Admin = (() => {
       { view: 'admin_halaqah', label: 'Halaqah', active: active === 'admin_halaqah' },
       { view: 'admin_master', label: 'Master Surat', active: active === 'admin_master' },
       { view: 'ustadz_absensi', label: 'Absensi', active: active === 'ustadz_absensi' },
+      { view: 'ustadz_talim', label: 'Ta’lim Malam', active: active === 'ustadz_talim' },
       { view: 'ustadz_pembelajaran', label: 'Pembelajaran', active: active === 'ustadz_pembelajaran' },
       { view: 'admin_riwayat', label: 'Riwayat', active: active === 'admin_riwayat' },
       { view: 'admin_laporan', label: 'Laporan', active: active === 'admin_laporan' },
@@ -74,6 +114,7 @@ const Admin = (() => {
     return [
       { view: 'ustadz_dashboard', label: 'Dashboard', active: active === 'ustadz_dashboard' },
       { view: 'ustadz_absensi', label: 'Absensi', active: active === 'ustadz_absensi' },
+      { view: 'ustadz_talim', label: 'Ta’lim Malam', active: active === 'ustadz_talim' },
       { view: 'ustadz_pembelajaran', label: 'Pembelajaran', active: active === 'ustadz_pembelajaran' },
       { view: 'ustadz_riwayat', label: 'Riwayat', active: active === 'ustadz_riwayat' },
       { view: 'ustadz_laporan', label: 'Laporan', active: active === 'ustadz_laporan' },
@@ -93,6 +134,7 @@ const Admin = (() => {
     const hadirSubuh = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Subuh' && k.status === 'Hadir').length;
     const hadirMaghrib = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Maghrib' && k.status === 'Hadir').length;
     const hadirIsya = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Isya' && k.status === 'Hadir').length;
+    const hadirTalim = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Ta’lim Malam' && k.status === 'Hadir').length;
 
     const kpi = `
       <div class="grid kpi">
@@ -107,6 +149,7 @@ const Admin = (() => {
         ${Shared.statCard(Shared.ICONS.sun, hadirSubuh, 'Kehadiran Subuh', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.sunset, hadirMaghrib, 'Kehadiran Maghrib', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.moon, hadirIsya, 'Kehadiran Isya', '#22C55E')}
+        ${Shared.statCard(Shared.ICONS.book, hadirTalim, 'Kehadiran Ta’lim Malam', '#22C55E')}
       </div>`;
 
     // progress hafalan per halaqah (avg pages)
@@ -494,9 +537,16 @@ const Admin = (() => {
     document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
       UI.confirmDialog('Hapus Ustadz', 'Yakin hapus ustadz ini?', () => {
         const db = Store.get();
+        const deleted = db.ustadz.find(x => x.id === b.dataset.del);
+        db.halaqah.forEach(h => {
+          if (h.ustadzId === b.dataset.del || (deleted && h.ustadz === deleted.nama)) {
+            h.ustadz = '';
+            h.ustadzId = '';
+          }
+        });
         db.ustadz = db.ustadz.filter(x => x.id !== b.dataset.del);
         db.users = db.users.filter(u => u.refId !== b.dataset.del);
-        Store.save(); Store.log('Hapus ustadz'); UI.toast('Ustadz dihapus'); ustadz();
+        Store.log('Hapus ustadz'); Store.save(); UI.toast('Ustadz dihapus'); ustadz();
       });
     });
   }
@@ -522,30 +572,47 @@ const Admin = (() => {
       title: id ? 'Edit Ustadz' : 'Tambah Ustadz', bodyHTML: body,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
-        { label: 'Simpan', cls: 'primary', onClick: (m, c) => {
+        { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
           const db = Store.get();
           const data = { nama: m.querySelector('#f-nama').value.trim(), noHp: m.querySelector('#f-hp').value.trim(), email: m.querySelector('#f-email').value.trim(), status: m.querySelector('#f-status').value, halaqah: m.querySelector('#f-halaqah').value };
           if (!data.nama) { UI.toast('Nama wajib', 'error'); return; }
           
           let uname = m.querySelector('#f-uname').value.trim();
           if (!uname) uname = (data.noHp && data.noHp.replace(/\D/g, '')) || data.nama.toLowerCase().replace(/\s/g, '');
+          const password = m.querySelector('#f-pass').value.trim();
+          const account = id ? db.users.find(x => x.role === 'ustadz' && x.refId === id) : null;
+          if (db.users.some(x => x.id !== (account && account.id) && x.username.toLowerCase() === uname.toLowerCase())) {
+            UI.toast('Username sudah digunakan akun lain', 'error'); return;
+          }
+          if (password && password.length < 6) { UI.toast('Password minimal 6 karakter', 'error'); return; }
           
           if (id) { 
+            const oldName = Store.findUstadz(id).nama;
             Object.assign(Store.findUstadz(id), data);
-            const user = db.users.find(x => x.role === 'ustadz' && x.refId === id);
+            db.halaqah.forEach(h => {
+              if (h.ustadzId === id || h.ustadz === oldName) {
+                h.ustadz = data.nama;
+                h.ustadzId = id;
+              }
+            });
+            const user = account;
             if (user) {
               user.username = uname;
+              if (password) user.password = password;
             } else {
-              db.users.push({ id: Store.uid('usr'), username: uname, password: m.querySelector('#f-pass').value.trim() || '12345678', role: 'ustadz', refId: id });
+              db.users.push({ id: Store.uid('usr'), username: uname, password: password || '12345678', role: 'ustadz', refId: id });
             }
+            assignUstadzToHalaqah(db, id, data.halaqah);
           }
           else {
             const nid = Store.uid('u'); const nu = { id: nid, ...data };
             db.ustadz.push(nu);
-            const pass = m.querySelector('#f-pass').value.trim() || '12345678';
+            const pass = password || '12345678';
             db.users.push({ id: Store.uid('usr'), username: uname, password: pass, role: 'ustadz', refId: nid });
+            assignUstadzToHalaqah(db, nid, data.halaqah);
           }
-          Store.save().then(() => { Store.log(id ? 'Edit ustadz' : 'Tambah ustadz'); }); c(); UI.toast('Tersimpan', 'success'); ustadz();
+          Store.log(id ? 'Edit ustadz' : 'Tambah ustadz');
+          await Store.save(); c(); UI.toast('Tersimpan', 'success'); ustadz();
         } }
       ]
     });
@@ -601,7 +668,8 @@ const Admin = (() => {
       </div>
       <div class="muted" style="font-size:13px;margin-top:8px">
         Ustadz: ${UI.esc(h.ustadz)} · Level: ${UI.esc(h.level)}<br>
-        ${h.jumlahSantri} santri · ${UI.esc(h.hari)} · ${UI.esc(h.jam)} · ${UI.esc(h.ruangan)}
+        ${h.jumlahSantri} santri · ${UI.esc(h.hari)} · ${UI.esc(h.jam)} · ${UI.esc(h.ruangan)}<br>
+        Setoran Bacaan: <b>${h.setoranBacaan ? 'Aktif' : 'Nonaktif'}</b>
       </div>
     </div>`).join('');
     document.getElementById('view-content').innerHTML = `
@@ -624,25 +692,41 @@ const Admin = (() => {
     const body = `
       ${UI.field('Nama Halaqah', `<input class="clay-input" id="f-nama" value="${h ? UI.esc(h.nama) : ''}">`)}
       <div class="row">
-        <div style="flex:1">${UI.field('Ustadz', `<select class="clay-select" id="f-ustadz"><option value="">-</option>${UI.optionsFromList(db.ustadz.map(u => ({ v: u.nama, l: u.nama })), 'v', 'l', h ? h.ustadz : '')}</select>`)}</div>
+        <div style="flex:1">${UI.field('Ustadz', `<select class="clay-select" id="f-ustadz"><option value="">-</option>${UI.optionsFromList(db.ustadz.map(u => ({ v: u.id, l: u.nama })), 'v', 'l', h ? (h.ustadzId || (db.ustadz.find(u => u.nama === h.ustadz) || {}).id || '') : '')}</select>`)}</div>
         <div style="flex:1">${UI.field('Level', `<select class="clay-select" id="f-level">${UI.optionsFromList(db.levelTahfidz.map(l => ({ v: l, l })), 'v', 'l', h ? h.level : 'Ziyadah')}</select>`)}</div>
       </div>
       <div class="row">
         <div style="flex:1">${UI.field('Hari', `<input class="clay-input" id="f-hari" value="${h ? UI.esc(h.hari) : 'Senin-Rabu-Jumat'}">`)}</div>
         <div style="flex:1">${UI.field('Jam', `<input class="clay-input" id="f-jam" value="${h ? UI.esc(h.jam) : '07:00-08:30'}">`)}</div>
       </div>
-      ${UI.field('Ruangan', `<input class="clay-input" id="f-ruang" value="${h ? UI.esc(h.ruangan) : ''}">`)}`;
+      ${UI.field('Ruangan', `<input class="clay-input" id="f-ruang" value="${h ? UI.esc(h.ruangan) : ''}">`)}
+      ${UI.field('Fitur Setoran', `<label class="row" style="gap:8px;cursor:pointer"><input id="f-setoran-bacaan" type="checkbox" ${h && h.setoranBacaan ? 'checked' : ''}> <span>Aktifkan tahap Setoran Bacaan untuk halaqah ini</span></label><div class="muted" style="font-size:12px;margin-top:4px">Jika nonaktif, ustadz langsung menginput setoran hafalan.</div>`)}`;
     UI.openModal({
       title: id ? 'Edit Halaqah' : 'Tambah Halaqah', bodyHTML: body,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
-        { label: 'Simpan', cls: 'primary', onClick: (m, c) => {
+        { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
           const db = Store.get();
-          const data = { nama: m.querySelector('#f-nama').value.trim(), ustadz: m.querySelector('#f-ustadz').value, level: m.querySelector('#f-level').value, hari: m.querySelector('#f-hari').value.trim(), jam: m.querySelector('#f-jam').value.trim(), ruangan: m.querySelector('#f-ruang').value.trim() };
+          const data = { nama: m.querySelector('#f-nama').value.trim(), level: m.querySelector('#f-level').value, hari: m.querySelector('#f-hari').value.trim(), jam: m.querySelector('#f-jam').value.trim(), ruangan: m.querySelector('#f-ruang').value.trim(), setoranBacaan: m.querySelector('#f-setoran-bacaan').checked };
+          const ustadzId = m.querySelector('#f-ustadz').value;
           if (!data.nama) { UI.toast('Nama wajib', 'error'); return; }
-          if (id) { Object.assign(db.halaqah.find(x => x.id === id), data); }
-          else { db.halaqah.push({ id: Store.uid('h'), jumlahSantri: 0, ...data }); }
-          Store.recalcHalaqah(); Store.save(); Store.log('Simpan halaqah'); c(); UI.toast('Tersimpan', 'success'); halaqah();
+          if (db.halaqah.some(x => x.id !== id && x.nama.toLowerCase() === data.nama.toLowerCase())) { UI.toast('Nama halaqah sudah digunakan', 'error'); return; }
+          let target;
+          if (id) {
+            target = db.halaqah.find(x => x.id === id);
+            const oldName = target.nama;
+            Object.assign(target, data);
+            if (oldName !== target.nama) {
+              db.santri.forEach(s => { if (s.halaqah === oldName) s.halaqah = target.nama; });
+              db.ustadz.forEach(u => { if (u.halaqah === oldName) u.halaqah = target.nama; });
+              (db.jurnalTalim || []).forEach(j => { if (j.halaqah === oldName) j.halaqah = target.nama; });
+            }
+          } else {
+            target = { id: Store.uid('h'), jumlahSantri: 0, ...data };
+            db.halaqah.push(target);
+          }
+          syncHalaqahUstadz(db, target, ustadzId);
+          Store.recalcHalaqah(); Store.log('Simpan halaqah'); await Store.save(); c(); UI.toast('Tersimpan', 'success'); halaqah();
         } }
       ]
     });
@@ -850,6 +934,19 @@ const Admin = (() => {
         <div class="row" style="margin-top:10px">
           <div style="flex:1">${UI.field('Maks Notif per Hari', `<input class="clay-input" id="s-notif-max" type="number" min="1" max="20" value="${s.notifMaxPerDay || 3}">`)}</div>
         </div>
+        <div class="row" style="margin-top:10px;align-items:flex-end">
+          <label style="flex:1;display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <button class="clay-toggle ${s.notifAbsensiWali !== false ? 'on' : ''}" id="s-notif-absensi-wali"></button>
+            <span id="s-notif-absensi-wali-label" style="font-size:13px">${s.notifAbsensiWali !== false ? 'Rekap absensi ke Wali: Aktif' : 'Rekap absensi ke Wali: Nonaktif'}</span>
+          </label>
+          <div style="flex:1">${UI.field('Periode Rekap Absensi Wali', `<select class="clay-select" id="s-notif-absensi-periode">
+            <option value="harian" ${(s.notifAbsensiPeriode || 'harian') === 'harian' ? 'selected' : ''}>Harian</option>
+            <option value="halaqah" ${s.notifAbsensiPeriode === 'halaqah' ? 'selected' : ''}>Tiap Halaqah</option>
+            <option value="mingguan" ${s.notifAbsensiPeriode === 'mingguan' ? 'selected' : ''}>Mingguan</option>
+            <option value="bulanan" ${s.notifAbsensiPeriode === 'bulanan' ? 'selected' : ''}>Bulanan</option>
+          </select>`)}</div>
+        </div>
+        <div class="muted" style="font-size:12px">Satu rekap diperbarui saat absensi dikoreksi, sehingga wali tidak menerima notifikasi ganda.</div>
       </div>
       <div class="clay-card mb">
         <div class="section-title"> WhatsApp Otomatis (ke Wali)</div>
@@ -897,7 +994,7 @@ const Admin = (() => {
       document.getElementById('s-setoran-label').textContent = on ? 'Berkali-kali per hari' : 'Sekali sehari';
     };
 
-    ['s-notif-active', 's-notif-wali', 's-notif-ustadz', 's-wa-auto'].forEach(id => {
+    ['s-notif-active', 's-notif-wali', 's-notif-ustadz', 's-notif-absensi-wali', 's-wa-auto'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.onclick = function() {
         this.classList.toggle('on');
@@ -906,6 +1003,7 @@ const Admin = (() => {
         if (id === 's-notif-active') label.textContent = on ? 'Notifikasi Aktif' : 'Notifikasi Nonaktif';
         else if (id === 's-notif-wali') label.textContent = on ? 'Kirim ke Wali: Ya' : 'Kirim ke Wali: Tidak';
         else if (id === 's-notif-ustadz') label.textContent = on ? 'Kirim ke Ustadz: Ya' : 'Kirim ke Ustadz: Tidak';
+        else if (id === 's-notif-absensi-wali') label.textContent = on ? 'Rekap absensi ke Wali: Aktif' : 'Rekap absensi ke Wali: Nonaktif';
         else if (id === 's-wa-auto') label.textContent = on ? 'WhatsApp Otomatis: Aktif' : 'WhatsApp Otomatis: Nonaktif';
       };
     });
@@ -938,6 +1036,8 @@ const Admin = (() => {
       db.settings.notifWali = document.getElementById('s-notif-wali').classList.contains('on');
       db.settings.notifUstadz = document.getElementById('s-notif-ustadz').classList.contains('on');
       db.settings.notifMaxPerDay = parseInt(document.getElementById('s-notif-max').value) || 3;
+      db.settings.notifAbsensiWali = document.getElementById('s-notif-absensi-wali').classList.contains('on');
+      db.settings.notifAbsensiPeriode = document.getElementById('s-notif-absensi-periode').value;
       db.settings.waBridgeUrl = document.getElementById('s-wa-url').value.trim();
       db.settings.waBridgeKey = document.getElementById('s-wa-key').value.trim();
       db.settings.waAuto = document.getElementById('s-wa-auto').classList.contains('on');

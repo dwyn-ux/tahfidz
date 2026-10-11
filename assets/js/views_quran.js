@@ -8,12 +8,53 @@ const Quran = (() => {
   const API = 'https://api.alquran.cloud/v1/surah';
   const EDITION = 'quran-uthmani,id.indonesian,en.sahih';
   const CACHE_KEY = 'tahfidzku_quran_cache_v2';
+  const LAYOUT_KEY = 'tahfidzku_quran_layout_v1';
   let cache = {};
   try { cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); } catch (e) { cache = {}; }
 
-  let state = { surah: 1, mode: 'mushaf', trans: 'id', page: null, pages: [], loading: false };
+  let state = { surah: 1, mode: 'mushaf', trans: 'id', page: null, pages: [], loading: false, layout: 'web' };
+  try {
+    const savedLayout = localStorage.getItem(LAYOUT_KEY);
+    if (savedLayout === 'web' || savedLayout === 'full') state.layout = savedLayout;
+  } catch (e) {}
 
   function getSurahMeta(n) { return SURAHS.find(s => s.n === Number(n)); }
+
+  function canGoNextPage() {
+    return state.page < state.pages[state.pages.length - 1] || state.surah < 114;
+  }
+
+  function canGoPrevPage() {
+    return state.page > state.pages[0] || state.surah > 1;
+  }
+
+  function nextMushafPage() {
+    if (state.page < state.pages[state.pages.length - 1]) {
+      state.page++;
+      syncPage();
+      renderAyahs();
+      return;
+    }
+    if (state.surah < 114) {
+      state.surah++;
+      state.page = null;
+      loadAndRender();
+    }
+  }
+
+  function prevMushafPage() {
+    if (state.page > state.pages[0]) {
+      state.page--;
+      syncPage();
+      renderAyahs();
+      return;
+    }
+    if (state.surah > 1) {
+      state.surah--;
+      state.page = null;
+      loadAndRender(true);
+    }
+  }
 
   async function fetchSurah(n) {
     if (cache[n]) return cache[n];
@@ -38,13 +79,19 @@ const Quran = (() => {
 
   function render() {
     const meta = getSurahMeta(state.surah);
+    const isFull = state.layout === 'full';
+    document.body.classList.toggle('q-reading-fullscreen', isFull);
     const options = SURAHS.map(s => `<option value="${s.n}" ${s.n === state.surah ? 'selected' : ''}>${s.n}. ${s.latin} (${s.arab})</option>`).join('');
     const pageOpts = state.pages.map(p => `<option value="${p}" ${p === state.page ? 'selected' : ''}>Halaman ${p}</option>`).join('');
     const lastPage = state.pages.length ? state.pages[state.pages.length - 1] : '-';
     document.getElementById('view-content').innerHTML = `
-      <div class="clay-card mb">
+      <div class="clay-card mb q-controls-card ${isFull ? 'hidden' : ''}">
         <div class="row" style="align-items:flex-end">
           <div style="flex:2">${UI.field('Surat', `<select class="clay-select" id="q-surah">${options}</select>`)}</div>
+          <div style="flex:1">${UI.field('Tampilan', `<select class="clay-select" id="q-layout">
+            <option value="web" ${state.layout === 'web' ? 'selected' : ''}>Mode Web</option>
+            <option value="full" ${state.layout === 'full' ? 'selected' : ''}>Halaman Penuh</option>
+          </select>`)}</div>
           <div style="flex:1">${UI.field('Mode', `<select class="clay-select" id="q-mode">
             <option value="mushaf" ${state.mode === 'mushaf' ? 'selected' : ''}> Mushaf</option>
             <option value="terjemah" ${state.mode === 'terjemah' ? 'selected' : ''}>🌐 + Terjemah</option>
@@ -68,6 +115,12 @@ const Quran = (() => {
           <button class="clay-btn ghost" id="q-next">Surat Berikutnya →</button>
         </div>
       </div>
+      ${isFull ? `<div class="q-full-toolbar">
+        <button class="clay-btn ghost sm" id="q-full-web">☰ Mode Web</button>
+        <button class="clay-btn ghost sm" id="q-full-prev" ${canGoPrevPage() ? '' : 'disabled'}>←</button>
+        <div class="q-full-title"><b id="q-full-info">${UI.esc(meta.latin)} · ${meta.arab}</b><span id="q-full-page-info">Halaman ${state.page || '-'}</span></div>
+        <button class="clay-btn primary sm" id="q-full-next" ${canGoNextPage() ? '' : 'disabled'}>→</button>
+      </div>` : ''}
       <div id="q-content"><div class="empty">Memuat...</div></div>`;
 
     document.getElementById('q-surah').onchange = (e) => { state.surah = Number(e.target.value); loadAndRender(); };
@@ -78,14 +131,36 @@ const Quran = (() => {
       if (state.mode === 'mushaf' && (!state.page || !state.pages.includes(state.page))) state.page = state.pages[0];
       renderAyahs();
     };
+    document.getElementById('q-layout').onchange = (e) => {
+      state.layout = e.target.value;
+      if (state.layout === 'full') state.mode = 'mushaf';
+      try { localStorage.setItem(LAYOUT_KEY, state.layout); } catch (err) {}
+      render();
+      renderAyahs();
+    };
     const transSel = document.getElementById('q-trans');
     if (transSel) transSel.onchange = (e) => { state.trans = e.target.value; renderAyahs(); };
     const pageSel = document.getElementById('q-page');
     if (pageSel) pageSel.onchange = (e) => { state.page = Number(e.target.value); renderAyahs(); };
-    document.getElementById('q-page-prev').onclick = () => { if (state.pages.length && state.page > state.pages[0]) { state.page--; syncPage(); renderAyahs(); } };
-    document.getElementById('q-page-next').onclick = () => { if (state.pages.length && state.page < state.pages[state.pages.length - 1]) { state.page++; syncPage(); renderAyahs(); } };
+    document.getElementById('q-page-prev').onclick = () => { if (state.pages.length) prevMushafPage(); };
+    document.getElementById('q-page-next').onclick = () => { if (state.pages.length) nextMushafPage(); };
     document.getElementById('q-prev').onclick = () => { if (state.surah > 1) { state.surah--; syncSurah(); loadAndRender(); } };
     document.getElementById('q-next').onclick = () => { if (state.surah < 114) { state.surah++; syncSurah(); loadAndRender(); } };
+    const fullWeb = document.getElementById('q-full-web');
+    if (fullWeb) fullWeb.onclick = () => {
+      state.layout = 'web';
+      try { localStorage.setItem(LAYOUT_KEY, state.layout); } catch (err) {}
+      render();
+      renderAyahs();
+    };
+    const fullPrev = document.getElementById('q-full-prev');
+    if (fullPrev) fullPrev.onclick = () => {
+      prevMushafPage();
+    };
+    const fullNext = document.getElementById('q-full-next');
+    if (fullNext) fullNext.onclick = () => {
+      nextMushafPage();
+    };
   }
 
   function syncSurah() {
@@ -94,6 +169,8 @@ const Quran = (() => {
     const meta = getSurahMeta(state.surah);
     const info = document.getElementById('q-info');
     if (info) info.textContent = `${meta.latin} · ${meta.arab}`;
+    const fullInfo = document.getElementById('q-full-info');
+    if (fullInfo) fullInfo.textContent = `${meta.latin} · ${meta.arab}`;
   }
 
   function syncPage() {
@@ -101,16 +178,20 @@ const Quran = (() => {
     if (sel) sel.value = state.page;
     const info = document.getElementById('q-page-info');
     if (info) info.textContent = `Halaman ${state.page} / ${state.pages.length ? state.pages[state.pages.length - 1] : '-'}`;
+    const fullInfo = document.getElementById('q-full-page-info');
+    if (fullInfo) fullInfo.textContent = `Halaman ${state.page}`;
   }
 
-  async function loadAndRender() {
+  async function loadAndRender(preferLastPage = false) {
     const content = document.getElementById('q-content');
     if (!content) return;
     content.innerHTML = '<div class="empty">Memuat...</div>';
     try {
       const ayahs = await fetchSurah(state.surah);
       state.pages = [...new Set(ayahs.map(a => a.page))].sort((a, b) => a - b);
-      if (!state.page || !state.pages.includes(state.page)) state.page = state.pages[0];
+      if (!state.page || !state.pages.includes(state.page)) {
+        state.page = preferLastPage ? state.pages[state.pages.length - 1] : state.pages[0];
+      }
       render();
       renderAyahs(ayahs);
     } catch (e) {
@@ -124,7 +205,12 @@ const Quran = (() => {
     if (!ayahs) ayahs = cache[state.surah] || [];
     const showTrans = state.mode === 'terjemah';
     const list = state.mode === 'mushaf' ? ayahs.filter(a => a.page === state.page) : ayahs;
-    const html = list.map(a => `
+    // Halaman penuh mengikuti aliran mushaf: ayat tidak dibuat sebagai
+    // kartu/baris terpisah, tetapi menyambung dengan tanda nomor ayat.
+    const fullFlow = state.layout === 'full' && state.mode === 'mushaf';
+    const html = fullFlow
+      ? `<div class="q-full-flow" dir="rtl">${list.map(a => `<span class="q-full-ayah-text">${UI.esc(a.ar)}</span><span class="q-full-ayah-marker" aria-label="Ayat ${a.n}">${a.n}</span>`).join('')}</div>`
+      : list.map(a => `
       <div class="q-ayah ${state.mode === 'mushaf' ? 'mushaf' : ''}">
         <div class="q-num">${a.n}</div>
         <div class="q-body">
@@ -133,10 +219,52 @@ const Quran = (() => {
         </div>
       </div>`).join('');
     const pageBadge = state.mode === 'mushaf' ? `<div class="q-page-badge"> Halaman Mushaf ${state.page}</div>` : '';
-    content.innerHTML = `<div class="clay-card q-reader">${pageBadge}${html}</div>`;
+    const hasNextPage = state.mode === 'mushaf' && canGoNextPage();
+    const bottomPager = state.mode === 'mushaf' ? `
+      <div class="clay-card mt" style="display:flex;justify-content:flex-end">
+        <button class="clay-btn primary" id="q-page-next-bottom" ${hasNextPage ? '' : 'disabled'}>Halaman Berikutnya →</button>
+      </div>` : '';
+    content.innerHTML = `<div class="clay-card q-reader ${state.layout === 'full' ? 'q-full-page' : ''}">${pageBadge}${html}</div>${bottomPager}`;
+    const nextBottom = document.getElementById('q-page-next-bottom');
+    if (nextBottom) nextBottom.onclick = () => {
+      if (!hasNextPage) return;
+      nextMushafPage();
+      document.getElementById('q-content').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+  }
+
+  // Dipakai pada form setoran agar ustadz dapat menyimak teks ayat yang
+  // dibaca tanpa meninggalkan proses input.
+  async function previewRange(target, sAwal, aAwal, sAkhir, aAkhir) {
+    if (!target) return;
+    const startSurah = Number(sAwal), endSurah = Number(sAkhir);
+    const startAyah = Number(aAwal), endAyah = Number(aAkhir);
+    if (!getSurahMeta(startSurah) || !getSurahMeta(endSurah) || !startAyah || !endAyah || startSurah > endSurah || (startSurah === endSurah && startAyah > endAyah)) {
+      target.innerHTML = '<span class="muted">Pilih rentang ayat yang valid untuk menampilkan bacaan.</span>';
+      return;
+    }
+    target.innerHTML = '<span class="muted">Memuat bacaan Al-Qur’an…</span>';
+    try {
+      const selected = [];
+      for (let surah = startSurah; surah <= endSurah; surah++) {
+        const ayahs = await fetchSurah(surah);
+        const first = surah === startSurah ? startAyah : 1;
+        const last = surah === endSurah ? endAyah : ayahs.length;
+        selected.push(...ayahs.filter(a => a.n >= first && a.n <= last));
+        if (selected.length > 100) break;
+      }
+      if (!selected.length) throw new Error('Ayat tidak ditemukan');
+      const capped = selected.slice(0, 100);
+      const suffix = selected.length > capped.length ? '<div class="muted" style="margin-top:8px">Tampilan dibatasi 100 ayat.</div>' : '';
+      target.innerHTML = `<div style="font-size:12px;font-weight:600;margin-bottom:8px">Bacaan untuk disimak</div>${capped.map(a => `
+        <div dir="rtl" style="font-family:Amiri,serif;font-size:24px;line-height:1.9;padding:6px 0;border-bottom:1px solid rgba(0,0,0,.06)">${UI.esc(a.ar)} <span class="muted" dir="ltr" style="font-family:Inter,sans-serif;font-size:11px">(${a.n})</span></div>`).join('')}${suffix}`;
+    } catch (e) {
+      target.innerHTML = `<span class="muted">Bacaan belum dapat dimuat: ${UI.esc(e.message)}</span>`;
+    }
   }
 
   function open() {
+    if (state.layout === 'full') state.mode = 'mushaf';
     const session = Store.getSession();
     if (session) {
       let nav = [];
@@ -187,5 +315,5 @@ const Quran = (() => {
     open();
   }
 
-  return { open, retry, openWithSurah };
+  return { open, retry, openWithSurah, previewRange };
 })();

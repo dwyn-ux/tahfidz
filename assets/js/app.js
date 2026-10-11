@@ -16,6 +16,8 @@ const App = (() => {
     // Ustadz
     ustadz_dashboard: () => Ustadz.dashboard(),
     ustadz_absensi: () => Ustadz.absensi(),
+    ustadz_talim: () => Ustadz.talim(),
+    ustadz_talim_absensi: () => Ustadz.absensi('Ta’lim Malam'),
     ustadz_pembelajaran: () => Ustadz.pembelajaran(),
     ustadz_riwayat: () => Ustadz.riwayat(),
     ustadz_laporan: () => Ustadz.laporan(),
@@ -37,12 +39,36 @@ const App = (() => {
   };
 
   let current = null;
+  let tableObserverStarted = false;
+
+  // Tables remain semantic on desktop and become labeled cards on small screens.
+  // Labels are inferred from their table headers, so all existing views benefit.
+  function enhanceTables(root = document) {
+    root.querySelectorAll('.clay-table').forEach(table => {
+      const labels = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+      table.querySelectorAll('tbody tr').forEach(row => {
+        [...row.children].forEach((cell, index) => {
+          if (cell.tagName === 'TD') cell.dataset.label = labels[index] || '';
+        });
+      });
+    });
+  }
+
+  function startTableEnhancer() {
+    if (tableObserverStarted) return;
+    const root = document.getElementById('app');
+    if (!root) return;
+    tableObserverStarted = true;
+    new MutationObserver(() => enhanceTables(root)).observe(root, { childList: true, subtree: true });
+  }
 
   function navigate(view) {
     if (!routes[view]) view = defaultRoute[Store.getSession().role] || 'admin_dashboard';
+    if (view !== 'quran') document.body.classList.remove('q-reading-fullscreen');
     current = view;
     try {
       routes[view]();
+      enhanceTables(document.getElementById('app'));
     } catch (e) {
       console.error('Render error:', e);
       UI.toast('Terjadi kesalahan pada halaman', 'error');
@@ -53,6 +79,7 @@ const App = (() => {
   }
 
   async function start() {
+    startTableEnhancer();
     const session = Store.getSession();
     if (!session) { Auth.renderLogin(); return; }
     const role = session.role;

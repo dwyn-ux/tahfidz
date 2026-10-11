@@ -317,6 +317,12 @@ function defaultSettings(): array {
         'defaultPasswordFormat' => '12345678',
         'logo' => '',
         'setoranMulti' => false,
+        'notifActive' => true,
+        'notifMaxPerDay' => 3,
+        'notifWali' => true,
+        'notifUstadz' => true,
+        'notifAbsensiWali' => true,
+        'notifAbsensiPeriode' => 'harian',
         'waBridgeUrl' => '', 'waBridgeKey' => '', 'waAuto' => false,
         'juzOrder' => [30,29,28,27,26,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
         'kelas' => ['TK Al-Qur\'an', 'SD', 'SMP', 'SMA'],
@@ -332,6 +338,90 @@ function publicSettings(array $s, string $role): array {
     // Non-admin: remove WhatsApp bridge credentials
     unset($s['waBridgeUrl'], $s['waBridgeKey']);
     return $s;
+}
+
+/* ---------------- Attendance summaries for guardians ---------------- */
+function attendancePeriodInfo(string $mode, string $date, string $halaqah = ''): array {
+    $dt = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+    if (!$dt) return [$date, $date];
+    if ($mode === 'mingguan') {
+        $start = $dt->modify('monday this week');
+        $end = $start->modify('+6 days');
+        return [$start->format('Y-m-d'), $start->format('d M') . ' - ' . $end->format('d M Y')];
+    }
+    if ($mode === 'bulanan') return [$dt->format('Y-m'), $dt->format('F Y')];
+    if ($mode === 'halaqah') return [$date . '|' . $halaqah, $date];
+    return [$date, $date];
+}
+
+function attendanceSummaryMessage(array $santri, array $records, string $mode, string $periodLabel, string $halaqah): string {
+    $count = ['Hadir' => 0, 'Izin' => 0, 'Sakit' => 0, 'Alfa' => 0];
+    foreach ($records as $record) {
+        $status = $record['status'] ?? 'Hadir';
+        if (isset($count[$status])) $count[$status]++;
+    }
+    $ringkas = 'Hadir ' . $count['Hadir'] . ', Izin ' . $count['Izin'] . ', Sakit ' . $count['Sakit'] . ', Alfa ' . $count['Alfa'];
+    $judul = $mode === 'halaqah'
+        ? 'Rekap absensi Halaqah ' . ($halaqah ?: '-')
+        : 'Rekap absensi ' . $mode;
+    return '📋 ' . $judul . ' ' . $santri['nama'] . ' (' . $periodLabel . '): ' . $ringkas . '.';
+}
+
+/**
+ * Refresh one guardian notification per child and period. A deterministic ID
+ * prevents duplicate notifications when staff correct an attendance record.
+ */
+function syncAttendanceWaliNotifications(): void {
+    $settings = getSettings();
+    if (empty($settings['notifActive']) || empty($settings['notifWali']) || empty($settings['notifAbsensiWali'])) return;
+    $mode = $settings['notifAbsensiPeriode'] ?? 'harian';
+    if (!in_array($mode, ['harian', 'halaqah', 'mingguan', 'bulanan'], true)) $mode = 'harian';
+
+    $today = date('Y-m-d');
+    $todayRecords = array_values(array_filter(getRecords('kehadiran'), fn($k) => ($k['tanggal'] ?? '') === $today));
+    if (!$todayRecords) return;
+
+    $santriById = [];
+    foreach (getRecords('santri') as $santri) $santriById[$santri['id']] = $santri;
+    $waliUsers = [];
+    $stmt = pdo()->query("SELECT id, refId FROM users WHERE role = 'wali'");
+    foreach ($stmt->fetchAll() as $user) $waliUsers[$user['refId']] = $user['id'];
+    $allAttendance = getRecords('kehadiran');
+
+    foreach ($todayRecords as $todayRecord) {
+        $santriId = $todayRecord['santriId'] ?? '';
+        $santri = $santriById[$santriId] ?? null;
+        if (!$santri) continue;
+        $waliUserId = $waliUsers[$santri['waliId'] ?? ''] ?? null;
+        if (!$waliUserId) continue;
+
+        $halaqah = $santri['halaqah'] ?? '';
+        [$periodKey, $periodLabel] = attendancePeriodInfo($mode, $today, $halaqah);
+        $records = array_values(array_filter($allAttendance, function ($record) use ($santriId, $mode, $periodKey, $halaqah) {
+            if (($record['santriId'] ?? '') !== $santriId) return false;
+            [$recordKey] = attendancePeriodInfo($mode, $record['tanggal'] ?? '', $halaqah);
+            return $recordKey === $periodKey;
+        }));
+        if (!$records) continue;
+
+        $message = attendanceSummaryMessage($santri, $records, $mode, $periodLabel, $halaqah);
+        $id = 'abs_' . substr(sha1($santriId . '|' . $mode . '|' . $periodKey), 0, 24);
+        $existing = getRecord('notifikasi', $id);
+        $changed = !$existing || ($existing['pesan'] ?? '') !== $message;
+        putRecord('notifikasi', $id, [
+            'id' => $id,
+            'userId' => $waliUserId,
+            'tipe' => 'wali',
+            'kategori' => 'absensi',
+            'santriId' => $santriId,
+            'periode' => $mode,
+            'periodKey' => $periodKey,
+            'pesan' => $message,
+            'tanggal' => $existing['tanggal'] ?? date('c'),
+            'updatedAt' => date('c'),
+            'read' => $changed ? false : ($existing['read'] ?? false),
+        ]);
+    }
 }
 
 /* ---------------- Users ---------------- */
@@ -360,6 +450,7 @@ function bootstrapData($user) {
             'kelas' => getSettings()['kelas'],
             'levelTahfidz' => getSettings()['levelTahfidz'],
             'kehadiran' => getRecords('kehadiran'),
+            'jurnalTalim' => getRecords('jurnalTalim'),
             'tahsin' => getRecords('tahsin'),
             'ziyadahBacaan' => getRecords('ziyadahBacaan'),
             'ziyadahHafalan' => getRecords('ziyadahHafalan'),
@@ -388,6 +479,7 @@ function bootstrapData($user) {
             'kelas' => getSettings()['kelas'],
             'levelTahfidz' => getSettings()['levelTahfidz'],
             'kehadiran' => getRecords('kehadiran'),
+            'jurnalTalim' => getRecords('jurnalTalim'),
             'tahsin' => getRecords('tahsin'),
             'ziyadahBacaan' => getRecords('ziyadahBacaan'),
             'ziyadahHafalan' => getRecords('ziyadahHafalan'),
@@ -412,6 +504,7 @@ function bootstrapData($user) {
 
     $santri = getRecords('santri');
     $kehadiran = getRecords('kehadiran');
+    $jurnalTalim = getRecords('jurnalTalim');
     $tahsin = getRecords('tahsin');
     $ziyadahBacaan = getRecords('ziyadahBacaan');
     $ziyadahHafalan = getRecords('ziyadahHafalan');
@@ -457,6 +550,7 @@ function bootstrapData($user) {
         'kelas' => getSettings()['kelas'],
         'levelTahfidz' => getSettings()['levelTahfidz'],
         'kehadiran' => $kehadiran,
+        'jurnalTalim' => $jurnalTalim,
         'tahsin' => $tahsin,
         'ziyadahBacaan' => $ziyadahBacaan,
         'ziyadahHafalan' => $ziyadahHafalan,

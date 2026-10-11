@@ -10,7 +10,7 @@ const TOKEN_KEY = 'tahfidzku_token_v1';
 
 const Store = (() => {
   let db = defaultDB();
-  let busy = false;
+  let saveChain = Promise.resolve();
 
   function defaultDB() {
     return {
@@ -22,12 +22,13 @@ const Store = (() => {
         defaultPasswordFormat: '12345678', logo: '', setoranMulti: false,
         juzOrder: [30,29,28,27,26,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
         notifActive: true, notifMaxPerDay: 3, notifWali: true, notifUstadz: true,
+        notifAbsensiWali: true, notifAbsensiPeriode: 'harian',
         waBridgeUrl: '', waBridgeKey: '', waAuto: false
       },
       users: [], santri: [], wali: [], ustadz: [], halaqah: [],
       kelas: ['TK Al-Qur\'an', 'SD', 'SMP', 'SMA'],
       levelTahfidz: ['Tahsin', 'Ziyadah', 'Mutqin'],
-      kehadiran: [], tahsin: [], ziyadahBacaan: [], ziyadahHafalan: [], mutqin: [], catatan: [],
+      kehadiran: [], jurnalTalim: [], tahsin: [], ziyadahBacaan: [], ziyadahHafalan: [], mutqin: [], catatan: [],
       tahunAjaran: ['2024/2025', '2025/2026', '2026/2027'], semester: ['Ganjil', 'Genap'],
       notifikasi: [], logAktivitas: [], logWa: [], setoranNotif: []
     };
@@ -99,6 +100,11 @@ const Store = (() => {
     try {
       const data = await api('bootstrap');
       db = Object.assign(defaultDB(), data.db);
+      // Data absensi dari versi awal belum memiliki sesi. Anggap sebagai
+      // Subuh supaya tetap muncul di rekap, lalu semua input baru memakai
+      // sesi yang eksplisit.
+      db.kehadiran = (db.kehadiran || []).map(k => k.sesi ? k : Object.assign({}, k, { sesi: 'Subuh' }));
+      db.jurnalTalim = db.jurnalTalim || [];
       return db;
     } catch (e) {
       if (String(e.message).includes('Unauthorized') || String(e.message).includes('401')) {
@@ -154,11 +160,17 @@ const Store = (() => {
     return waSend(s.noHpWali, message);
   }
   function save() {
-    if (busy) return Promise.resolve();
-    busy = true;
-    return api('save', { method: 'POST', body: db })
-      .catch(err => { console.warn('save failed', err); if (UI && UI.toast) UI.toast('Gagal menyimpan ke server', 'error'); })
-      .finally(() => { busy = false; });
+    // Ambil snapshot agar perubahan cepat berurutan (mis. hapus akun lalu
+    // tetapkan ustadz baru) dikirim satu per satu, tidak ada yang terlewat.
+    const payload = JSON.parse(JSON.stringify(db));
+    // Password plaintext hanya perlu ada pada payload sekali; jangan biarkan
+    // tersisa di memori aplikasi setelah permintaan dibuat.
+    (db.users || []).forEach(user => { if (Object.prototype.hasOwnProperty.call(user, 'password')) delete user.password; });
+    saveChain = saveChain.catch(() => undefined).then(() =>
+      api('save', { method: 'POST', body: payload })
+        .catch(err => { console.warn('save failed', err); if (UI && UI.toast) UI.toast('Gagal menyimpan ke server', 'error'); })
+    );
+    return saveChain;
   }
 
   function reset() {
@@ -192,6 +204,13 @@ const Store = (() => {
   function findUstadz(id) { return db.ustadz.find(u => u.id === id); }
   function findUstadzByName(name) { return db.ustadz.find(u => u.nama === name); }
   function findHalaqahByName(name) { return db.halaqah.find(h => h.nama === name); }
+  function findHalaqahForUstadz(ustadz) {
+    if (!ustadz) return null;
+    return db.halaqah.find(h => h.ustadzId === ustadz.id)
+      || db.halaqah.find(h => h.ustadz === ustadz.nama)
+      || db.halaqah.find(h => h.nama === ustadz.halaqah)
+      || null;
+  }
 
   function search(q) {
     const s = q.toLowerCase().trim();
@@ -318,7 +337,7 @@ const Store = (() => {
   return {
     load, save, get, reset, uid, log, nowISO, todayStr,
     setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout, changePassword,
-    recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahByName, search,
+    recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahByName, findHalaqahForUstadz, search,
     waSend, waLog, waReady, waSendWali,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, addNotif, notifFor, clearNotifs, checkSetoranTerlewat
   };

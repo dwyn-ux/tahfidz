@@ -35,7 +35,8 @@ const Wali = (() => {
     const hadirSubuh = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Subuh').length;
     const hadirMaghrib = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Maghrib').length;
     const hadirIsya = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Isya').length;
-    const totalHadir = hadirSubuh + hadirMaghrib + hadirIsya;
+    const hadirTalim = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Ta’lim Malam').length;
+    const totalHadir = hadirSubuh + hadirMaghrib + hadirIsya + hadirTalim;
     const pct = kehadiran.length ? Math.round((totalHadir / kehadiran.length) * 100) : 0;
     const lastCat = db.catatan.filter(c => c.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
     const ustadz = db.ustadz.find(u => u.halaqah === s.halaqah);
@@ -57,6 +58,7 @@ const Wali = (() => {
           <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Subuh</span><b>${hadirSubuh}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Maghrib</span><b>${hadirMaghrib}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Isya</span><b>${hadirIsya}</b></div>
+          <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Ta’lim Malam</span><b>${hadirTalim}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span>Rata-rata Nilai</span><b>${Store.avgNilai(s.id) || '-'}</b></div>
         </div>
       </div>

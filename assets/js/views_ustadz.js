@@ -7,6 +7,7 @@ const Ustadz = (() => {
     return [
       { view: 'ustadz_dashboard', label: 'Dashboard', active: active === 'ustadz_dashboard' },
       { view: 'ustadz_absensi', label: 'Absensi', active: active === 'ustadz_absensi' },
+      { view: 'ustadz_talim', label: 'Ta’lim Malam', active: active === 'ustadz_talim' },
       { view: 'ustadz_pembelajaran', label: 'Pembelajaran', active: active === 'ustadz_pembelajaran' },
       { view: 'ustadz_riwayat', label: 'Riwayat', active: active === 'ustadz_riwayat' },
       { view: 'ustadz_laporan', label: 'Laporan', active: active === 'ustadz_laporan' },
@@ -35,7 +36,8 @@ const Ustadz = (() => {
     if (_scope === 'all') return null; // admin: tidak terikat 1 halaqah
     const session = Store.getSession();
     const u = Store.findUstadz(session.refId);
-    return u ? u.halaqah : null;
+    const h = Store.findHalaqahForUstadz(u);
+    return h ? h.nama : (u ? u.halaqah : null);
   }
   function mySantri() {
     const db = Store.get();
@@ -76,12 +78,14 @@ const Ustadz = (() => {
       return {
         subuh: k.filter(k => k.sesi === 'Subuh' && k.status === 'Hadir').length,
         maghrib: k.filter(k => k.sesi === 'Maghrib' && k.status === 'Hadir').length,
-        isya: k.filter(k => k.sesi === 'Isya' && k.status === 'Hadir').length
+        isya: k.filter(k => k.sesi === 'Isya' && k.status === 'Hadir').length,
+        talim: k.filter(k => k.sesi === 'Ta’lim Malam' && k.status === 'Hadir').length
       };
     });
     const totalSubuh = kehadiranBulan.reduce((a, b) => a + b.subuh, 0);
     const totalMaghrib = kehadiranBulan.reduce((a, b) => a + b.maghrib, 0);
     const totalIsya = kehadiranBulan.reduce((a, b) => a + b.isya, 0);
+    const totalTalim = kehadiranBulan.reduce((a, b) => a + b.talim, 0);
 
     document.getElementById('view-content').innerHTML = `
       <div class="grid kpi">
@@ -94,6 +98,7 @@ const Ustadz = (() => {
         ${Shared.statCard(Shared.ICONS.sun, totalSubuh, 'Kehadiran Subuh (Bulan Ini)', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.sunset, totalMaghrib, 'Kehadiran Maghrib (Bulan Ini)', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.moon, totalIsya, 'Kehadiran Isya (Bulan Ini)', '#22C55E')}
+        ${Shared.statCard(Shared.ICONS.book, totalTalim, 'Kehadiran Ta’lim Malam (Bulan Ini)', '#22C55E')}
       </div>
       <div class="grid cols-2 mt">
         <div class="clay-card">
@@ -115,21 +120,36 @@ const Ustadz = (() => {
   }
 
   /* ---------------- Absensi (multi-sesi) ---------------- */
-  const SESI = ['Subuh', 'Maghrib', 'Isya'];
+  const SESI = ['Subuh', 'Maghrib', 'Isya', 'Ta’lim Malam'];
 
-  function absensi() {
+  function absensi(initialSesi = 'Subuh') {
     const c = ctx(); _scope = c.scope;
-    const navItems = (c.role === 'admin') ? Admin.nav('ustadz_absensi') : nav('ustadz_absensi');
+    const isTalim = initialSesi === 'Ta’lim Malam';
+    const navItems = (c.role === 'admin') ? Admin.nav(isTalim ? 'ustadz_talim' : 'ustadz_absensi') : nav(isTalim ? 'ustadz_talim' : 'ustadz_absensi');
     Shared.shell(c.role, navItems, '');
-    Shared.setHeader('Absensi', 'Default: Hadir (klik yang berubah)');
+    Shared.setHeader(isTalim ? 'Absensi Ta’lim Malam' : 'Absensi', 'Default: Hadir (klik yang berubah)');
     const db = Store.get();
-    const santri = mySantri();
+    const allSantri = mySantri();
     const t = Store.todayStr();
-    let sesiAktif = 'Subuh';
+    let sesiAktif = initialSesi;
+    let halaqahFilter = '';
+    let searchTerm = '';
+    let editing = null;
 
     function renderAbsensi() {
+      // Admin dapat memilih satu halaqah; pencarian nama tidak mengubah
+      // cakupan absensi yang akan disimpan.
+      const roster = halaqahFilter ? allSantri.filter(s => s.halaqah === halaqahFilter) : allSantri;
+      const sessionRecords = db.kehadiran.filter(k => k.tanggal === t && k.sesi === sesiAktif && roster.some(s => s.id === k.santriId));
+      const hasSaved = sessionRecords.length > 0;
+      const isEditing = editing === null ? !hasSaved : editing;
+      const santri = roster.filter(s => {
+        const term = searchTerm.toLowerCase();
+        const matchesSearch = !term || (s.nama || '').toLowerCase().includes(term) || String(s.nis || '').toLowerCase().includes(term);
+        return matchesSearch;
+      });
       const existing = {};
-      db.kehadiran.filter(k => k.tanggal === t && k.sesi === sesiAktif && santri.some(s => s.id === k.santriId)).forEach(k => existing[k.santriId] = k.status);
+      sessionRecords.filter(k => santri.some(s => s.id === k.santriId)).forEach(k => existing[k.santriId] = k.status);
 
       const rows = santri.map(s => {
         const cur = existing[s.id] || 'Hadir';
@@ -137,10 +157,10 @@ const Ustadz = (() => {
           <td><b>${UI.esc(s.nama)}</b></td>
           <td>
             <div class="row" style="gap:6px">
-              <button class="clay-btn sm ${cur === 'Hadir' ? 'primary' : 'ghost'}" data-st="Hadir"> Hadir</button>
-              <button class="clay-btn sm ${cur === 'Izin' ? '' : 'ghost'}" data-st="Izin" style="${cur === 'Izin' ? 'background:#FACC15;color:#000' : ''}"> Izin</button>
-              <button class="clay-btn sm ${cur === 'Sakit' ? 'secondary' : 'ghost'}" data-st="Sakit"> Sakit</button>
-              <button class="clay-btn sm ${cur === 'Alfa' ? 'danger' : 'ghost'}" data-st="Alfa"> Alfa</button>
+              <button class="clay-btn sm ${cur === 'Hadir' ? 'primary' : 'ghost'}" data-st="Hadir" ${isEditing ? '' : 'disabled'}> Hadir</button>
+              <button class="clay-btn sm ${cur === 'Izin' ? '' : 'ghost'}" data-st="Izin" style="${cur === 'Izin' ? 'background:#FACC15;color:#000' : ''}" ${isEditing ? '' : 'disabled'}> Izin</button>
+              <button class="clay-btn sm ${cur === 'Sakit' ? 'secondary' : 'ghost'}" data-st="Sakit" ${isEditing ? '' : 'disabled'}> Sakit</button>
+              <button class="clay-btn sm ${cur === 'Alfa' ? 'danger' : 'ghost'}" data-st="Alfa" ${isEditing ? '' : 'disabled'}> Alfa</button>
             </div>
           </td>
           <td><span class="badge ${cur === 'Hadir' ? 'green' : cur === 'Izin' ? 'warn' : cur === 'Sakit' ? 'blue' : 'danger'}">${UI.esc(cur)}</span></td>
@@ -151,22 +171,44 @@ const Ustadz = (() => {
         <div class="clay-card">
           <div class="row" style="justify-content:space-between">
             <div class="section-title" style="margin:0">Absensi ${UI.fmtDate(t)}</div>
-            <button class="clay-btn primary" id="btn-save"> Simpan Absensi</button>
+            ${hasSaved && !isEditing
+              ? '<div class="row" style="gap:8px"><span class="badge green">Sudah tersimpan</span><button class="clay-btn ghost" id="btn-edit"> Edit Absensi</button></div>'
+              : '<button class="clay-btn primary" id="btn-save"> Simpan Absensi</button>'}
           </div>
           <div class="row mb" style="margin-top:12px">
             <span class="muted" style="font-size:13px">Sesi:</span>
             ${SESI.map(s => `<button class="pill ${s === sesiAktif ? 'active' : ''}" data-sesi="${s}">${s === 'Subuh' ? '' : s === 'Maghrib' ? '' : ''} ${s}</button>`).join('')}
           </div>
+          <div class="row mb" style="align-items:flex-end">
+            <div style="flex:1;min-width:180px">
+              <label class="field-label">Halaqah</label>
+              <select class="clay-select" id="abs-halaqah"></select>
+            </div>
+            <div style="flex:2;min-width:180px">
+              <label class="field-label">Cari Santri</label>
+              <input class="clay-input" id="abs-search" placeholder="Nama atau NIS santri">
+            </div>
+          </div>
           <div class="table-wrap mt"><table class="clay-table">
             <thead><tr><th>Santri</th><th>Status</th><th></th></tr></thead>
-            <tbody id="abs-body">${rows || `<tr><td colspan="3"><div class="empty">Tidak ada santri di halaqah Anda.</div></td></tr>`}</tbody>
+            <tbody id="abs-body">${rows || `<tr><td colspan="3"><div class="empty">Santri tidak ditemukan.</div></td></tr>`}</tbody>
           </table></div>
         </div>`;
 
+      const halaqahSelect = document.getElementById('abs-halaqah');
+      const halaqahOptions = [...new Set(allSantri.map(s => s.halaqah).filter(Boolean))].sort();
+      halaqahSelect.innerHTML = '<option value="">Semua Halaqah</option>' + halaqahOptions.map(name => '<option value="' + UI.esc(name) + '">' + UI.esc(name) + '</option>').join('');
+      halaqahSelect.value = halaqahFilter;
+      const searchInput = document.getElementById('abs-search');
+      searchInput.value = searchTerm;
+
       document.querySelectorAll('[data-sesi]').forEach(b => b.onclick = () => {
         sesiAktif = b.dataset.sesi;
+        editing = null;
         renderAbsensi();
       });
+      halaqahSelect.onchange = () => { halaqahFilter = halaqahSelect.value; renderAbsensi(); };
+      searchInput.oninput = () => { searchTerm = searchInput.value; renderAbsensi(); };
 
       const state = {};
       santri.forEach(s => state[s.id] = existing[s.id] || 'Hadir');
@@ -190,23 +232,102 @@ const Ustadz = (() => {
         });
       });
 
-      document.getElementById('btn-save').onclick = async () => {
+      const editButton = document.getElementById('btn-edit');
+      if (editButton) editButton.onclick = () => {
+        editing = true;
+        renderAbsensi();
+      };
+
+      const saveButton = document.getElementById('btn-save');
+      if (saveButton) saveButton.onclick = async () => {
         const db = Store.get();
         const t = Store.todayStr();
-        db.kehadiran = db.kehadiran.filter(k => !(k.tanggal === t && k.sesi === sesiAktif && santri.some(s => s.id === k.santriId)));
-        Object.keys(state).forEach(sid => {
+        // Pencarian hanya menyaring tampilan. Saat disimpan, seluruh santri
+        // pada halaqah terpilih tetap mendapat satu catatan sesi.
+        const allState = {};
+        roster.forEach(s => {
+          const previous = sessionRecords.find(k => k.santriId === s.id);
+          allState[s.id] = state[s.id] || (previous ? previous.status : 'Hadir');
+        });
+        db.kehadiran = db.kehadiran.filter(k => !(k.tanggal === t && k.sesi === sesiAktif && roster.some(s => s.id === k.santriId)));
+        Object.keys(allState).forEach(sid => {
           const sObj = Store.findSantri(sid);
           const hObj = sObj ? Store.findHalaqahByName(sObj.halaqah) : null;
-          db.kehadiran.push({ id: Store.uid('k'), santriId: sid, halaqahId: hObj ? hObj.id : (myHalaqah() || ''), tanggal: t, sesi: sesiAktif, status: state[sid] });
-          if (state[sid] !== 'Hadir') {
-            const s = Store.findSantri(sid);
-            if (s) { const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId); if (wUser) Store.addNotif(wUser.id, 'wali', s.nama + ' ' + sesiAktif + ' (' + state[sid] + ')'); }
-          }
+          db.kehadiran.push({ id: Store.uid('k'), santriId: sid, halaqahId: hObj ? hObj.id : (myHalaqah() || ''), tanggal: t, sesi: sesiAktif, status: allState[sid] });
         });
         await Store.save(); Store.log('Input absensi ' + sesiAktif); UI.toast('Absensi ' + sesiAktif + ' tersimpan', 'success');
+        editing = null;
+        renderAbsensi();
       };
     }
     renderAbsensi();
+  }
+
+  /* ---------------- Ta’lim Malam ---------------- */
+  function talim() {
+    const c = ctx(); _scope = c.scope;
+    const navItems = (c.role === 'admin') ? Admin.nav('ustadz_talim') : nav('ustadz_talim');
+    Shared.shell(c.role, navItems, '');
+    Shared.setHeader('Ta’lim Malam', 'Jurnal kemajuan dan absensi santri');
+    const db = Store.get();
+    if (!db.jurnalTalim) db.jurnalTalim = [];
+    const myUstadz = Store.findUstadz(Store.getSession()?.refId);
+    const myHalaqahName = myHalaqah();
+    const journals = db.jurnalTalim
+      .filter(j => _scope === 'all' || j.ustadzId === myUstadz?.id || j.halaqah === myHalaqahName)
+      .sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
+    const rows = journals.map(j => `<tr>
+      <td>${UI.fmtDate(j.tanggal)}</td><td>${UI.esc(j.ustadz || '-')}</td>
+      <td><b>${UI.esc(j.judulKitab)}</b></td><td>${UI.esc(j.bab)}</td>
+      <td>${UI.esc(j.pembahasan)}</td><td>${UI.esc(j.halaman)}</td>
+    </tr>`).join('');
+    document.getElementById('view-content').innerHTML = `
+      <div class="clay-card">
+        <div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div><div class="section-title" style="margin:0">Jurnal Kemajuan Ta’lim Malam</div><div class="muted" style="font-size:13px">Catat materi yang telah disampaikan.</div></div>
+          <div class="row"><button class="clay-btn ghost" id="btn-talim-absen">Absensi Ta’lim Malam</button><button class="clay-btn primary" id="btn-talim-add">+ Isi Jurnal</button></div>
+        </div>
+        <div class="table-wrap mt"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Ustadz</th><th>Judul Kitab</th><th>Bab</th><th>Pembahasan</th><th>Halaman</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="6"><div class="empty">Belum ada jurnal ta’lim malam.</div></td></tr>'}</tbody></table></div>
+      </div>`;
+    document.getElementById('btn-talim-absen').onclick = () => App.navigate('ustadz_talim_absensi');
+    document.getElementById('btn-talim-add').onclick = () => talimForm();
+  }
+
+  function talimForm() {
+    const db = Store.get();
+    const session = Store.getSession();
+    const currentUstadz = Store.findUstadz(session?.refId);
+    const isAdmin = session?.role === 'admin';
+    const body = `
+      ${UI.field('Tanggal', `<input class="clay-input" id="f-talim-tgl" type="date" value="${Store.todayStr()}">`)}
+      ${UI.field('Ustadz', isAdmin
+        ? `<select class="clay-select" id="f-talim-ustadz"><option value="">- Pilih Ustadz -</option>${UI.optionsFromList(db.ustadz.map(u => ({ v: u.id, l: u.nama })), 'v', 'l', '')}</select>`
+        : `<input class="clay-input" value="${UI.esc(currentUstadz?.nama || 'Ustadz')}" disabled>`)}
+      ${UI.field('Judul Kitab', `<input class="clay-input" id="f-talim-kitab" placeholder="Contoh: Riyadhus Shalihin">`)}
+      ${UI.field('Bab', `<input class="clay-input" id="f-talim-bab" placeholder="Contoh: Bab Keikhlasan">`)}
+      ${UI.field('Pembahasan', `<textarea class="clay-textarea" id="f-talim-bahas" placeholder="Ringkasan materi yang dibahas"></textarea>`)}
+      ${UI.field('Halaman', `<input class="clay-input" id="f-talim-halaman" placeholder="Contoh: 12–15">`)}`;
+    UI.openModal({
+      title: 'Isi Jurnal Ta’lim Malam', bodyHTML: body,
+      actions: [
+        { label: 'Batal', cls: 'ghost', onClick: (m, close) => close() },
+        { label: 'Simpan', cls: 'primary', onClick: async (m, close) => {
+          const ustadzId = isAdmin ? m.querySelector('#f-talim-ustadz').value : currentUstadz?.id;
+          const ustadz = db.ustadz.find(u => u.id === ustadzId);
+          const judulKitab = m.querySelector('#f-talim-kitab').value.trim();
+          const bab = m.querySelector('#f-talim-bab').value.trim();
+          const pembahasan = m.querySelector('#f-talim-bahas').value.trim();
+          const halaman = m.querySelector('#f-talim-halaman').value.trim();
+          if (!ustadz) { UI.toast('Pilih ustadz', 'error'); return; }
+          if (!judulKitab || !bab || !pembahasan || !halaman) { UI.toast('Lengkapi judul kitab, bab, pembahasan, dan halaman', 'error'); return; }
+          if (!db.jurnalTalim) db.jurnalTalim = [];
+          const halaqah = Store.findHalaqahForUstadz(ustadz);
+          db.jurnalTalim.push({ id: Store.uid('jt'), tanggal: m.querySelector('#f-talim-tgl').value, ustadzId, ustadz: ustadz.nama, halaqah: halaqah?.nama || ustadz.halaqah || '', judulKitab, bab, pembahasan, halaman });
+          Store.log('Isi jurnal Ta’lim Malam'); await Store.save(); close(); UI.toast('Jurnal Ta’lim Malam tersimpan', 'success'); talim();
+        } }
+      ]
+    });
   }
 
   /* ---------------- Pembelajaran ---------------- */
@@ -285,6 +406,46 @@ const Ustadz = (() => {
     surahInput.oninput = update;
   }
 
+  function bindSetoranPreview(root, prefix) {
+    const scope = root || document;
+    const button = scope.querySelector('#' + prefix + '-open-quran');
+    const fields = ['sa', 'aa', 'sk', 'ak'].map(name => scope.querySelector('#' + prefix + '-' + name));
+    if (!button || fields.some(field => !field)) return () => {};
+    const range = () => ({
+      sAwal: parseInt(fields[0].value) || 0,
+      aAwal: Number(fields[1].value) || 0,
+      sAkhir: parseInt(fields[2].value) || 0,
+      aAkhir: Number(fields[3].value) || 0
+    });
+    const validRange = ({ sAwal, aAwal, sAkhir, aAkhir }) => {
+      const first = getSurah(sAwal), last = getSurah(sAkhir);
+      return !!(first && last && aAwal >= 1 && aAwal <= first.ayahs && aAkhir >= 1 && aAkhir <= last.ayahs
+        && sAwal <= sAkhir && (sAwal !== sAkhir || aAwal <= aAkhir));
+    };
+    const update = () => {
+      button.hidden = !validRange(range());
+    };
+    fields.forEach(field => {
+      field.addEventListener('input', update);
+      field.addEventListener('change', update);
+    });
+    button.onclick = () => {
+      const selected = range();
+      if (!validRange(selected)) return;
+      const first = getSurah(selected.sAwal);
+      const last = getSurah(selected.sAkhir);
+      const popup = UI.openModal({
+        title: 'Al-Qur’an untuk Disimak',
+        sub: first.latin + ':' + selected.aAwal + ' — ' + last.latin + ':' + selected.aAkhir,
+        bodyHTML: '<div id="setoran-quran-popup" class="setoran-quran-popup"><span class="muted">Memuat bacaan Al-Qur’an…</span></div>',
+        actions: [{ label: 'Tutup', cls: 'ghost', onClick: (m, close) => close() }]
+      });
+      Quran.previewRange(popup.modal.querySelector('#setoran-quran-popup'), selected.sAwal, selected.aAwal, selected.sAkhir, selected.aAkhir);
+    };
+    update();
+    return update;
+  }
+
   function tahsinForm(santriId) {
     const s = Store.findSantri(santriId);
     const body = `
@@ -343,9 +504,12 @@ const Ustadz = (() => {
     const s = Store.findSantri(santriId);
     const db = Store.get();
     const t = Store.todayStr();
+    const halaqah = Store.findHalaqahByName(s.halaqah);
+    const bacaanRequired = !!(halaqah && halaqah.setoranBacaan);
     const bacaanToday = db.ziyadahBacaan.filter(z => z.santriId === santriId && z.tanggal === t).sort((a, b) => (b._created||0)-(a._created||0))[0];
     const hafalanToday = db.ziyadahHafalan.some(z => z.santriId === santriId && z.tanggal === t);
-    const skipBacaan = !!bacaanToday && !hafalanToday;
+    const skipBacaan = bacaanRequired && !!bacaanToday && !hafalanToday;
+    const hafalanReady = !bacaanRequired || skipBacaan;
 
     const last = Store.lastZiyadah(santriId);
     const lastH = Store.lastHafalan(santriId);
@@ -381,15 +545,15 @@ const Ustadz = (() => {
     const bacaanDisabled = skipBacaan ? 'disabled' : '';
     const btnBacaanHide = skipBacaan ? 'style="display:none"' : '';
     const bacaanOkShow = skipBacaan ? 'style="display:inline"' : 'style="display:none"';
-    const hafalanActive = skipBacaan ? 'opacity:1;border-left:3px solid var(--primary)' : 'opacity:0.5;border-left:3px solid var(--muted)';
-    const hafalanDisabled = skipBacaan ? '' : 'disabled';
-    const btnHafalanDisabled = skipBacaan ? '' : 'disabled';
+    const hafalanActive = hafalanReady ? 'opacity:1;border-left:3px solid var(--primary)' : 'opacity:0.5;border-left:3px solid var(--muted)';
+    const hafalanDisabled = hafalanReady ? '' : 'disabled';
+    const btnHafalanDisabled = hafalanReady ? '' : 'disabled';
 
     const body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
       ${UI.field('Tanggal', `<input class="clay-input" value="${t}" disabled>`)}
       <hr style="border:none;border-top:1px solid var(--border,#ddd);margin:12px 0">
-      <div id="sec-bacaan" class="clay-card pad-sm mb" style="background:var(--bg);${bacaanLocked}">
+      <div id="sec-bacaan" class="clay-card pad-sm mb" style="display:${bacaanRequired ? 'block' : 'none'};background:var(--bg);${bacaanLocked}">
         <div class="section-title" style="font-size:14px;margin:0 0 8px 0">📖 Setoran Bacaan</div>
         <div class="row">
           <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="b-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off" ${bacaanDisabled}>`)}</div>
@@ -399,6 +563,7 @@ const Ustadz = (() => {
           <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="b-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off" ${bacaanDisabled}>`)}</div>
           <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="b-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}" ${bacaanDisabled}>`)}</div>
         </div>
+        <button class="clay-btn ghost sm setoran-quran-btn" id="b-open-quran" type="button" hidden>📖 Buka Al-Qur’an</button>
         <button class="clay-btn primary" id="btn-simpan-bacaan" style="margin-top:8px" ${btnBacaanHide}>💾 Simpan Bacaan</button>
         <span id="bacaan-ok" ${bacaanOkShow} style="margin-top:8px;color:var(--green)">✓ Bacaan tersimpan</span>
       </div>
@@ -412,6 +577,7 @@ const Ustadz = (() => {
           <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="h-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off" ${hafalanDisabled}>`)}</div>
           <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="h-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}" ${hafalanDisabled}>`)}</div>
         </div>
+        <button class="clay-btn ghost sm setoran-quran-btn" id="h-open-quran" type="button" hidden>📖 Buka Al-Qur’an</button>
         <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg);font-size:13px"></div>
         ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80" ${hafalanDisabled}>`)}
         ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat" ${hafalanDisabled}></textarea>`)}
@@ -429,12 +595,15 @@ const Ustadz = (() => {
       ]
     });
 
+    const refreshBacaanPreview = bacaanRequired ? bindSetoranPreview(modal.modal, 'b') : () => {};
+    const refreshHafalanPreview = bindSetoranPreview(modal.modal, 'h');
+
     setTimeout(() => {
       bindAyatMax('b-sa', 'b-aa,b-ak');
       bindAyatMax('b-sk', 'b-aa,b-ak');
     }, 50);
 
-    if (skipBacaan) {
+    if (hafalanReady) {
       document.getElementById('sec-hafalan').style.opacity = '1';
       document.getElementById('sec-hafalan').style.borderLeftColor = 'var(--primary)';
       setTimeout(() => {
@@ -456,7 +625,7 @@ const Ustadz = (() => {
       }, 50);
     }
 
-    document.getElementById('btn-simpan-bacaan').onclick = async () => {
+    if (bacaanRequired) document.getElementById('btn-simpan-bacaan').onclick = async () => {
       const sa = document.getElementById('b-sa').value;
       const sk = document.getElementById('b-sk').value;
       const sA = sa ? parseInt(sa) : defSA;
@@ -488,6 +657,7 @@ const Ustadz = (() => {
       document.getElementById('h-sk').value = surahLabel(sK);
       document.getElementById('h-aa').value = aaEl.value;
       document.getElementById('h-ak').value = akEl.value;
+      refreshHafalanPreview();
 
       document.getElementById('sec-hafalan').style.opacity = '1';
       document.getElementById('sec-hafalan').style.borderLeftColor = 'var(--primary)';
@@ -790,6 +960,11 @@ const Ustadz = (() => {
     const s = Store.findSantri(santriId);
     if (!s) return;
     const level = s.level;
+    let bacaanRequired = false;
+    let skipBacaan = false;
+    let hafalanReady = false;
+    let defSA = 2, defAA = 1, defSK = 2, defAK = 5;
+    let surahLabel = n => String(n);
     
     let body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
@@ -806,13 +981,15 @@ const Ustadz = (() => {
     } else if (level === 'Ziyadah') {
       const t = Store.todayStr();
       const db = Store.get();
+      const halaqah = Store.findHalaqahByName(s.halaqah);
+      bacaanRequired = !!(halaqah && halaqah.setoranBacaan);
       const bacaanToday = db.ziyadahBacaan.filter(z => z.santriId === santriId && z.tanggal === t).sort((a, b) => (b._created||0)-(a._created||0))[0];
       const hafalanToday = db.ziyadahHafalan.some(z => z.santriId === santriId && z.tanggal === t);
-      const skipBacaan = !!bacaanToday && !hafalanToday;
+      skipBacaan = bacaanRequired && !!bacaanToday && !hafalanToday;
+      hafalanReady = !bacaanRequired || skipBacaan;
 
       const last = Store.lastZiyadah(santriId);
       const lastH = Store.lastHafalan(santriId);
-      let defSA = 2, defAA = 1, defSK = 2, defAK = 5;
       if (bacaanToday) {
         defSA = bacaanToday.sAwal; defAA = bacaanToday.aAwal;
         defSK = bacaanToday.sAkhir; defAK = bacaanToday.aAkhir;
@@ -824,19 +1001,19 @@ const Ustadz = (() => {
         if (n) { defSA = n.surah; defAA = n.ayah; defSK = n.surah; defAK = n.ayah + 4; }
       }
 
-      function surahLabel(n) { const s = getSurah(n); return s ? s.n + '. ' + s.latin : n; }
+      surahLabel = n => { const surah = getSurah(n); return surah ? surah.n + '. ' + surah.latin : n; };
 
       const bacaanLocked = skipBacaan ? 'opacity:0.5;border-left:3px solid var(--muted)' : 'border-left:3px solid var(--primary)';
       const bacaanDisabled = skipBacaan ? 'disabled' : '';
       const btnBacaanHide = skipBacaan ? 'style="display:none"' : '';
       const bacaanOkShow = skipBacaan ? 'style="display:inline"' : 'style="display:none"';
-      const hafalanActive = skipBacaan ? 'opacity:1;border-left:3px solid var(--primary)' : 'opacity:0.5;border-left:3px solid var(--muted)';
-      const hafalanDisabled = skipBacaan ? '' : 'disabled';
-      const btnHafalanDisabled = skipBacaan ? '' : 'disabled';
+      const hafalanActive = hafalanReady ? 'opacity:1;border-left:3px solid var(--primary)' : 'opacity:0.5;border-left:3px solid var(--muted)';
+      const hafalanDisabled = hafalanReady ? '' : 'disabled';
+      const btnHafalanDisabled = hafalanReady ? '' : 'disabled';
 
       const bacaanSection = `
         <hr style="border:none;border-top:1px solid var(--border,#ddd);margin:12px 0">
-        <div id="sec-bacaan" class="clay-card pad-sm mb" style="background:var(--bg);${bacaanLocked}">
+        <div id="sec-bacaan" class="clay-card pad-sm mb" style="display:${bacaanRequired ? 'block' : 'none'};background:var(--bg);${bacaanLocked}">
           <div class="section-title" style="font-size:14px;margin:0 0 8px 0">📖 Setoran Bacaan</div>
           <div class="row">
             <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="b-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off" ${bacaanDisabled}>`)}</div>
@@ -846,6 +1023,7 @@ const Ustadz = (() => {
             <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="b-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off" ${bacaanDisabled}>`)}</div>
             <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="b-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}" ${bacaanDisabled}>`)}</div>
           </div>
+          <button class="clay-btn ghost sm setoran-quran-btn" id="b-open-quran" type="button" hidden>📖 Buka Al-Qur’an</button>
           <button class="clay-btn primary" id="btn-simpan-bacaan" style="margin-top:8px" ${btnBacaanHide}>💾 Simpan Bacaan</button>
           <span id="bacaan-ok" ${bacaanOkShow} style="margin-top:8px;color:var(--green)">✓ Bacaan tersimpan</span>
         </div>`;
@@ -861,6 +1039,7 @@ const Ustadz = (() => {
             <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="h-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off" ${hafalanDisabled}>`)}</div>
             <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="h-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}" ${hafalanDisabled}>`)}</div>
           </div>
+          <button class="clay-btn ghost sm setoran-quran-btn" id="h-open-quran" type="button" hidden>📖 Buka Al-Qur’an</button>
           <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg);font-size:13px"></div>
           ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80" ${hafalanDisabled}>`)}
           ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat" ${hafalanDisabled}></textarea>`)}
@@ -936,6 +1115,8 @@ const Ustadz = (() => {
 
     if (level === 'Ziyadah') {
       const modalContent = modal.modal;
+      const refreshBacaanPreview = bacaanRequired ? bindSetoranPreview(modalContent, 'b') : () => {};
+      const refreshHafalanPreview = bindSetoranPreview(modalContent, 'h');
       const t = Store.todayStr();
       const db = Store.get();
       let hSlide = null;
@@ -945,7 +1126,7 @@ const Ustadz = (() => {
         bindAyatMax('b-sk', 'b-aa,b-ak');
       }, 50);
 
-      if (skipBacaan) {
+      if (hafalanReady) {
         modalContent.querySelector('#sec-hafalan').style.opacity = '1';
         modalContent.querySelector('#sec-hafalan').style.borderLeftColor = 'var(--primary)';
         setTimeout(() => {
@@ -967,7 +1148,7 @@ const Ustadz = (() => {
         }, 50);
       }
 
-      modalContent.querySelector('#btn-simpan-bacaan').onclick = async () => {
+      if (bacaanRequired) modalContent.querySelector('#btn-simpan-bacaan').onclick = async () => {
         const sa = modalContent.querySelector('#b-sa').value;
         const sk = modalContent.querySelector('#b-sk').value;
         const sA = sa ? parseInt(sa) : defSA;
@@ -999,6 +1180,7 @@ const Ustadz = (() => {
         modalContent.querySelector('#h-sk').value = surahLabel(sK);
         modalContent.querySelector('#h-aa').value = aaEl.value;
         modalContent.querySelector('#h-ak').value = akEl.value;
+        refreshHafalanPreview();
 
         modalContent.querySelector('#sec-hafalan').style.opacity = '1';
         modalContent.querySelector('#sec-hafalan').style.borderLeftColor = 'var(--primary)';
@@ -1073,5 +1255,5 @@ const Ustadz = (() => {
     };
   }
 
-  return { nav, dashboard, absensi, pembelajaran, riwayat, laporan, notif };
+  return { nav, dashboard, absensi, talim, pembelajaran, riwayat, laporan, notif };
 })();
