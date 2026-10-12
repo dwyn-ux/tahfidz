@@ -130,7 +130,7 @@ switch ($action) {
         send(['ok' => true]);
         break;
 
-    /* ---------------- SAVE (persist full db, role-restricted) ---------------- */
+    /* ---------------- SAVE (delta-first, role-restricted) ---------------- */
     case 'save':
         $u = requireAuth();
         $b = body();
@@ -141,10 +141,11 @@ switch ($action) {
 
         if ($u['role'] === 'wali') {
             // Wali is read-only EXCEPT their own wali record (nama/noHp, Profil page).
-            if (isset($b['wali']) && is_array($b['wali']) && $u['refId']) {
+            $waliRows = $b['changes']['records']['wali']['upsert'] ?? ($b['wali'] ?? null);
+            if (is_array($waliRows) && $u['refId']) {
                 $w = getRecord('wali', $u['refId']);
                 if ($w) {
-                    foreach ($b['wali'] as $rec) {
+                    foreach ($waliRows as $rec) {
                         if (($rec['id'] ?? null) === $u['refId']) {
                             foreach (['nama', 'noHp'] as $f) {
                                 if (array_key_exists($f, $rec)) $w[$f] = $rec[$f];
@@ -159,24 +160,77 @@ switch ($action) {
         }
 
         $allowedTypes = ($u['role'] === 'admin') ? $adminTypes : $ustadzTypes;
-        // Ustadz bootstrap filters notifikasi/log to their own, so a full-payload
-        // reconcile would DELETE other users' notifications. Never delete those here.
-        $noReconcile = ($u['role'] === 'ustadz') ? ['notifikasi', 'logAktivitas', 'logWa'] : [];
 
+        /*
+         * Modern clients send a delta instead of a whole browser cache.  The
+         * old full-payload reconcile below is kept for compatibility, but it
+         * is unsafe for concurrent staff sessions: a stale payload can erase
+         * a record that was just entered by somebody else.
+         */
+        if (isset($b['changes']) && is_array($b['changes'])) {
+            $changes = $b['changes'];
+
+            $attendanceChanged = false;
+            $recordChanges = $changes['records'] ?? [];
+            if (is_array($recordChanges)) {
+                foreach ($recordChanges as $type => $change) {
+                    if (!in_array($type, $allowedTypes, true) || !is_array($change)) continue;
+                    foreach (($change['upsert'] ?? []) as $rec) {
+                        if (!is_array($rec)) continue;
+                        $id = $rec['id'] ?? uid($type);
+                        $rec['id'] = $id;
+                        putRecord($type, $id, $rec);
+                        if ($type === 'kehadiran') $attendanceChanged = true;
+                    }
+                    foreach (($change['remove'] ?? []) as $id) {
+                        if (!is_string($id) || $id === '') continue;
+                        delRecord($type, $id);
+                        if ($type === 'kehadiran') $attendanceChanged = true;
+                    }
+                }
+            }
+
+            if ($u['role'] === 'admin' && isset($changes['settings']) && is_array($changes['settings'])) {
+                saveSettings($changes['settings']);
+            }
+            if ($u['role'] === 'admin' && isset($changes['users']) && is_array($changes['users'])) {
+                foreach (($changes['users']['upsert'] ?? []) as $usr) {
+                    if (!is_array($usr) || empty($usr['id'])) continue;
+                    $existing = getUserById($usr['id']);
+                    if ($existing) {
+                        $passSql = '';
+                        $params = [];
+                        if (!empty($usr['password']) && !preg_match('/^\$2[aby]\$/', $usr['password'])) {
+                            $passSql = ', password=?';
+                            $params[] = password_hash($usr['password'], PASSWORD_DEFAULT);
+                        }
+                        $stmt = pdo()->prepare('UPDATE users SET username=?, role=?, refId=?' . $passSql . ' WHERE id=?');
+                        $stmt->execute(array_merge([$usr['username'] ?? '', $usr['role'] ?? 'wali', $usr['refId'] ?? null], $params, [$usr['id']]));
+                    } else {
+                        $pass = !empty($usr['password']) ? password_hash($usr['password'], PASSWORD_DEFAULT) : password_hash('12345678', PASSWORD_DEFAULT);
+                        $stmt = pdo()->prepare(insertIgnoreSQL('users', ['id', 'username', 'password', 'role', 'refId']));
+                        $stmt->execute([$usr['id'], $usr['username'] ?? '', $pass, $usr['role'] ?? 'wali', $usr['refId'] ?? null]);
+                    }
+                }
+                foreach (($changes['users']['remove'] ?? []) as $id) {
+                    if (is_string($id) && $id !== '' && $id !== $u['uid']) {
+                        pdo()->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
+                    }
+                }
+            }
+            if ($attendanceChanged) syncAttendanceWaliNotifications();
+            send(['ok' => true]);
+        }
+
+        // Fallback untuk klien versi lama. Payload penuh hanya boleh di-merge;
+        // jangan pernah dipakai untuk menyimpulkan bahwa baris di server harus
+        // dihapus, karena browser lama bisa membawa cache yang sudah tertinggal.
+        // Klien baru mengirim `changes.remove` bila pengguna memang menghapus.
         foreach ($allowedTypes as $t) {
             if (!isset($b[$t]) || !is_array($b[$t])) continue;
-            $keep = [];
             foreach ($b[$t] as $rec) {
                 $id = $rec['id'] ?? uid($t);
-                $keep[] = $id;
                 putRecord($t, $id, $rec);
-            }
-            // reconcile deletions: remove server rows not in payload
-            if (in_array($t, $noReconcile, true)) continue;
-            $stmt = pdo()->prepare('SELECT id FROM records WHERE type = ?');
-            $stmt->execute([$t]);
-            foreach ($stmt->fetchAll() as $row) {
-                if (!in_array($row['id'], $keep, true)) delRecord($t, $row['id']);
             }
         }
 
@@ -209,14 +263,8 @@ switch ($action) {
                     $stmt->execute([$usr['id'], $usr['username'] ?? '', $pass, $usr['role'] ?? 'wali', $usr['refId'] ?? null]);
                 }
             }
-            // remove users not in payload (except current user)
-            $payloadIds = array_filter(array_map(fn($u) => $u['id'] ?? null, $b['users']));
-            foreach ($existingIds as $eid) {
-                if ($eid === $u['uid']) continue;
-                if (!in_array($eid, $payloadIds, true)) {
-                    pdo()->prepare('DELETE FROM users WHERE id = ?')->execute([$eid]);
-                }
-            }
+            // Legacy full payloads are merge-only. User deletion is handled
+            // exclusively by the delta path above.
         }
         // Attendance notifications are generated server-side so ustadz do not
         // need access to guardian account data, and corrections stay deduplicated.

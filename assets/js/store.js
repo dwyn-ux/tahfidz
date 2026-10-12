@@ -1,9 +1,9 @@
 /* ============================================================
    Tahfidzku — Data Store (API-backed, PHP + MySQL)
    Frontend keeps an in-memory `db` hydrated from the server.
-   Mutations update memory immediately; Store.save() persists
-   the whole db to the server (fire-and-forget). The public API
-   matches the old localStorage version so views need no change.
+   Mutations update memory immediately; Store.save() persists only
+   the changed records to the server. The public API matches the
+   old localStorage version so views need no change.
    ============================================================ */
 const API_BASE = 'api/index.php';
 const TOKEN_KEY = 'tahfidzku_token_v1';
@@ -11,6 +11,11 @@ const TOKEN_KEY = 'tahfidzku_token_v1';
 const Store = (() => {
   let db = defaultDB();
   let saveChain = Promise.resolve();
+  // Salinan data terakhir yang dimuat/disimpan. Ini dipakai agar browser
+  // hanya mengirim perubahan, bukan menimpa seluruh database dengan cache
+  // yang mungkin sudah tertinggal dari perangkat lain.
+  let persisted = null;
+  const recordTypes = ['santri', 'wali', 'ustadz', 'halaqah', 'kehadiran', 'jurnalTalim', 'tahsin', 'ziyadahBacaan', 'ziyadahHafalan', 'mutqin', 'catatan', 'notifikasi', 'logAktivitas', 'logWa'];
 
   function defaultDB() {
     return {
@@ -105,6 +110,7 @@ const Store = (() => {
       // sesi yang eksplisit.
       db.kehadiran = (db.kehadiran || []).map(k => k.sesi ? k : Object.assign({}, k, { sesi: 'Subuh' }));
       db.jurnalTalim = db.jurnalTalim || [];
+      persisted = snapshot(db);
       return db;
     } catch (e) {
       if (String(e.message).includes('Unauthorized') || String(e.message).includes('401')) {
@@ -115,6 +121,51 @@ const Store = (() => {
   }
 
   function get() { return db; }
+
+  function snapshot(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function sameValue(a, b) {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  function recordsById(records) {
+    return (records || []).reduce((map, record) => {
+      if (record && record.id) map[record.id] = record;
+      return map;
+    }, {});
+  }
+
+  // Bentuk payload perubahan (upsert/hapus) terhadap snapshot terakhir.
+  // Baris yang tidak disentuh tidak pernah dikirim, sehingga simpan dari
+  // perangkat/sesi lain tidak dapat menghapus data baru secara tidak sengaja.
+  function changesSincePersisted() {
+    const before = persisted || defaultDB();
+    const records = {};
+    recordTypes.forEach(type => {
+      const oldRows = recordsById(before[type]);
+      const newRows = recordsById(db[type]);
+      const upsert = Object.keys(newRows)
+        .filter(id => !oldRows[id] || !sameValue(oldRows[id], newRows[id]))
+        .map(id => newRows[id]);
+      const remove = Object.keys(oldRows).filter(id => !newRows[id]);
+      if (upsert.length || remove.length) records[type] = { upsert, remove };
+    });
+
+    const changes = { records };
+    if (!sameValue(before.settings, db.settings)) changes.settings = db.settings;
+
+    const oldUsers = recordsById(before.users);
+    const newUsers = recordsById(db.users);
+    const upsertUsers = Object.keys(newUsers)
+      .filter(id => !oldUsers[id] || !sameValue(oldUsers[id], newUsers[id]))
+      .map(id => newUsers[id]);
+    const removeUsers = Object.keys(oldUsers).filter(id => !newUsers[id]);
+    if (upsertUsers.length || removeUsers.length) changes.users = { upsert: upsertUsers, remove: removeUsers };
+
+    return Object.keys(records).length || changes.settings || changes.users ? changes : null;
+  }
 
   // Kirim pesan WhatsApp via WA bridge (jika dikonfigurasi). Fire-and-forget.
   // Setiap percobaan dicatat ke db.logWa (status: queued/skipped/error).
@@ -160,17 +211,28 @@ const Store = (() => {
     return waSend(s.noHpWali, message);
   }
   function save() {
-    // Ambil snapshot agar perubahan cepat berurutan (mis. hapus akun lalu
-    // tetapkan ustadz baru) dikirim satu per satu, tidak ada yang terlewat.
-    const payload = JSON.parse(JSON.stringify(db));
+    const changes = changesSincePersisted();
+    if (!changes) return Promise.resolve(true);
+    // Ambil snapshot agar perubahan cepat berurutan dikirim satu per satu.
+    const savedSnapshot = snapshot(db);
+    const payload = { changes: snapshot(changes) };
     // Password plaintext hanya perlu ada pada payload sekali; jangan biarkan
     // tersisa di memori aplikasi setelah permintaan dibuat.
     (db.users || []).forEach(user => { if (Object.prototype.hasOwnProperty.call(user, 'password')) delete user.password; });
-    saveChain = saveChain.catch(() => undefined).then(() =>
-      api('save', { method: 'POST', body: payload })
-        .catch(err => { console.warn('save failed', err); if (UI && UI.toast) UI.toast('Gagal menyimpan ke server', 'error'); })
+    (savedSnapshot.users || []).forEach(user => { if (Object.prototype.hasOwnProperty.call(user, 'password')) delete user.password; });
+    const request = saveChain.catch(() => undefined).then(() =>
+      api('save', { method: 'POST', body: payload }).then(() => {
+        persisted = savedSnapshot;
+        return true;
+      })
     );
-    return saveChain;
+    // Rantai berikutnya tetap dapat berjalan setelah satu kegagalan.
+    saveChain = request.catch(() => undefined);
+    return request.catch(err => {
+      console.warn('save failed', err);
+      if (UI && UI.toast) UI.toast('Gagal menyimpan ke server. Coba simpan lagi.', 'error');
+      return false;
+    });
   }
 
   function reset() {

@@ -135,6 +135,9 @@ const Ustadz = (() => {
     let halaqahFilter = '';
     let searchTerm = '';
     let editing = null;
+    // Status yang belum disimpan harus tetap ada saat daftar dirender ulang
+    // karena pencarian, perpindahan filter, atau perubahan ukuran layar.
+    let pendingStatus = {};
 
     function renderAbsensi() {
       // Admin dapat memilih satu halaqah; pencarian nama tidak mengubah
@@ -149,10 +152,10 @@ const Ustadz = (() => {
         return matchesSearch;
       });
       const existing = {};
-      sessionRecords.filter(k => santri.some(s => s.id === k.santriId)).forEach(k => existing[k.santriId] = k.status);
+      sessionRecords.forEach(k => existing[k.santriId] = k.status);
 
       const rows = santri.map(s => {
-        const cur = existing[s.id] || 'Hadir';
+        const cur = pendingStatus[s.id] || existing[s.id] || 'Hadir';
         return `<tr data-id="${s.id}">
           <td><b>${UI.esc(s.nama)}</b></td>
           <td>
@@ -196,7 +199,14 @@ const Ustadz = (() => {
         </div>`;
 
       const halaqahSelect = document.getElementById('abs-halaqah');
-      const halaqahOptions = [...new Set(allSantri.map(s => s.halaqah).filter(Boolean))].sort();
+      // Ambil dari master halaqah sekaligus data santri. Dengan begitu admin
+      // selalu dapat memilih semua halaqah yang berlaku, dan "Semua Halaqah"
+      // benar-benar menampilkan seluruh roster, bukan hanya opsi yang kebetulan
+      // sudah muncul dari data absensi.
+      const halaqahOptions = [...new Set([
+        ...db.halaqah.map(h => h.nama),
+        ...allSantri.map(s => s.halaqah)
+      ].filter(Boolean))].sort();
       halaqahSelect.innerHTML = '<option value="">Semua Halaqah</option>' + halaqahOptions.map(name => '<option value="' + UI.esc(name) + '">' + UI.esc(name) + '</option>').join('');
       halaqahSelect.value = halaqahFilter;
       const searchInput = document.getElementById('abs-search');
@@ -205,18 +215,17 @@ const Ustadz = (() => {
       document.querySelectorAll('[data-sesi]').forEach(b => b.onclick = () => {
         sesiAktif = b.dataset.sesi;
         editing = null;
+        pendingStatus = {};
         renderAbsensi();
       });
       halaqahSelect.onchange = () => { halaqahFilter = halaqahSelect.value; renderAbsensi(); };
       searchInput.oninput = () => { searchTerm = searchInput.value; renderAbsensi(); };
 
-      const state = {};
-      santri.forEach(s => state[s.id] = existing[s.id] || 'Hadir');
       document.querySelectorAll('#abs-body tr[data-id]').forEach(tr => {
         const id = tr.dataset.id;
         tr.querySelectorAll('button[data-st]').forEach(btn => {
           btn.onclick = () => {
-            state[id] = btn.dataset.st;
+            pendingStatus[id] = btn.dataset.st;
             tr.querySelectorAll('button[data-st]').forEach(b => {
               b.className = 'clay-btn sm ghost';
               if (b.dataset.st === 'Izin') b.style = '';
@@ -247,16 +256,22 @@ const Ustadz = (() => {
         const allState = {};
         roster.forEach(s => {
           const previous = sessionRecords.find(k => k.santriId === s.id);
-          allState[s.id] = state[s.id] || (previous ? previous.status : 'Hadir');
+          allState[s.id] = pendingStatus[s.id] || (previous ? previous.status : 'Hadir');
         });
         db.kehadiran = db.kehadiran.filter(k => !(k.tanggal === t && k.sesi === sesiAktif && roster.some(s => s.id === k.santriId)));
         Object.keys(allState).forEach(sid => {
           const sObj = Store.findSantri(sid);
           const hObj = sObj ? Store.findHalaqahByName(sObj.halaqah) : null;
-          db.kehadiran.push({ id: Store.uid('k'), santriId: sid, halaqahId: hObj ? hObj.id : (myHalaqah() || ''), tanggal: t, sesi: sesiAktif, status: allState[sid] });
+          const previous = sessionRecords.find(k => k.santriId === sid);
+          // Pertahankan ID catatan yang sama saat koreksi. Dengan demikian
+          // dua perangkat yang mengoreksi sesi yang sama akan memperbarui
+          // baris yang sama, bukan membuat salinan lalu saling menghapus.
+          db.kehadiran.push({ id: previous ? previous.id : Store.uid('k'), santriId: sid, halaqahId: hObj ? hObj.id : (myHalaqah() || ''), tanggal: t, sesi: sesiAktif, status: allState[sid] });
         });
-        await Store.save(); Store.log('Input absensi ' + sesiAktif); UI.toast('Absensi ' + sesiAktif + ' tersimpan', 'success');
+        if (!await Store.save()) return;
+        Store.log('Input absensi ' + sesiAktif); UI.toast('Absensi ' + sesiAktif + ' tersimpan', 'success');
         editing = null;
+        pendingStatus = {};
         renderAbsensi();
       };
     }
@@ -336,7 +351,7 @@ const Ustadz = (() => {
           if (!db.jurnalTalim) db.jurnalTalim = [];
           const halaqah = Store.findHalaqahForUstadz(ustadz);
           db.jurnalTalim.push({ id: Store.uid('jt'), tanggal: m.querySelector('#f-talim-tgl').value, ustadzId, ustadz: ustadz.nama, halaqah: halaqah?.nama || ustadz.halaqah || '', judulKitab, bab, pembahasan, halaman });
-          Store.log('Isi jurnal Ta’lim Malam'); await Store.save(); close(); UI.toast('Jurnal Ta’lim Malam tersimpan', 'success'); talim();
+          Store.log('Isi jurnal Ta’lim Malam'); if (!await Store.save()) return; close(); UI.toast('Jurnal Ta’lim Malam tersimpan', 'success'); talim();
         } }
       ]
     });
@@ -480,7 +495,7 @@ const Ustadz = (() => {
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (wUser) Store.addNotif(wUser.id, 'wali', 'Nilai Tahsin baru: ' + s.nama);
           waReport(santriId, '📖 Laporan Tahsin ' + s.nama + ': halaman ' + m.querySelector('#f-ha').value + '-' + m.querySelector('#f-hk').value + ', nilai ' + m.querySelector('#f-nilai').value + '. — ' + db.settings.namaLembaga);
-          await Store.save(); Store.log('Input tahsin ' + s.nama); c(); UI.toast('Tersimpan', 'success'); renderTahsin();
+          if (!await Store.save()) return; Store.log('Input tahsin ' + s.nama); c(); UI.toast('Tersimpan', 'success'); renderTahsin();
         } }
       ]
     });
@@ -655,7 +670,7 @@ const Ustadz = (() => {
         tanggal: Store.todayStr(), sAwal: sA, aAwal: +aaEl.value,
         sAkhir: sK, aAkhir: +akEl.value, _created: Date.now()
       });
-      await Store.save();
+      if (!await Store.save()) return;
       Store.log('Setor ziyadah bacaan ' + s.nama);
       UI.toast('Setoran bacaan tersimpan', 'success');
 
@@ -719,7 +734,7 @@ const Ustadz = (() => {
       const wUser = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);
       if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
       waReport(santriId, '📚 Setoran hafalan ' + s.nama + ' berhasil: ' + formatHafalan(h) + ' (' + getSurah(sA).latin + ':' + aA + ' - ' + getSurah(sK).latin + ':' + aK + '). Semangat terus! — ' + d.settings.namaLembaga);
-      await Store.save();
+      if (!await Store.save()) return;
       Store.log('Setor ziyadah hafalan ' + s.nama);
       if (hSlide) clearInterval(hSlide);
       modal.close();
@@ -780,7 +795,7 @@ const Ustadz = (() => {
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (wUser) Store.addNotif(wUser.id, 'wali', 'Murajaah Mutqin: ' + s.nama);
           waReport(santriId, '🌟 Murajaah Mutqin ' + s.nama + ': ' + getSurah(sA).latin + ':' + m.querySelector('#m-aa').value + ' - ' + getSurah(sK).latin + ':' + m.querySelector('#m-ak').value + '. Total ' + m.querySelector('#m-total').value + ' halaman. — ' + db.settings.namaLembaga);
-          await Store.save(); Store.log('Input mutqin ' + s.nama); c(); UI.toast('Tersimpan', 'success'); renderMutqin();
+          if (!await Store.save()) return; Store.log('Input mutqin ' + s.nama); c(); UI.toast('Tersimpan', 'success'); renderMutqin();
         } }
       ]
     });
@@ -1116,7 +1131,7 @@ const Ustadz = (() => {
           const w = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (w) Store.addNotif(w.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + level + ')');
           waReport(santriId, '✅ Laporan setoran ' + s.nama + ' (' + level + ') tersimpan. Terima kasih. — ' + d.settings.namaLembaga);
-          await Store.save();
+          if (!await Store.save()) return;
           Store.log('Input umum: ' + s.nama + ' (' + level + ')');
           c();
           UI.toast('Setoran ' + level + ' tersimpan', 'success');
@@ -1178,7 +1193,7 @@ const Ustadz = (() => {
           tanggal: Store.todayStr(), sAwal: sA, aAwal: +aaEl.value,
           sAkhir: sK, aAkhir: +akEl.value, _created: Date.now()
         });
-        await Store.save();
+        if (!await Store.save()) return;
         Store.log('Setor ziyadah bacaan ' + s.nama);
         UI.toast('Setoran bacaan tersimpan', 'success');
 
@@ -1240,7 +1255,7 @@ const Ustadz = (() => {
         const wUser = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);
         if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
         waReport(santriId, '📚 Setoran hafalan ' + s.nama + ' berhasil: ' + formatHafalan(h) + ' (' + getSurah(sA).latin + ':' + aA + ' - ' + getSurah(sK).latin + ':' + aK + '). Semangat terus! — ' + d.settings.namaLembaga);
-        await Store.save();
+        if (!await Store.save()) return;
         Store.log('Setor ziyadah hafalan ' + s.nama);
         if (hSlide) clearInterval(hSlide);
         modal.close();
