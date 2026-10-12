@@ -330,6 +330,10 @@ const Ustadz = (() => {
     const currentUstadz = Store.findUstadz(session?.refId);
     const isAdmin = session?.role === 'admin';
     const source = sourceJournal || {};
+    // ID dibuat saat formulir dibuka, bukan setiap tombol Simpan ditekan.
+    // Jadi jika sebuah klik terkirim ulang, server akan meng-upsert jurnal
+    // yang sama alih-alih membuat baris Ta'lim baru.
+    const journalId = Store.uid('jt');
     const copiedFrom = sourceJournal
       ? `<div class="badge blue" style="margin-bottom:12px">Data dilanjutkan dari jurnal ${UI.esc(UI.fmtDate(source.tanggal))}. Silakan sesuaikan materi atau halaman terbaru.</div>`
       : '';
@@ -358,8 +362,18 @@ const Ustadz = (() => {
           if (!judulKitab || !bab || !pembahasan || !halaman) { UI.toast('Lengkapi judul kitab, bab, pembahasan, dan halaman', 'error'); return; }
           if (!db.jurnalTalim) db.jurnalTalim = [];
           const halaqah = Store.findHalaqahForUstadz(ustadz);
-          db.jurnalTalim.push({ id: Store.uid('jt'), tanggal: m.querySelector('#f-talim-tgl').value, ustadzId, ustadz: ustadz.nama, halaqah: halaqah?.nama || ustadz.halaqah || '', judulKitab, bab, pembahasan, halaman });
-          Store.log('Isi jurnal Ta’lim Malam'); if (!await Store.save()) return; close(); UI.toast('Jurnal Ta’lim Malam tersimpan', 'success'); talim();
+          const journal = { id: journalId, tanggal: m.querySelector('#f-talim-tgl').value, ustadzId, ustadz: ustadz.nama, halaqah: halaqah?.nama || ustadz.halaqah || '', judulKitab, bab, pembahasan, halaman };
+          const existingIndex = db.jurnalTalim.findIndex(j => j.id === journalId);
+          if (existingIndex === -1) {
+            db.jurnalTalim.push(journal);
+            Store.log('Isi jurnal Ta’lim Malam');
+          } else {
+            // Jika simpan sebelumnya gagal lalu dicoba ulang, perbarui entri
+            // sementara yang sama tanpa menambah duplikat di memori.
+            db.jurnalTalim[existingIndex] = journal;
+          }
+          if (!await Store.save()) return;
+          close(); UI.toast('Jurnal Ta’lim Malam tersimpan', 'success'); talim();
         } }
       ]
     });

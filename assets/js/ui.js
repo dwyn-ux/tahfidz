@@ -56,7 +56,37 @@ const UI = (() => {
     const actions = modal.querySelector('.modal-actions');
     (opts.actions || []).forEach(a => {
       const btn = el(`<button class="clay-btn ${a.cls || ''}">${esc(a.label)}</button>`);
-      btn.onclick = () => a.onClick && a.onClick(modal, close);
+      // Handler simpan biasanya asynchronous. Tanpa pengunci, beberapa tap
+      // sebelum respons server selesai menjalankan handler yang sama berulang
+      // kali dan dapat membuat data ganda.
+      let actionPending = false;
+      btn.onclick = () => {
+        if (actionPending || !a.onClick) return;
+        let result;
+        try {
+          result = a.onClick(modal, close);
+        } catch (err) {
+          console.error('Modal action failed:', err);
+          toast('Terjadi kesalahan. Silakan coba lagi.', 'error');
+          return;
+        }
+        if (!result || typeof result.then !== 'function') return;
+
+        actionPending = true;
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+        Promise.resolve(result).catch(err => {
+          console.error('Modal action failed:', err);
+          toast('Terjadi kesalahan. Silakan coba lagi.', 'error');
+        }).finally(() => {
+          actionPending = false;
+          // Modal mungkin telah ditutup setelah penyimpanan berhasil.
+          if (btn.isConnected) {
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+          }
+        });
+      };
       actions.appendChild(btn);
     });
     overlay.appendChild(modal);
