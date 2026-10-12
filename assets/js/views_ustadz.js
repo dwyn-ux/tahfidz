@@ -280,36 +280,48 @@ const Ustadz = (() => {
       <td>${UI.fmtDate(j.tanggal)}</td><td>${UI.esc(j.ustadz || '-')}</td>
       <td><b>${UI.esc(j.judulKitab)}</b></td><td>${UI.esc(j.bab)}</td>
       <td>${UI.esc(j.pembahasan)}</td><td>${UI.esc(j.halaman)}</td>
+      <td><button class="clay-btn sm ghost" type="button" data-continue-talim="${UI.esc(j.id)}">Lanjutkan</button></td>
     </tr>`).join('');
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card">
         <div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap">
-          <div><div class="section-title" style="margin:0">Jurnal Kemajuan Ta’lim Malam</div><div class="muted" style="font-size:13px">Catat materi yang telah disampaikan.</div></div>
+          <div><div class="section-title" style="margin:0">Jurnal Kemajuan Ta’lim Malam</div><div class="muted" style="font-size:13px">Gunakan tombol Lanjutkan pada histori untuk memakai data jurnal sebelumnya.</div></div>
           <div class="row"><button class="clay-btn ghost" id="btn-talim-absen">Absensi Ta’lim Malam</button><button class="clay-btn primary" id="btn-talim-add">+ Isi Jurnal</button></div>
         </div>
-        <div class="table-wrap mt"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Ustadz</th><th>Judul Kitab</th><th>Bab</th><th>Pembahasan</th><th>Halaman</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="6"><div class="empty">Belum ada jurnal ta’lim malam.</div></td></tr>'}</tbody></table></div>
+        <div class="table-wrap mt"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Ustadz</th><th>Judul Kitab</th><th>Bab</th><th>Pembahasan</th><th>Halaman</th><th>Aksi</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="7"><div class="empty">Belum ada jurnal ta’lim malam.</div></td></tr>'}</tbody></table></div>
       </div>`;
     document.getElementById('btn-talim-absen').onclick = () => App.navigate('ustadz_talim_absensi');
     document.getElementById('btn-talim-add').onclick = () => talimForm();
+    document.querySelectorAll('[data-continue-talim]').forEach(btn => {
+      btn.onclick = () => {
+        const journal = journals.find(j => j.id === btn.dataset.continueTalim);
+        if (journal) talimForm(journal);
+      };
+    });
   }
 
-  function talimForm() {
+  function talimForm(sourceJournal = null) {
     const db = Store.get();
     const session = Store.getSession();
     const currentUstadz = Store.findUstadz(session?.refId);
     const isAdmin = session?.role === 'admin';
+    const source = sourceJournal || {};
+    const copiedFrom = sourceJournal
+      ? `<div class="badge blue" style="margin-bottom:12px">Data dilanjutkan dari jurnal ${UI.esc(UI.fmtDate(source.tanggal))}. Silakan sesuaikan materi atau halaman terbaru.</div>`
+      : '';
     const body = `
+      ${copiedFrom}
       ${UI.field('Tanggal', `<input class="clay-input" id="f-talim-tgl" type="date" value="${Store.todayStr()}">`)}
       ${UI.field('Ustadz', isAdmin
-        ? `<select class="clay-select" id="f-talim-ustadz"><option value="">- Pilih Ustadz -</option>${UI.optionsFromList(db.ustadz.map(u => ({ v: u.id, l: u.nama })), 'v', 'l', '')}</select>`
+        ? `<select class="clay-select" id="f-talim-ustadz"><option value="">- Pilih Ustadz -</option>${UI.optionsFromList(db.ustadz.map(u => ({ v: u.id, l: u.nama })), 'v', 'l', source.ustadzId || '')}</select>`
         : `<input class="clay-input" value="${UI.esc(currentUstadz?.nama || 'Ustadz')}" disabled>`)}
-      ${UI.field('Judul Kitab', `<input class="clay-input" id="f-talim-kitab" placeholder="Contoh: Riyadhus Shalihin">`)}
-      ${UI.field('Bab', `<input class="clay-input" id="f-talim-bab" placeholder="Contoh: Bab Keikhlasan">`)}
-      ${UI.field('Pembahasan', `<textarea class="clay-textarea" id="f-talim-bahas" placeholder="Ringkasan materi yang dibahas"></textarea>`)}
-      ${UI.field('Halaman', `<input class="clay-input" id="f-talim-halaman" placeholder="Contoh: 12–15">`)}`;
+      ${UI.field('Judul Kitab', `<input class="clay-input" id="f-talim-kitab" placeholder="Contoh: Riyadhus Shalihin" value="${UI.esc(source.judulKitab || '')}">`)}
+      ${UI.field('Bab', `<input class="clay-input" id="f-talim-bab" placeholder="Contoh: Bab Keikhlasan" value="${UI.esc(source.bab || '')}">`)}
+      ${UI.field('Pembahasan', `<textarea class="clay-textarea" id="f-talim-bahas" placeholder="Ringkasan materi yang dibahas">${UI.esc(source.pembahasan || '')}</textarea>`)}
+      ${UI.field('Halaman', `<input class="clay-input" id="f-talim-halaman" placeholder="Contoh: 12–15" value="${UI.esc(source.halaman || '')}">`)}`;
     UI.openModal({
-      title: 'Isi Jurnal Ta’lim Malam', bodyHTML: body,
+      title: sourceJournal ? 'Lanjutkan Jurnal Ta’lim Malam' : 'Isi Jurnal Ta’lim Malam', bodyHTML: body,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, close) => close() },
         { label: 'Simpan', cls: 'primary', onClick: async (m, close) => {
