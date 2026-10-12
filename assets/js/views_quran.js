@@ -284,6 +284,7 @@ const Quran = (() => {
     const nav = `<button class="nav-item active" data-view="quran"><span class="ico"></span> Al-Qur'an</button>`;
     document.getElementById('app').innerHTML = `
       <div class="app-shell">
+        <div class="scrim" id="scrim"></div>
         <aside class="sidebar" id="sidebar">
           <div class="brand"><span class="logo"></span> Tahfidzku</div>
           ${nav}
@@ -297,6 +298,7 @@ const Quran = (() => {
         <main class="main">
           <div class="topbar">
             <div>
+              <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Buka menu navigasi" aria-controls="sidebar" aria-expanded="false">☰</button>
               <h1 id="page-title">Al-Qur'an</h1>
               <div class="sub" id="page-sub">Baca mushaf & terjemah</div>
             </div>
@@ -305,6 +307,24 @@ const Quran = (() => {
           <div id="view-content"></div>
         </main>
       </div>`;
+    const sidebar = document.getElementById('sidebar');
+    const scrim = document.getElementById('scrim');
+    const menuToggle = document.getElementById('menu-toggle');
+    const closeMenu = () => {
+      sidebar.classList.remove('open');
+      scrim.classList.remove('show');
+      document.body.classList.remove('nav-open');
+      menuToggle.setAttribute('aria-expanded', 'false');
+    };
+    menuToggle.onclick = () => {
+      const isOpen = sidebar.classList.toggle('open');
+      scrim.classList.toggle('show', isOpen);
+      document.body.classList.toggle('nav-open', isOpen);
+      menuToggle.setAttribute('aria-expanded', String(isOpen));
+    };
+    scrim.onclick = closeMenu;
+    document.onkeydown = (e) => { if (e.key === 'Escape') closeMenu(); };
+    window.onresize = () => { if (window.innerWidth > 860) closeMenu(); };
     document.getElementById('btn-back-login').onclick = () => { Auth.renderLogin(); };
   }
 

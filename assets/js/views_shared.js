@@ -33,7 +33,7 @@ const Shared = (() => {
         <main class="main">
           <div class="topbar">
             <div>
-              <button class="menu-toggle" id="menu-toggle">☰</button>
+              <button class="menu-toggle" id="menu-toggle" type="button" aria-label="Buka menu navigasi" aria-controls="sidebar" aria-expanded="false">☰</button>
               <h1 id="page-title">Dashboard</h1>
               <div class="sub" id="page-sub">${UI.esc(db.settings.namaLembaga)}</div>
             </div>
@@ -47,14 +47,27 @@ const Shared = (() => {
     document.getElementById('btn-logout').onclick = () => {
       Store.logout(); UI.toast('Berhasil keluar', 'info'); Auth.renderLogin();
     };
-    document.getElementById('menu-toggle').onclick = () => {
-      document.getElementById('sidebar').classList.toggle('open');
-      document.getElementById('scrim').classList.toggle('show');
+    const menuToggle = document.getElementById('menu-toggle');
+    const sidebar = document.getElementById('sidebar');
+    const scrim = document.getElementById('scrim');
+    const closeMenu = () => {
+      sidebar.classList.remove('open');
+      scrim.classList.remove('show');
+      document.body.classList.remove('nav-open');
+      menuToggle.setAttribute('aria-expanded', 'false');
     };
+    const toggleMenu = () => {
+      const isOpen = sidebar.classList.toggle('open');
+      scrim.classList.toggle('show', isOpen);
+      document.body.classList.toggle('nav-open', isOpen);
+      menuToggle.setAttribute('aria-expanded', String(isOpen));
+    };
+    menuToggle.onclick = toggleMenu;
     document.getElementById('scrim').onclick = () => {
-      document.getElementById('sidebar').classList.remove('open');
-      document.getElementById('scrim').classList.remove('show');
+      closeMenu();
     };
+    document.onkeydown = (e) => { if (e.key === 'Escape') closeMenu(); };
+    window.onresize = () => { if (window.innerWidth > 860) closeMenu(); };
     document.querySelectorAll('.nav-item').forEach(b => {
       b.onclick = () => { App.navigate(b.dataset.view); };
     });

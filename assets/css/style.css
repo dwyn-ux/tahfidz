@@ -26,6 +26,8 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+html, body { max-width: 100%; overflow-x: hidden; }
+
 body {
   font-family: 'Inter', 'Poppins', sans-serif;
   background: var(--bg);
@@ -37,7 +39,7 @@ body {
 h1, h2, h3, h4, .brand { font-family: 'Poppins', sans-serif; }
 
 /* ---------- Layout ---------- */
-.app-shell { display: flex; min-height: 100vh; }
+.app-shell { display: flex; width: 100%; min-width: 0; min-height: 100vh; }
 
 .sidebar {
   width: 260px;
@@ -90,7 +92,7 @@ h1, h2, h3, h4, .brand { font-family: 'Poppins', sans-serif; }
 .sidebar .user-box b { display: block; font-size: 14px; }
 
 .main {
-  flex: 1; padding: 28px 32px; overflow-x: hidden;
+  flex: 1 1 auto; min-width: 0; padding: 28px 32px; overflow-x: hidden;
 }
 .topbar {
   display: flex; align-items: center; justify-content: space-between;
@@ -325,20 +327,25 @@ label.field-label { display: block; font-size: 13px; font-weight: 600; margin: 1
 /* ---------- Responsive ---------- */
 /* Tablet & below: sidebar becomes an off-canvas drawer */
 @media (max-width: 860px) {
+  body.nav-open { overflow: hidden; }
   .sidebar {
     position: fixed; top: 0; left: 0; z-index: 60;
-    height: 100vh; max-height: 100vh;
-    transform: translateX(-110%);
+    width: min(84vw, 320px); height: 100dvh; max-height: 100dvh;
+    transform: translate3d(-105%, 0, 0);
     transition: transform .25s ease;
     border-radius: 0 var(--radius-xl) var(--radius-xl) 0;
+    visibility: hidden; pointer-events: none;
   }
-  .sidebar.open { transform: translateX(0) !important; box-shadow: var(--shadow-clay); }
+  .sidebar.open {
+    transform: translate3d(0, 0, 0) !important;
+    visibility: visible; pointer-events: auto; box-shadow: var(--shadow-clay);
+  }
   .main { padding: 18px; }
   .menu-toggle { display: grid !important; }
 }
 /* Phone: tighter spacing, smaller type */
 @media (max-width: 560px) {
-  .sidebar { width: 84vw; max-width: 300px; padding: 18px 14px; }
+  .sidebar { width: min(88vw, 320px); max-width: 320px; padding: 18px 14px; }
   .sidebar.open { transform: translateX(0) !important; }
   .main { padding: 14px; }
   .topbar { margin-bottom: 16px; }
@@ -369,7 +376,7 @@ label.field-label { display: block; font-size: 13px; font-weight: 600; margin: 1
 }
 .scrim { display: none; }
 @media (max-width: 860px) {
-  .scrim.show { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 55; }
+  .scrim.show { display: block; position: fixed; inset: 0; background: rgba(15,23,42,.42); z-index: 55; }
 }
 
 /* ---------- Al-Qur'an Reader ---------- */
@@ -547,11 +554,19 @@ label.field-label { font-size: 12px; letter-spacing: .02em; color: #526172; }
 .auth-card .tagline { font-size: 14px; }
 
 @media (max-width: 860px) {
-  .sidebar { border-radius: 0 20px 20px 0; box-shadow: 12px 0 34px rgba(15,23,42,.12); }
+  .sidebar {
+    width: min(84vw, 320px); max-width: 320px;
+    border-radius: 0 20px 20px 0; box-shadow: 12px 0 34px rgba(15,23,42,.12);
+  }
   .main { padding: 22px; }
 }
 
 @media (max-width: 560px) {
+  .sidebar { width: min(88vw, 320px); }
+  .topbar > div:first-child { min-width: 0; }
+  .menu-toggle { margin-bottom: 8px; }
+  .topbar .actions { width: 100%; }
+  .topbar .actions > * { min-width: 0; max-width: 100%; }
   .main { padding: 14px; }
   .clay-card { padding: 17px; border-radius: 16px; }
   .stat { padding: 15px; }
@@ -583,6 +598,18 @@ label.field-label { font-size: 12px; letter-spacing: .02em; color: #526172; }
   .clay-table td:last-child { border-bottom: 0; }
   .clay-table td .row { gap: 6px; }
   .clay-table td .clay-btn { padding: 7px 10px; font-size: 12px; }
+}
+
+/* Compact phones: prevent wide controls or inline content from forcing a
+   desktop-scale viewport.  Individual data tables become cards below. */
+@media (max-width: 420px) {
+  .grid.kpi { grid-template-columns: 1fr; }
+  .row > .clay-btn { max-width: 100%; white-space: normal; }
+  .search-box { min-width: 0; width: 100%; }
+  .search-drop { left: 0; right: auto; min-width: min(280px, 100%); }
+  #toast-root { top: 12px; right: 12px; left: 12px; }
+  .toast { min-width: 0; width: 100%; }
+  .fab { right: 16px; bottom: 16px; width: 54px; height: 54px; }
 }
 
 /* ---------- Al-Qur'an: focused full-page mushaf ---------- */

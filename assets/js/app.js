@@ -76,6 +76,7 @@ const App = (() => {
     // close mobile sidebar
     const sb = document.getElementById('sidebar'); const sc = document.getElementById('scrim');
     if (sb) sb.classList.remove('open'); if (sc) sc.classList.remove('show');
+    document.body.classList.remove('nav-open');
   }
 
   async function start() {
