@@ -127,9 +127,11 @@ const Ustadz = (() => {
     const isTalim = initialSesi === 'Ta’lim Malam';
     const navItems = (c.role === 'admin') ? Admin.nav(isTalim ? 'ustadz_talim' : 'ustadz_absensi') : nav(isTalim ? 'ustadz_talim' : 'ustadz_absensi');
     Shared.shell(c.role, navItems, '');
-    Shared.setHeader(isTalim ? 'Absensi Ta’lim Malam' : 'Absensi', 'Default: Hadir (klik yang berubah)');
+    Shared.setHeader(isTalim ? 'Absensi Ta’lim Malam' : 'Absensi', 'Pilih status untuk santri yang akan diabsen');
     const db = Store.get();
-    const allSantri = mySantri();
+    // Opsi "Semua Santri" memang harus memperlihatkan seluruh roster,
+    // sedangkan opsi kedua membatasi ke halaqah ustadz yang sedang login.
+    const allSantri = db.santri;
     const t = Store.todayStr();
     let sesiAktif = initialSesi;
     let halaqahFilter = '';
@@ -155,7 +157,7 @@ const Ustadz = (() => {
       sessionRecords.forEach(k => existing[k.santriId] = k.status);
 
       const rows = santri.map(s => {
-        const cur = pendingStatus[s.id] || existing[s.id] || 'Hadir';
+        const cur = pendingStatus[s.id] || existing[s.id] || '';
         return `<tr data-id="${s.id}">
           <td><b>${UI.esc(s.nama)}</b></td>
           <td>
@@ -166,7 +168,9 @@ const Ustadz = (() => {
               <button class="clay-btn sm ${cur === 'Alfa' ? 'danger' : 'ghost'}" data-st="Alfa" ${isEditing ? '' : 'disabled'}> Alfa</button>
             </div>
           </td>
-          <td><span class="badge ${cur === 'Hadir' ? 'green' : cur === 'Izin' ? 'warn' : cur === 'Sakit' ? 'blue' : 'danger'}">${UI.esc(cur)}</span></td>
+          <td>${cur
+            ? `<span class="badge ${cur === 'Hadir' ? 'green' : cur === 'Izin' ? 'warn' : cur === 'Sakit' ? 'blue' : 'danger'}">${UI.esc(cur)}</span>`
+            : '<span class="muted">Belum dipilih</span>'}</td>
         </tr>`;
       }).join('');
 
@@ -199,15 +203,11 @@ const Ustadz = (() => {
         </div>`;
 
       const halaqahSelect = document.getElementById('abs-halaqah');
-      // Ambil dari master halaqah sekaligus data santri. Dengan begitu admin
-      // selalu dapat memilih semua halaqah yang berlaku, dan "Semua Halaqah"
-      // benar-benar menampilkan seluruh roster, bukan hanya opsi yang kebetulan
-      // sudah muncul dari data absensi.
-      const halaqahOptions = [...new Set([
-        ...db.halaqah.map(h => h.nama),
-        ...allSantri.map(s => s.halaqah)
-      ].filter(Boolean))].sort();
-      halaqahSelect.innerHTML = '<option value="">Semua Halaqah</option>' + halaqahOptions.map(name => '<option value="' + UI.esc(name) + '">' + UI.esc(name) + '</option>').join('');
+      // Ustadz memilih antara seluruh santri atau halaqah yang diampunya.
+      // Jangan tampilkan daftar halaqah lain pada form absensi.
+      const ownHalaqah = myHalaqah();
+      halaqahSelect.innerHTML = '<option value="">Semua Santri</option>'
+        + (ownHalaqah ? '<option value="' + UI.esc(ownHalaqah) + '">' + UI.esc(ownHalaqah) + '</option>' : '');
       halaqahSelect.value = halaqahFilter;
       const searchInput = document.getElementById('abs-search');
       searchInput.value = searchTerm;
@@ -251,12 +251,13 @@ const Ustadz = (() => {
       if (saveButton) saveButton.onclick = async () => {
         const db = Store.get();
         const t = Store.todayStr();
-        // Pencarian hanya menyaring tampilan. Saat disimpan, seluruh santri
-        // pada halaqah terpilih tetap mendapat satu catatan sesi.
+        // Pencarian hanya menyaring tampilan. Hanya santri yang statusnya
+        // dipilih yang mendapatkan catatan; tidak ada lagi default Hadir.
         const allState = {};
         roster.forEach(s => {
           const previous = sessionRecords.find(k => k.santriId === s.id);
-          allState[s.id] = pendingStatus[s.id] || (previous ? previous.status : 'Hadir');
+          const status = pendingStatus[s.id] || (previous ? previous.status : '');
+          if (status) allState[s.id] = status;
         });
         db.kehadiran = db.kehadiran.filter(k => !(k.tanggal === t && k.sesi === sesiAktif && roster.some(s => s.id === k.santriId)));
         Object.keys(allState).forEach(sid => {
