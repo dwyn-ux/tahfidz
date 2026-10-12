@@ -259,11 +259,17 @@ function requireAdmin() {
     return requireRole('admin');
 }
 
-/* ---------------- Generic record store ----------------
-   All entities live in `records` (type, id, data JSON) except
-   `users` (auth) and `settings` (single row). This maps 1:1 to
-   the JS `db` object so the frontend barely changes.            */
+require_once __DIR__ . '/normalized_store.php';
+
+/* ---------------- Record store ----------------
+   Instalasi lama tetap memakai tabel `records` sampai migrate.php selesai.
+   Sesudah itu, fungsi publik yang dipakai API ini otomatis mengarah ke tabel
+   per-entitas; tabel legacy tidak dihapus dan tetap menjadi arsip rollback. */
 function getRecords($type): array {
+    if (NormalizedStore::isActive()) return NormalizedStore::getRecords($type);
+    return legacyGetRecords($type);
+}
+function legacyGetRecords($type): array {
     $stmt = pdo()->prepare('SELECT id, data FROM records WHERE type = ?');
     $stmt->execute([$type]);
     $out = [];
@@ -275,6 +281,10 @@ function getRecords($type): array {
     return $out;
 }
 function getRecord($type, $id) {
+    if (NormalizedStore::isActive()) return NormalizedStore::getRecord($type, $id);
+    return legacyGetRecord($type, $id);
+}
+function legacyGetRecord($type, $id) {
     $stmt = pdo()->prepare('SELECT data FROM records WHERE type = ? AND id = ?');
     $stmt->execute([$type, $id]);
     $r = $stmt->fetch();
@@ -284,13 +294,30 @@ function getRecord($type, $id) {
     return $obj;
 }
 function putRecord($type, $id, $obj) {
+    if (NormalizedStore::isActive()) {
+        NormalizedStore::put($type, $id, $obj);
+        return;
+    }
     $data = json_encode($obj, JSON_UNESCAPED_UNICODE);
     $stmt = pdo()->prepare(upsertSQL('records', ['id', 'type', 'data']));
     $stmt->execute([$id, $type, $data]);
 }
 function delRecord($type, $id) {
+    if (NormalizedStore::isActive()) {
+        NormalizedStore::delete($type, $id);
+        return;
+    }
     $stmt = pdo()->prepare('DELETE FROM records WHERE type = ? AND id = ?');
     $stmt->execute([$type, $id]);
+}
+
+function resetApplicationRecords(): void {
+    if (NormalizedStore::isActive()) {
+        // Jangan menyentuh `records`: setelah migrasi tabel itu adalah arsip.
+        NormalizedStore::clearCurrentRecords();
+        return;
+    }
+    pdo()->exec('DELETE FROM records');
 }
 
 /* ---------------- Settings ---------------- */

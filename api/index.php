@@ -123,8 +123,9 @@ switch ($action) {
     /* ---------------- RESET (admin reseed) ---------------- */
     case 'reset':
         $u = requireAdmin();
-        // clear all records + settings, keep users
-        pdo()->exec('DELETE FROM records');
+        // Bersihkan data aktif saja. Setelah migrasi, tabel `records` lama
+        // tetap merupakan arsip rollback dan tidak pernah dihapus di sini.
+        resetApplicationRecords();
         pdo()->exec('DELETE FROM settings');
         saveSettings(defaultSettings());
         send(['ok' => true]);

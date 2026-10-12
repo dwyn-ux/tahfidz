@@ -94,6 +94,40 @@ Laporan tahsin/ziyadah/mutqin otomatis terkirim ke `noHpWali` saat setoran disim
 > dan file database dari akses web, serta meneruskan header `Authorization`
 > (diperlukan untuk login di PHP-FPM/FastCGI).
 
+### Migrasi database lama
+
+Versi lama menyimpan seluruh data operasional di tabel `records` sebagai JSON.
+Versi ini memisahkannya ke tabel per entitas (`santri`, `wali`, `ustadz`,
+`halaqah`, `kehadiran`, `jurnal_talim`, tabel setoran, notifikasi, dan log).
+
+Migrasi **tidak menghapus atau mengubah** tabel lama `records`, `users`, atau
+`settings`. Tabel `records` tetap disimpan sebagai arsip rollback. Aplikasi baru
+baru akan menggunakan tabel terstruktur setelah seluruh penyalinan tervalidasi.
+
+1. Backup database dari cPanel/phpMyAdmin seperti biasa.
+2. Upload rilis aplikasi ini. Sebelum migrasi dijalankan, aplikasi tetap membaca
+   tabel lama sehingga tidak ada downtime data.
+3. Jalankan salah satu cara berikut:
+
+   ```bash
+   php api/migrate.php
+   ```
+
+   Atau, untuk shared hosting tanpa SSH, tambahkan nilai acak `MIGRATION_TOKEN`
+   pada `api/.env`, lalu buka sekali:
+
+   ```
+   https://domain-anda.com/api/migrate.php?token=ISI_MIGRATION_TOKEN
+   ```
+
+4. Pastikan respons menyatakan `"status":"migrated"` beserta jumlah data tiap
+   jenis. Menjalankan script lagi aman dan hanya mengembalikan
+   `"status":"already_migrated"`.
+
+Jika ditemukan absensi lama yang ganda untuk santri, tanggal, dan sesi yang sama,
+migrasi dibatalkan tanpa perubahan pada tabel lama. Rapikan duplikat tersebut
+terlebih dahulu, kemudian jalankan lagi.
+
 ---
 
 ## Demo Login
@@ -135,9 +169,10 @@ tahfidzku/
 
 ## Catatan Teknis
 
-- **Penyimpanan**: tabel generik `records` (id, type, data JSON) untuk semua entitas,
-  tabel `users` untuk autentikasi, dan `settings` untuk konfigurasi lembaga.
-  Model ini memetakan 1:1 ke struktur data frontend sehingga migrasi dari localStorage mulus.
+- **Penyimpanan**: tabel per-entitas untuk data akademik dan operasional, dengan
+  index pada relasi dan tanggal yang sering dipakai laporan. `users` menangani
+  autentikasi dan `settings` menyimpan konfigurasi lembaga. Instalasi lama
+  mempertahankan tabel `records` sebagai arsip setelah migrasi berhasil.
 - **Autentikasi**: token HMAC-SHA256 (gaya JWT) di header `Authorization: Bearer`.
   Password di-hash dengan `password_hash()`. Kunci token dari `APP_SECRET` di `.env`
   (jika kosong, otomatis dibuat dan disimpan di `api/.secret`; folder `api/` harus bisa ditulis).

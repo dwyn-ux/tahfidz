@@ -10,6 +10,7 @@
  * Usage: api/install.php?token=YOUR_INSTALL_TOKEN
  */
 require_once __DIR__ . '/config.php';
+$installToken = $envVars['INSTALL_TOKEN'] ?? '';
 
 /* ---------------- Install protection ----------------
  * Web access requires INSTALL_TOKEN from .env. CLI (php api/install.php) is allowed
@@ -42,8 +43,6 @@ try {
             id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL, role TEXT NOT NULL, refId TEXT)");
         $p->exec("CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY, data TEXT NOT NULL)");
-        $p->exec("CREATE TABLE IF NOT EXISTS records (id TEXT PRIMARY KEY, type TEXT NOT NULL, data TEXT NOT NULL)");
-        $p->exec("CREATE INDEX IF NOT EXISTS idx_type ON records(type)");
     } else {
         $p->exec("CREATE TABLE IF NOT EXISTS users (
             id VARCHAR(40) PRIMARY KEY,
@@ -55,14 +54,11 @@ try {
         $p->exec("CREATE TABLE IF NOT EXISTS settings (
             id INT PRIMARY KEY, data JSON NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-        $p->exec("CREATE TABLE IF NOT EXISTS records (
-            id VARCHAR(40) PRIMARY KEY,
-            type VARCHAR(40) NOT NULL,
-            data JSON NOT NULL,
-            INDEX idx_type (type)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
 
+    // Instalasi baru langsung memakai tabel per-entitas. Tabel `records`
+    // hanya dipertahankan pada instalasi lama sebagai arsip saat migrasi.
+    NormalizedStore::activateFreshDatabase();
     saveSettings(defaultSettings());
 
     $ins = function ($type, $obj) {
