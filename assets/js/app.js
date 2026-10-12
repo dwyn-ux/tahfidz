@@ -11,6 +11,7 @@ const App = (() => {
     admin_master: () => Admin.master(),
     admin_riwayat: () => Admin.riwayat(),
     admin_laporan: () => Admin.laporan(),
+    admin_rekap_setoran: () => Admin.rekapSetoran(),
     admin_notif: () => Admin.notif(),
     admin_settings: () => Admin.settings(),
     // Ustadz

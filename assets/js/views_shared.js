@@ -463,6 +463,115 @@ const Shared = (() => {
     UI.toast('Template berhasil didownload', 'success');
   }
 
+  /* ---------- Rekap setoran mingguan ---------- */
+  const HARI_SETORAN = [
+    { label: 'Sen', offset: 0 }, { label: 'Sel', offset: 1 },
+    { label: 'Rab', offset: 2 }, { label: 'Kam', offset: 3 },
+    { label: 'Jum', offset: 4 }
+  ];
+  const JENIS_SETORAN = {
+    tahsin: 'Tahsin',
+    ziyadahBacaan: 'Ziyadah Bacaan',
+    ziyadahHafalan: 'Ziyadah Hafalan',
+    mutqin: 'Mutqin'
+  };
+
+  function dateKey(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  // Nilai input boleh hari apa saja; laporan selalu dimulai dari hari Senin.
+  function mondayOf(value) {
+    const source = /^\d{4}-\d{2}-\d{2}$/.test(value || '') ? value : Store.todayStr();
+    const date = new Date(source + 'T12:00:00');
+    const day = date.getDay();
+    date.setDate(date.getDate() + (day === 0 ? -6 : 1 - day));
+    return dateKey(date);
+  }
+
+  function weeklyDepositGroups(filters) {
+    const db = Store.get();
+    const f = filters || {};
+    const week = mondayOf(f.week);
+    const start = new Date(week + 'T12:00:00');
+    const days = HARI_SETORAN.map(h => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + h.offset);
+      return { ...h, tanggal: dateKey(date) };
+    });
+    const ustadz = f.ustadzId && db.ustadz.find(u => u.id === f.ustadzId);
+    const setoran = new Map();
+    Object.keys(JENIS_SETORAN).forEach(type => {
+      (db[type] || []).forEach(record => {
+        if (!record.santriId || !record.tanggal) return;
+        const key = record.santriId + '|' + record.tanggal;
+        const existing = setoran.get(key) || [];
+        if (!existing.includes(type)) existing.push(type);
+        setoran.set(key, existing);
+      });
+    });
+    let halaqah = db.halaqah.slice();
+    if (f.halaqah) halaqah = halaqah.filter(h => h.nama === f.halaqah);
+    if (f.ustadzId) halaqah = halaqah.filter(h => h.ustadzId === f.ustadzId || (ustadz && h.ustadz === ustadz.nama));
+    const today = Store.todayStr();
+    const groups = halaqah.map(h => {
+      const santri = db.santri
+        .filter(s => s.halaqah === h.nama && s.status !== 'Nonaktif')
+        .sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+      const rows = santri.map(s => {
+        const cells = days.map(day => {
+          const types = setoran.get(s.id + '|' + day.tanggal) || [];
+          if (day.tanggal > today) return { status: 'future', types: [] };
+          return types.length ? { status: 'submitted', types } : { status: 'missing', types: [] };
+        });
+        return { s, cells, missing: cells.filter(c => c.status === 'missing').length };
+      });
+      return { h, rows };
+    });
+    return { week, days, groups };
+  }
+
+  function renderRekapSetoranMingguan(filters) {
+    const recap = weeklyDepositGroups(filters);
+    const weekEnd = recap.days[recap.days.length - 1].tanggal;
+    const groups = recap.groups.map(group => {
+      const body = group.rows.map((row, index) => {
+        const cells = row.cells.map(cell => {
+          if (cell.status === 'future') return '<td class="center"><span class="badge gray">—</span></td>';
+          if (cell.status === 'submitted') {
+            const title = cell.types.map(type => JENIS_SETORAN[type]).join(', ');
+            return `<td class="center" title="${UI.esc(title)}"><span class="badge green">✓</span></td>`;
+          }
+          return '<td class="center"><span class="badge danger">Belum</span></td>';
+        }).join('');
+        return `<tr>
+          <td class="center">${index + 1}</td>
+          <td><b>${UI.esc(row.s.nama)}</b><div class="muted" style="font-size:12px">${UI.esc(row.s.nis || '-')}</div></td>
+          <td>${UI.esc(row.s.level || '-')}</td>
+          ${cells}
+          <td class="center"><b>${row.missing}</b></td>
+        </tr>`;
+      }).join('');
+      return `<div class="clay-card mb">
+        <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px">
+          <div><div class="section-title" style="margin:0">${UI.esc(group.h.nama)}</div><div class="muted" style="font-size:12px">Ustadz: ${UI.esc(group.h.ustadz || 'Belum ditetapkan')} · ${group.rows.length} santri aktif</div></div>
+          <span class="badge blue">${UI.esc(group.h.level || '-')}</span>
+        </div>
+        <div class="table-wrap"><table class="clay-table">
+          <thead><tr><th class="center">No</th><th>Santri</th><th>Level</th>${recap.days.map(day => `<th class="center">${day.label}<br><span style="font-weight:400;font-size:11px">${day.tanggal.slice(8)}</span></th>`).join('')}<th class="center">Belum</th></tr></thead>
+          <tbody>${body || '<tr><td colspan="9"><div class="empty">Belum ada santri aktif di halaqah ini.</div></td></tr>'}</tbody>
+        </table></div>
+      </div>`;
+    }).join('');
+    return `<div class="mb">
+      <div class="muted" style="font-size:13px;margin:0 0 12px">Pekan ${UI.esc(UI.fmtDate(recap.week))}–${UI.esc(UI.fmtDate(weekEnd))}. <span class="badge green">✓</span> sudah setoran; <span class="badge danger">Belum</span> belum setoran. Setoran dihitung dari Tahsin, Ziyadah Bacaan, Ziyadah Hafalan, dan Mutqin.</div>
+      ${groups || '<div class="empty">Tidak ada halaqah yang sesuai dengan filter.</div>'}
+    </div>`;
+  }
+
   /* ---------- Notifikasi (shared) ---------- */
   function renderNotifikasi(userId) {
     const list = Store.notifFor(userId);
@@ -482,5 +591,5 @@ const Shared = (() => {
     </div>`;
   }
 
-  return { shell, setHeader, setActions, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadTemplateExcel, bulanLabel, renderNotifikasi, ICONS, hafalanMapHTML };
+  return { shell, setHeader, setActions, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadTemplateExcel, bulanLabel, mondayOf, renderRekapSetoranMingguan, renderNotifikasi, ICONS, hafalanMapHTML };
 })();

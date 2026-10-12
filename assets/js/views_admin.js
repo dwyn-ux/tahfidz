@@ -104,6 +104,7 @@ const Admin = (() => {
       { view: 'ustadz_pembelajaran', label: 'Pembelajaran', active: active === 'ustadz_pembelajaran' },
       { view: 'admin_riwayat', label: 'Riwayat', active: active === 'admin_riwayat' },
       { view: 'admin_laporan', label: 'Laporan', active: active === 'admin_laporan' },
+      { view: 'admin_rekap_setoran', label: 'Rekap Setoran', active: active === 'admin_rekap_setoran' },
       { view: 'admin_notif', label: 'Notifikasi', active: active === 'admin_notif' },
       { view: 'admin_settings', label: 'Settings', active: active === 'admin_settings' },
       { view: 'quran', label: 'Al-Qur\'an', active: active === 'quran' }
@@ -659,30 +660,68 @@ const Admin = (() => {
   /* ---------------- Halaqah ---------------- */
   function halaqah() {
     Shared.shell('admin', nav('admin_halaqah'), '');
-    Shared.setHeader('Manajemen Halaqah', 'Kelompok pembelajaran');
+    Shared.setHeader('Manajemen Halaqah', 'Ustadz, halaqah, dan santri');
     const db = Store.get();
-    const cards = db.halaqah.map(h => `<div class="clay-card pad-sm">
-      <div class="row center" style="justify-content:space-between">
-        <b> ${UI.esc(h.nama)}</b>
-        <div><button class="clay-btn sm" data-edit="${h.id}">✏️</button> <button class="clay-btn sm danger" data-del="${h.id}">🗑</button></div>
+    const options = db.halaqah.map(h => ({ value: h.nama, label: h.nama }));
+    const moveOptions = selected => `<option value="" ${!selected ? 'selected' : ''}>Belum ditetapkan</option>${UI.optionsFromList(options, 'value', 'label', selected)}`;
+    const santriRows = santri => santri.map((s, i) => `<tr>
+      <td class="center">${i + 1}</td>
+      <td><b>${UI.esc(s.nama)}</b><div class="muted" style="font-size:12px">${UI.esc(s.nis || '-')}</div></td>
+      <td>${UI.esc(s.kelas || '-')}</td>
+      <td>${UI.esc(s.level || '-')}</td>
+      <td><select class="clay-select" data-move-target style="min-width:160px">${moveOptions(s.halaqah)}</select></td>
+      <td class="center"><button class="clay-btn sm secondary" data-save-move="${UI.esc(s.id)}">Simpan</button></td>
+    </tr>`).join('');
+    const group = (title, h, santri) => `<div class="clay-card mb">
+      <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px">
+        <div>
+          <div class="section-title" style="margin:0">${UI.esc(title)}</div>
+          ${h ? `<div class="muted" style="font-size:13px;margin-top:5px">Ustadz: <b>${UI.esc(h.ustadz || 'Belum ditetapkan')}</b> · Level: ${UI.esc(h.level || '-')} · ${UI.esc(h.hari || '-')} · ${UI.esc(h.jam || '-')} · ${UI.esc(h.ruangan || '-')}<br>Setoran Bacaan: <b>${h.setoranBacaan ? 'Aktif' : 'Nonaktif'}</b></div>` : '<div class="muted" style="font-size:13px;margin-top:5px">Santri yang belum memiliki halaqah aktif.</div>'}
+        </div>
+        ${h ? `<div><button class="clay-btn sm" data-edit-halaqah="${UI.esc(h.id)}">✏️ Edit Halaqah</button> <button class="clay-btn sm danger" data-del="${UI.esc(h.id)}">🗑</button></div>` : ''}
       </div>
-      <div class="muted" style="font-size:13px;margin-top:8px">
-        Ustadz: ${UI.esc(h.ustadz)} · Level: ${UI.esc(h.level)}<br>
-        ${h.jumlahSantri} santri · ${UI.esc(h.hari)} · ${UI.esc(h.jam)} · ${UI.esc(h.ruangan)}<br>
-        Setoran Bacaan: <b>${h.setoranBacaan ? 'Aktif' : 'Nonaktif'}</b>
-      </div>
-    </div>`).join('');
+      <div class="table-wrap"><table class="clay-table">
+        <thead><tr><th class="center">No</th><th>Santri</th><th>Kelas</th><th>Level</th><th>Pindah ke Halaqah</th><th class="center">Aksi</th></tr></thead>
+        <tbody>${santriRows(santri) || '<tr><td colspan="6"><div class="empty">Belum ada santri.</div></td></tr>'}</tbody>
+      </table></div>
+    </div>`;
+    const groups = db.halaqah.map(h => group(h.nama, h, db.santri.filter(s => s.halaqah === h.nama).sort((a, b) => a.nama.localeCompare(b.nama, 'id')))).join('');
+    const withoutHalaqah = db.santri.filter(s => !db.halaqah.some(h => h.nama === s.halaqah)).sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
     document.getElementById('view-content').innerHTML = `
-      <div class="row" style="justify-content:flex-end;margin-bottom:16px">
+      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div class="muted" style="font-size:13px">Pilih halaqah tujuan lalu klik <b>Simpan</b> untuk memindahkan santri.</div>
         <button class="clay-btn primary" id="btn-add">+ Tambah Halaqah</button>
       </div>
-      <div class="grid cols-3">${cards || '<div class="empty">Belum ada halaqah.</div>'}</div>`;
+      ${groups || '<div class="empty">Belum ada halaqah.</div>'}
+      ${withoutHalaqah.length ? group('Belum Ditentukan Halaqah', null, withoutHalaqah) : ''}`;
     document.getElementById('btn-add').onclick = () => halaqahForm();
-    document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => halaqahForm(b.dataset.edit));
+    document.querySelectorAll('[data-edit-halaqah]').forEach(b => b.onclick = () => halaqahForm(b.dataset.editHalaqah));
     document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
       UI.confirmDialog('Hapus Halaqah', 'Yakin hapus halaqah?', () => {
         const db = Store.get(); db.halaqah = db.halaqah.filter(x => x.id !== b.dataset.del); Store.save(); Store.log('Hapus halaqah'); UI.toast('Dihapus'); halaqah();
       });
+    });
+    document.querySelectorAll('[data-save-move]').forEach(button => button.onclick = async () => {
+      const row = button.closest('tr');
+      const target = row.querySelector('[data-move-target]').value;
+      const santri = Store.findSantri(button.dataset.saveMove);
+      if (!santri || santri.halaqah === target) { UI.toast('Belum ada perubahan halaqah', 'error'); return; }
+      const oldHalaqah = santri.halaqah || '';
+      const before = oldHalaqah || 'Belum ditetapkan';
+      santri.halaqah = target;
+      Store.recalcHalaqah();
+      button.disabled = true;
+      const saved = await Store.save();
+      if (!saved) {
+        santri.halaqah = oldHalaqah;
+        Store.recalcHalaqah();
+        button.disabled = false;
+        UI.toast('Perpindahan gagal disimpan', 'error');
+        return;
+      }
+      Store.log('Pindah santri: ' + santri.nama + ' dari ' + before + ' ke ' + (target || 'Belum ditetapkan'));
+      UI.toast('Halaqah ' + santri.nama + ' diperbarui', 'success');
+      halaqah();
     });
   }
 
@@ -857,6 +896,32 @@ const Admin = (() => {
       Shared.bindLaporanExport();
     };
     ['f-bulan', 'f-halaqah', 'f-level', 'f-kelas', 'f-status'].forEach(id => document.getElementById(id).onchange = apply);
+    apply();
+  }
+
+  /* ---------------- Rekap Setoran Mingguan ---------------- */
+  function rekapSetoran() {
+    Shared.shell('admin', nav('admin_rekap_setoran'), '');
+    Shared.setHeader('Rekap Setoran Mingguan', 'Status setoran per santri dan per hari');
+    const db = Store.get();
+    document.getElementById('view-content').innerHTML = `
+      <div class="clay-card mb">
+        <div class="row">
+          <div style="flex:1">${UI.field('Pekan (mulai Senin)', `<input type="date" class="clay-input" id="f-pekan" value="${Shared.mondayOf(Store.todayStr())}">`)}</div>
+          <div style="flex:1">${UI.field('Ustadz', `<select class="clay-select" id="f-ustadz"><option value="">Semua Ustadz</option>${UI.optionsFromList(db.ustadz.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id')).map(u => ({ v: u.id, l: u.nama })), 'v', 'l')}</select>`)}</div>
+        </div>
+      </div>
+      <div id="rekap-setoran-content"></div>`;
+    const apply = () => {
+      const weekInput = document.getElementById('f-pekan');
+      weekInput.value = Shared.mondayOf(weekInput.value);
+      document.getElementById('rekap-setoran-content').innerHTML = Shared.renderRekapSetoranMingguan({
+        week: weekInput.value,
+        ustadzId: document.getElementById('f-ustadz').value
+      });
+    };
+    document.getElementById('f-pekan').onchange = apply;
+    document.getElementById('f-ustadz').onchange = apply;
     apply();
   }
 
@@ -1132,5 +1197,5 @@ const Admin = (() => {
     if (waLogBtn) waLogBtn.onclick = renderWaLog;
   }
 
-  return { nav, dashboard, santri, ustadz, halaqah, master, riwayat, laporan, notif, settings, importSantriDialog };
+  return { nav, dashboard, santri, ustadz, halaqah, master, riwayat, laporan, rekapSetoran, notif, settings, importSantriDialog };
 })();

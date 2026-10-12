@@ -11,8 +11,9 @@ Sangat mudah di-deploy di shared hosting.
 
 ## Fitur (sesuai PRD)
 
-- **Admin**: dashboard, manajemen santri/ustadz/wali/halaqah, pengaturan lembaga, reset data.
-- **Ustadz**: input ziyadah hafalan, tahsin, kehadiran, catatan, rekap per santri.
+- **Admin**: dashboard, manajemen santri/ustadz/wali/halaqah, perpindahan santri antar-halaqah,
+  rekap setoran mingguan per ustadz, pengaturan lembaga, reset data.
+- **Ustadz**: input ziyadah hafalan, tahsin, kehadiran, catatan, serta rekap setoran mingguan dan laporan per santri.
 - **Wali**: pantau progress hafalan & kehadiran anak, lihat notifikasi, edit profil & ganti password.
 - **Perhitungan otomatis**: total hafalan (juz/halaman/ayat), rata-rata nilai, kehadiran bulanan,
   konversi ayat ↔ halaman ↔ juz berdasarkan data 114 surat Al-Qur'an.

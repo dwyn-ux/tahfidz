@@ -918,21 +918,32 @@ const Ustadz = (() => {
   function laporan() {
     const c = ctx(); _scope = c.scope;
     Shared.shell(c.role, nav('ustadz_laporan'), '');
-    Shared.setHeader('Laporan Halaqah', 'Santri yang Anda ampu');
-    const db = Store.get();
+    Shared.setHeader('Laporan Halaqah', 'Rekap setoran dan laporan santri yang Anda ampu');
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card mb">
         <div class="row">
           <div style="flex:1">${UI.field('Bulan', `<input type="month" class="clay-input" id="f-bulan" value="${Store.todayStr().slice(0, 7)}">`)}</div>
+          <div style="flex:1">${UI.field('Pekan (mulai Senin)', `<input type="date" class="clay-input" id="f-pekan" value="${Shared.mondayOf(Store.todayStr())}">`)}</div>
         </div>
       </div>
+      <div id="rekap-setoran"></div>
       <div id="lap"></div>`;
     const apply = () => {
       const bulan = document.getElementById('f-bulan').value;
-      document.getElementById('lap').innerHTML = Shared.renderLaporan({ halaqah: myHalaqah(), bulan });
+      const pekan = document.getElementById('f-pekan');
+      pekan.value = Shared.mondayOf(pekan.value);
+      const ownHalaqah = myHalaqah();
+      if (!ownHalaqah && _scope !== 'all') {
+        document.getElementById('rekap-setoran').innerHTML = '<div class="empty">Anda belum ditugaskan ke halaqah. Hubungi admin untuk pengaturan halaqah.</div>';
+        document.getElementById('lap').innerHTML = '';
+        return;
+      }
+      document.getElementById('rekap-setoran').innerHTML = Shared.renderRekapSetoranMingguan({ halaqah: ownHalaqah, week: pekan.value });
+      document.getElementById('lap').innerHTML = Shared.renderLaporan({ halaqah: ownHalaqah, bulan });
       Shared.bindLaporanExport();
     };
     document.getElementById('f-bulan').onchange = apply;
+    document.getElementById('f-pekan').onchange = apply;
     apply();
   }
 
