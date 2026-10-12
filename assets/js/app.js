@@ -62,8 +62,17 @@ const App = (() => {
     new MutationObserver(() => enhanceTables(root)).observe(root, { childList: true, subtree: true });
   }
 
-  function navigate(view) {
+  function historyUrl(view) {
+    return window.location.pathname + window.location.search + '#' + view;
+  }
+
+  function navigate(view, options = {}) {
     if (!routes[view]) view = defaultRoute[Store.getSession().role] || 'admin_dashboard';
+    // Setiap perpindahan menu dicatat agar tombol Back perangkat kembali ke
+    // halaman sebelumnya di aplikasi, bukan langsung keluar dari web.
+    if (!options.fromHistory && current !== view) {
+      window.history.pushState({ tahfidzView: view }, '', historyUrl(view));
+    }
     if (view !== 'quran') document.body.classList.remove('q-reading-fullscreen');
     current = view;
     try {
@@ -93,8 +102,20 @@ const App = (() => {
       return;
     }
     setFavicon();
-    navigate(defaultRoute[role]);
+    const hashView = window.location.hash.slice(1);
+    const initialView = routes[hashView] ? hashView : defaultRoute[role];
+    // Halaman pertama adalah akar riwayat aplikasi, bukan entri tambahan.
+    window.history.replaceState({ tahfidzView: initialView }, '', historyUrl(initialView));
+    navigate(initialView, { fromHistory: true });
   }
+
+  window.addEventListener('popstate', event => {
+    const session = Store.getSession();
+    if (!session) return;
+    const view = event.state?.tahfidzView || window.location.hash.slice(1) || defaultRoute[session.role];
+    // Menutup modal tidak perlu merender ulang menu yang sama.
+    if (view !== current) navigate(view, { fromHistory: true });
+  });
 
   return { start, navigate };
 })();

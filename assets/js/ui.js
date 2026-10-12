@@ -2,6 +2,17 @@
    Tahfidzku — UI helpers (modal, toast, format)
    ============================================================ */
 const UI = (() => {
+  const modalStack = [];
+  let ignoreNextModalPop = false;
+
+  // Hardware/browser Back closes the top-most form first. Without this,
+  // Android can leave the app while an input modal is still open.
+  window.addEventListener('popstate', () => {
+    if (ignoreNextModalPop) { ignoreNextModalPop = false; return; }
+    const top = modalStack[modalStack.length - 1];
+    if (top) top.close(true);
+  });
+
   function el(html) {
     const t = document.createElement('template');
     t.innerHTML = html.trim();
@@ -51,7 +62,21 @@ const UI = (() => {
     overlay.appendChild(modal);
     overlay.onclick = (e) => { if (e.target === overlay && opts.dismissable !== false) close(); };
     root.appendChild(overlay);
-    function close() { overlay.remove(); }
+    const modalId = 'modal_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    window.history.pushState(Object.assign({}, window.history.state || {}, { tahfidzModal: modalId }), '', window.location.href);
+    let closed = false;
+    function close(fromHistory = false) {
+      if (closed) return;
+      closed = true;
+      overlay.remove();
+      const index = modalStack.findIndex(item => item.id === modalId);
+      if (index !== -1) modalStack.splice(index, 1);
+      if (!fromHistory && window.history.state?.tahfidzModal === modalId) {
+        ignoreNextModalPop = true;
+        window.history.back();
+      }
+    }
+    modalStack.push({ id: modalId, close });
     return { modal, close };
   }
 

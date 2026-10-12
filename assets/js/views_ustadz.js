@@ -148,11 +148,9 @@ const Ustadz = (() => {
       const sessionRecords = db.kehadiran.filter(k => k.tanggal === t && k.sesi === sesiAktif && roster.some(s => s.id === k.santriId));
       const hasSaved = sessionRecords.length > 0;
       const isEditing = editing === null ? !hasSaved : editing;
-      const santri = roster.filter(s => {
-        const term = searchTerm.toLowerCase();
-        const matchesSearch = !term || (s.nama || '').toLowerCase().includes(term) || String(s.nis || '').toLowerCase().includes(term);
-        return matchesSearch;
-      });
+      // Semua baris roster tetap berada di DOM. Pencarian hanya menyembunyikan
+      // baris yang tidak cocok agar kolom pencarian tidak kehilangan fokus.
+      const santri = roster;
       const existing = {};
       sessionRecords.forEach(k => existing[k.santriId] = k.status);
 
@@ -219,7 +217,16 @@ const Ustadz = (() => {
         renderAbsensi();
       });
       halaqahSelect.onchange = () => { halaqahFilter = halaqahSelect.value; renderAbsensi(); };
-      searchInput.oninput = () => { searchTerm = searchInput.value; renderAbsensi(); };
+      const applySearch = () => {
+        const term = searchTerm.toLowerCase();
+        document.querySelectorAll('#abs-body tr[data-id]').forEach(tr => {
+          const s = roster.find(item => item.id === tr.dataset.id);
+          const matches = !term || ((s?.nama || '').toLowerCase().includes(term)) || String(s?.nis || '').toLowerCase().includes(term);
+          tr.hidden = !matches;
+        });
+      };
+      searchInput.oninput = () => { searchTerm = searchInput.value; applySearch(); };
+      applySearch();
 
       document.querySelectorAll('#abs-body tr[data-id]').forEach(tr => {
         const id = tr.dataset.id;
@@ -919,33 +926,33 @@ const Ustadz = (() => {
   function renderUmum() {
     const db = Store.get();
     const allSantri = db.santri.filter(s => s.status === 'Aktif');
-    let filterText = '';
-    
-    function renderTable(santri) {
-      let html = `
-        <div class="clay-card">
-          <div class="row" style="justify-content:space-between">
-            <div class="section-title" style="margin:0">Setoran Umum (${santri.length} santri)</div>
-            <input class="clay-input" id="cari-santri" type="text" placeholder="Cari nama santri..." value="${UI.esc(filterText)}" style="max-width:260px" autocomplete="off" />
-          </div>
-          <div class="table-wrap mt">
-            <table class="clay-table">
-              <thead>
-                <tr><th>Santri</th><th>Kelas</th><th>Level</th><th>Total Hafalan</th><th>Nilai</th><th>Aksi</th></tr>
-              </thead>
-              <tbody>`;
-      
+    document.getElementById('tab-content').innerHTML = `
+      <div class="clay-card">
+        <div class="row" style="justify-content:space-between">
+          <div class="section-title" id="setoran-umum-title" style="margin:0">Setoran Umum (${allSantri.length} santri)</div>
+          <input class="clay-input" id="cari-santri" type="text" placeholder="Cari nama santri..." style="max-width:260px" autocomplete="off" />
+        </div>
+        <div class="table-wrap mt"><table class="clay-table">
+          <thead><tr><th>Santri</th><th>Kelas</th><th>Level</th><th>Total Hafalan</th><th>Nilai</th><th>Aksi</th></tr></thead>
+          <tbody id="setoran-umum-body"></tbody>
+        </table></div>
+      </div>`;
+
+    function renderRows(santri) {
+      const body = document.getElementById('setoran-umum-body');
+      const title = document.getElementById('setoran-umum-title');
+      title.textContent = 'Setoran Umum (' + santri.length + ' santri)';
       if (!santri.length) {
-        html += '<tr><td colspan="6"><div class="empty">Tidak ada santri.</div></td></tr>';
+        body.innerHTML = '<tr><td colspan="6"><div class="empty">Tidak ada santri.</div></td></tr>';
+        return;
       }
-      santri.forEach(s => {
+      body.innerHTML = santri.map(s => {
         const totalH = Store.totalHafalanSantri(s.id);
         const avg = Store.avgNilai(s.id);
         let btnLabel = '+ Input', btnCls = 'primary';
         if (s.level === 'Ziyadah') { btnLabel = '+ Setoran'; btnCls = 'secondary'; }
         else if (s.level === 'Mutqin') { btnLabel = '+ Murajaah'; btnCls = 'success'; }
-        
-        html += `<tr>
+        return `<tr>
           <td><b>${UI.esc(s.nama)}</b><div class="muted" style="font-size:12px">${UI.esc(s.nis)}</div></td>
           <td>${UI.esc(s.kelas)}</td>
           <td><span class="badge ${s.level === 'Tahsin' ? 'blue' : s.level === 'Ziyadah' ? 'green' : 'warn'}">${UI.esc(s.level)}</span></td>
@@ -953,30 +960,19 @@ const Ustadz = (() => {
           <td>${avg ? '<b>' + avg + '</b>' : '<span class="muted">-</span>'}</td>
           <td><button class="clay-btn sm ${btnCls}" data-input="${s.id}">${btnLabel}</button></td>
         </tr>`;
-      });
-      
-      html += '</tbody></table></div></div>';
-      
-      document.getElementById('tab-content').innerHTML = html;
-      
-      const input = document.getElementById('cari-santri');
-      if (input) {
-        input.focus();
-        input.setSelectionRange(input.value.length, input.value.length);
-        input.oninput = () => {
-          filterText = input.value.trim().toLowerCase();
-          const filtered = allSantri.filter(s =>
-            s.nama.toLowerCase().includes(filterText) ||
-            (s.nis && s.nis.toString().toLowerCase().includes(filterText))
-          );
-          renderTable(filtered);
-        };
-      }
-      
-      document.querySelectorAll('[data-input]').forEach(b => b.onclick = () => umumInput(b.dataset.input));
+      }).join('');
+      body.querySelectorAll('[data-input]').forEach(b => b.onclick = () => umumInput(b.dataset.input));
     }
-    
-    renderTable(allSantri);
+
+    const input = document.getElementById('cari-santri');
+    input.oninput = () => {
+      const term = input.value.trim().toLowerCase();
+      renderRows(allSantri.filter(s =>
+        s.nama.toLowerCase().includes(term) ||
+        (s.nis && s.nis.toString().toLowerCase().includes(term))
+      ));
+    };
+    renderRows(allSantri);
   }
 
   function formatHafalan(h) {
