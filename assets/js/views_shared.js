@@ -477,6 +477,14 @@ const Shared = (() => {
     mutqin: 'Mutqin'
   };
 
+  function jenisSetoranUntukProgram(programs) {
+    const types = [];
+    if (programs.includes('Tahsin')) types.push('tahsin');
+    if (programs.includes('Ziyadah')) types.push('ziyadahBacaan', 'ziyadahHafalan');
+    if (programs.includes('Mutqin')) types.push('mutqin');
+    return types;
+  }
+
   function dateKey(date) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -518,13 +526,11 @@ const Shared = (() => {
     if (f.ustadzId) halaqah = halaqah.filter(h => Store.ustadzIdsForHalaqah(h).includes(f.ustadzId));
     const today = Store.todayStr();
     const groups = halaqah.map(h => {
-      const relevantTypes = h.level === 'Tahsin' ? ['tahsin']
-        : h.level === 'Ziyadah' ? ['ziyadahBacaan', 'ziyadahHafalan']
-        : h.level === 'Mutqin' ? ['mutqin'] : Object.keys(JENIS_SETORAN);
       const santri = db.santri
-        .filter(s => Store.santriHasHalaqah(s, h, h.level) && s.status !== 'Nonaktif')
+        .filter(s => Store.santriHasHalaqah(s, h) && s.status !== 'Nonaktif')
         .sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
       const rows = santri.map(s => {
+        const relevantTypes = jenisSetoranUntukProgram(Store.programsForSantriHalaqah(s, h));
         const cells = days.map(day => {
           const types = (setoran.get(s.id + '|' + day.tanggal) || []).filter(type => relevantTypes.includes(type));
           if (day.tanggal > today) return { status: 'future', types: [] };

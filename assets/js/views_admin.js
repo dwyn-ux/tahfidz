@@ -67,6 +67,11 @@ const Admin = (() => {
     refreshUstadzHalaqah(db);
   }
 
+  function halaqahOptionLabel(halaqah, includeLevel = true) {
+    const pengampu = Store.ustadzNamesForHalaqah(halaqah).join(', ') || 'Belum ada pengampu';
+    return halaqah.nama + ' (' + pengampu + ')' + (includeLevel && halaqah.level ? ' · ' + halaqah.level : '');
+  }
+
   function bindImportFile(modal, headers) {
     const input = modal.querySelector('#imp-file');
     const textarea = modal.querySelector('#imp-data');
@@ -363,8 +368,8 @@ const Admin = (() => {
     const primaryProgram = s && activePrograms.includes(s.level) ? s.level : activePrograms[0];
     const halaqahOptions = program => {
       const selected = s ? (Store.halaqahForSantriProgram(s, program) || {}).id : '';
-      const choices = db.halaqah.filter(h => h.level === program).map(h => ({ v: h.id, l: h.nama }));
-      return `<option value="">Pilih halaqah ${UI.esc(program)}</option>${UI.optionsFromList(choices, 'v', 'l', selected)}`;
+      const choices = db.halaqah.map(h => ({ v: h.id, l: halaqahOptionLabel(h) }));
+      return `<option value="">Pilih halaqah untuk setoran ${UI.esc(program)}</option>${UI.optionsFromList(choices, 'v', 'l', selected)}`;
     };
     const programChecks = allPrograms.map(program => `
       <label class="row" style="gap:8px;cursor:pointer;padding:5px 0">
@@ -402,7 +407,7 @@ const Admin = (() => {
         <div style="flex:1">${UI.field('Kelas', `<select class="clay-select" id="f-kelas">${UI.optionsFromList(db.kelas.map(k => ({ v: k, l: k })), 'v', 'l', s ? s.kelas : db.kelas[0])}</select>`)}</div>
       </div>
       ${UI.field('Program Aktif', `<div class="clay-card pad-sm">${programChecks}</div><div class="muted" style="font-size:12px;margin-top:4px">Santri dapat aktif di lebih dari satu program pada waktu yang sama.</div>`) }
-      ${UI.field('Halaqah per Program', `<div class="clay-card pad-sm">${programHalaqahFields}</div><div class="muted" style="font-size:12px;margin-top:4px">Pilih halaqah sesuai program yang dicentang. Contoh: Tahsin tetap aktif sambil mengikuti Ziyadah.</div>`)}`;
+      ${UI.field('Halaqah per Jenis Setoran', `<div class="clay-card pad-sm">${programHalaqahFields}</div><div class="muted" style="font-size:12px;margin-top:4px">Jenis setoran mengikuti Program Aktif, bukan level halaqah. Contoh: centang Ziyadah lalu pilih halaqah Mutqin agar masuk kelompok Mutqin, tetapi setorannya tetap Ziyadah.</div>`)}`;
     const modal = UI.openModal({
       title: id ? 'Edit Santri' : 'Tambah Santri', sub: id ? '' : 'Akun wali otomatis dibuat',
       bodyHTML: body,
@@ -614,7 +619,7 @@ const Admin = (() => {
       </div>
       <div class="row">
         <div style="flex:1">${UI.field('Status', `<select class="clay-select" id="f-status"><option ${u && u.status === 'Aktif' ? 'selected' : ''}>Aktif</option><option ${u && u.status === 'Nonaktif' ? 'selected' : ''}>Nonaktif</option></select>`)}</div>
-        <div style="flex:1">${UI.field('Halaqah', `<select class="clay-select" id="f-halaqah"><option value="">-</option>${UI.optionsFromList(db.halaqah.map(h => ({ v: h.nama, l: h.nama })), 'v', 'l', u ? u.halaqah : '')}</select>`)}</div>
+        <div style="flex:1">${UI.field('Halaqah', `<select class="clay-select" id="f-halaqah"><option value="">-</option>${UI.optionsFromList(db.halaqah.map(h => ({ v: h.nama, l: halaqahOptionLabel(h) })), 'v', 'l', u ? u.halaqah : '')}</select>`)}</div>
       </div>
       <div class="row">
         <div style="flex:1">${UI.field('Username', `<input class="clay-input" id="f-uname" value="${u ? UI.esc(db.users.find(x => x.role === 'ustadz' && x.refId === id)?.username || '') : ''}" placeholder="Otomatis jika kosong">`)}</div>
@@ -714,22 +719,26 @@ const Admin = (() => {
     Shared.shell('admin', nav('admin_halaqah'), '');
     Shared.setHeader('Manajemen Halaqah', 'Ustadz, halaqah, dan santri');
     const db = Store.get();
-    const moveOptions = (program, selected) => {
-      const options = db.halaqah.filter(h => h.level === program).map(h => ({ value: h.id, label: h.nama }));
+    const moveOptions = selected => {
+      const options = db.halaqah.map(h => ({ value: h.id, label: halaqahOptionLabel(h) }));
       return `<option value="" ${!selected ? 'selected' : ''}>Pilih halaqah</option>${UI.optionsFromList(options, 'value', 'label', selected)}`;
     };
-    const santriRows = (santri, currentHalaqah) => santri.map((s, i) => {
-      const program = currentHalaqah ? currentHalaqah.level : s.level;
-      const assigned = Store.halaqahForSantriProgram(s, program);
-      return `<tr>
+    const santriRows = (santri, currentHalaqah) => santri.flatMap(s => {
+      const programs = currentHalaqah
+        ? Store.programsForSantriHalaqah(s, currentHalaqah)
+        : Store.activeProgramsForSantri(s);
+      return programs.map(program => {
+        const assigned = Store.halaqahForSantriProgram(s, program);
+        return { s, program, assigned };
+      });
+    }).map(({ s, program, assigned }, i) => `<tr>
       <td class="center">${i + 1}</td>
       <td><b>${UI.esc(s.nama)}</b><div class="muted" style="font-size:12px">${UI.esc(s.nis || '-')}</div></td>
       <td>${UI.esc(s.kelas || '-')}</td>
-      <td>${UI.esc(program || '-')}</td>
-      <td><select class="clay-select" data-move-target style="min-width:160px">${moveOptions(program, assigned && assigned.id)}</select></td>
+      <td><span class="badge ${program === 'Ziyadah' ? 'green' : program === 'Mutqin' ? 'warn' : 'blue'}">${UI.esc(program || '-')}</span></td>
+      <td><select class="clay-select" data-move-target style="min-width:160px">${moveOptions(assigned && assigned.id)}</select></td>
       <td class="center"><button class="clay-btn sm secondary" data-save-move="${UI.esc(s.id)}" data-program="${UI.esc(program)}">Simpan</button></td>
-    </tr>`;
-    }).join('');
+    </tr>`).join('');
     const group = (title, h, santri) => `<div class="clay-card mb">
       <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px">
         <div>
@@ -739,17 +748,17 @@ const Admin = (() => {
         ${h ? `<div><button class="clay-btn sm" data-edit-halaqah="${UI.esc(h.id)}">✏️ Edit Halaqah</button> <button class="clay-btn sm danger" data-del="${UI.esc(h.id)}">🗑</button></div>` : ''}
       </div>
       <div class="table-wrap"><table class="clay-table">
-        <thead><tr><th class="center">No</th><th>Santri</th><th>Kelas</th><th>Level</th><th>Pindah ke Halaqah</th><th class="center">Aksi</th></tr></thead>
+        <thead><tr><th class="center">No</th><th>Santri</th><th>Kelas</th><th>Jenis Setoran</th><th>Pindah ke Halaqah</th><th class="center">Aksi</th></tr></thead>
         <tbody>${santriRows(santri, h) || '<tr><td colspan="6"><div class="empty">Belum ada santri.</div></td></tr>'}</tbody>
       </table></div>
     </div>`;
     const groups = db.halaqah.map(h => group(h.nama, h, db.santri
-      .filter(s => Store.santriHasHalaqah(s, h, h.level))
+      .filter(s => Store.santriHasHalaqah(s, h))
       .sort((a, b) => a.nama.localeCompare(b.nama, 'id')))).join('');
     const withoutHalaqah = db.santri.filter(s => !Store.halaqahForSantri(s).length).sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
     document.getElementById('view-content').innerHTML = `
       <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div class="muted" style="font-size:13px">Penempatan disimpan per program. Santri dapat muncul di lebih dari satu halaqah bila programnya aktif.</div>
+      <div class="muted" style="font-size:13px">Penempatan dan jenis setoran disimpan terpisah. Santri Ziyadah boleh ditempatkan di halaqah Mutqin dan tetap setoran Ziyadah.</div>
         <button class="clay-btn primary" id="btn-add">+ Tambah Halaqah</button>
       </div>
       ${groups || '<div class="empty">Belum ada halaqah.</div>'}
@@ -969,7 +978,7 @@ const Admin = (() => {
         <div class="section-title"> Filter Laporan</div>
         <div class="row">
           <div style="flex:1">${UI.field('Bulan', `<input type="month" class="clay-input" id="f-bulan" value="${Store.todayStr().slice(0, 7)}">`)}</div>
-          <div style="flex:1">${UI.field('Halaqah', `<select class="clay-select" id="f-halaqah"><option value="">Semua</option>${UI.optionsFromList(db.halaqah.map(h => ({ v: h.nama, l: h.nama })), 'v', 'l')}</select>`)}</div>
+          <div style="flex:1">${UI.field('Halaqah', `<select class="clay-select" id="f-halaqah"><option value="">Semua</option>${UI.optionsFromList(db.halaqah.map(h => ({ v: h.nama, l: halaqahOptionLabel(h) })), 'v', 'l')}</select>`)}</div>
           <div style="flex:1">${UI.field('Level', `<select class="clay-select" id="f-level"><option value="">Semua</option>${UI.optionsFromList(db.levelTahfidz.map(l => ({ v: l, l })), 'v', 'l')}</select>`)}</div>
           <div style="flex:1">${UI.field('Kelas', `<select class="clay-select" id="f-kelas"><option value="">Semua</option>${UI.optionsFromList(db.kelas.map(k => ({ v: k, l: k })), 'v', 'l')}</select>`)}</div>
           <div style="flex:1">${UI.field('Status', `<select class="clay-select" id="f-status"><option value="">Semua</option><option>Aktif</option><option>Nonaktif</option></select>`)}</div>

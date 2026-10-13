@@ -292,6 +292,9 @@ const Store = (() => {
   // Bentuk data baru:
   // programAktif: ['Tahsin', 'Ziyadah']
   // halaqahProgram: { Tahsin: '<id halaqah>', Ziyadah: '<id halaqah>' }
+  // Program menentukan jenis setoran, sedangkan halaqah menentukan kelompok
+  // belajar. Keduanya sengaja tidak harus memiliki level yang sama; misalnya
+  // setoran Ziyadah dapat ditempatkan di halaqah berlevel Mutqin.
   // Kolom `level` dan `halaqah` tetap dipertahankan sebagai program utama
   // supaya laporan dan data dari versi sebelumnya tetap kompatibel.
   function normalizeSantriPrograms(santri) {
@@ -349,6 +352,14 @@ const Store = (() => {
     }
     return halaqahForSantri(santri).some(item => item.id === target.id)
       || santri.halaqah === target.nama;
+  }
+
+  function programsForSantriHalaqah(santri, halaqah) {
+    if (!santri || !halaqah) return [];
+    const target = typeof halaqah === 'string' ? (findHalaqahById(halaqah) || findHalaqahByName(halaqah)) : halaqah;
+    if (!target) return [];
+    return activeProgramsForSantri(santri)
+      .filter(program => santriHasHalaqah(santri, target, program));
   }
 
   function configureSantriPrograms(santri, programs, halaqahProgram, primaryProgram) {
@@ -550,7 +561,7 @@ const Store = (() => {
     load, save, get, reset, uid, log, nowISO, todayStr,
     setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout, changePassword,
     recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahById, findHalaqahByName, ustadzIdsForHalaqah, ustadzNamesForHalaqah, halaqahHasUstadz, findHalaqahForUstadz,
-    activeProgramsForSantri, halaqahForSantriProgram, halaqahForSantri, santriHasProgram, santriHasHalaqah, configureSantriPrograms, programSummaryForSantri, halaqahSummaryForSantri, search,
+    activeProgramsForSantri, halaqahForSantriProgram, halaqahForSantri, santriHasProgram, santriHasHalaqah, programsForSantriHalaqah, configureSantriPrograms, programSummaryForSantri, halaqahSummaryForSantri, search,
     waSend, waLog, waReady, waSendWali,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, addNotif, notifFor, clearNotifs, checkSetoranTerlewat
   };
