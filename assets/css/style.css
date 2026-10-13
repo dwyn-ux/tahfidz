@@ -553,6 +553,21 @@ label.field-label { font-size: 12px; letter-spacing: .02em; color: #526172; }
 .auth-card .brand { color: var(--text); font-size: 25px; letter-spacing: -.5px; }
 .auth-card .tagline { font-size: 14px; }
 
+/* Desktop: navigasi selalu terlihat saat konten halaman digulir. */
+@media (min-width: 861px) {
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    height: 100dvh;
+    max-height: 100dvh;
+    z-index: 50;
+  }
+  .main {
+    margin-left: 248px;
+    width: calc(100% - 248px);
+  }
+}
+
 @media (max-width: 860px) {
   .sidebar {
     width: min(84vw, 320px); max-width: 320px;

@@ -189,12 +189,20 @@ function nextJuzInOrder(currentJuz, order) {
   return o[idx + 1];
 }
 
+function juzForHafalanPosition(surah, ayah) {
+  // Batas juz 26–30 dipakai secara eksplisit karena estimasi halaman pada
+  // ayat terakhir dapat bergeser satu juz (contoh Al-Hadid: 57:29).
+  for (const [juz, range] of Object.entries(JUZ_SURAH_RANGE)) {
+    if (surah >= range[0] && surah <= range[1]) return Number(juz);
+  }
+  return pageToJuz(ayahToPage(surah, ayah));
+}
+
 /* Cari posisi auto-fill selanjutnya berdasarkan urutan juz */
 function nextHafalanPosition(lastSurah, lastAyah, juzOrder) {
   const s = getSurah(lastSurah);
   if (!s) return { surah: 78, ayah: 1 }; // fallback ke juz 30
-  const lastPage = ayahToPage(lastSurah, lastAyah);
-  const currentJuz = pageToJuz(lastPage);
+  const currentJuz = juzForHafalanPosition(lastSurah, lastAyah);
   const lastSurahOfCurrentJuz = lastSurahOfJuz(currentJuz);
 
   // masih di tengah surah
