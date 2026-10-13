@@ -207,11 +207,19 @@ const Store = (() => {
 
   function waReady() { return !!(db.settings && db.settings.waBridgeUrl); }
 
+  // Pengaturan dari backup/versi lama kadang tersimpan sebagai string, misalnya
+  // "false". Jangan perlakukan nilai teks tersebut sebagai aktif karena bersifat
+  // truthy di JavaScript.
+  function waAutoEnabled() {
+    const value = db.settings && db.settings.waAuto;
+    return value === true || value === 1 || value === '1' || value === 'true';
+  }
+
   // Kirim laporan ke no. WA wali dari santri (auto jika waAuto aktif). Fire-and-forget.
   function waSendWali(santriId, message) {
     const s = db.santri.find(x => x.id === santriId);
     if (!s) { waLog({ to: null, status: 'skipped', detail: 'Santri tidak ditemukan', message }); return Promise.resolve(false); }
-    if (!db.settings.waAuto) { waLog({ to: s.noHpWali, status: 'skipped', detail: 'WhatsApp Otomatis nonaktif', message }); return Promise.resolve(false); }
+    if (!waAutoEnabled()) { waLog({ to: s.noHpWali, status: 'skipped', detail: 'WhatsApp Otomatis nonaktif', message }); return Promise.resolve(false); }
     if (!s.noHpWali) { waLog({ to: null, status: 'skipped', detail: 'Santri tanpa no. HP wali', message }); return Promise.resolve(false); }
     return waSend(s.noHpWali, message);
   }
@@ -562,7 +570,7 @@ const Store = (() => {
     setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout, changePassword,
     recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahById, findHalaqahByName, ustadzIdsForHalaqah, ustadzNamesForHalaqah, halaqahHasUstadz, findHalaqahForUstadz,
     activeProgramsForSantri, halaqahForSantriProgram, halaqahForSantri, santriHasProgram, santriHasHalaqah, programsForSantriHalaqah, configureSantriPrograms, programSummaryForSantri, halaqahSummaryForSantri, search,
-    waSend, waLog, waReady, waSendWali,
+    waSend, waLog, waReady, waAutoEnabled, waSendWali,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, addNotif, notifFor, clearNotifs, checkSetoranTerlewat
   };
 })();

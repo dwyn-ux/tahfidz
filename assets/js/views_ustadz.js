@@ -28,7 +28,7 @@ const Ustadz = (() => {
   // Saat WA otomatis dimatikan, penyimpanan tidak perlu memunculkan toast
   // pengiriman apa pun. Ustadz cukup menerima konfirmasi "Tersimpan".
   function waReport(santriId, message) {
-    if (!Store.get().settings.waAuto) return Promise.resolve(false);
+    if (!Store.waAutoEnabled()) return Promise.resolve(false);
     return Store.waSendWali(santriId, message).then(ok => {
       UI.toast(ok ? 'WA terkirim ke wali ✓' : 'WA gagal dikirim ke wali (cek Log WhatsApp di Admin)', ok ? 'success' : 'error');
     });
@@ -942,7 +942,8 @@ const Ustadz = (() => {
         document.getElementById('lap').innerHTML = '';
         return;
       }
-      document.getElementById('rekap-setoran').innerHTML = Shared.renderRekapSetoranMingguan({ halaqah: ownHalaqah, week: pekan.value });
+      document.getElementById('rekap-setoran').innerHTML = Shared.renderRekapSetoranMingguan({ halaqah: ownHalaqah, week: pekan.value, allowMakeup: true });
+      Shared.bindRekapSetoranBayar(({ santriId, tanggal, programs }) => bayarSetoran(santriId, tanggal, programs));
       document.getElementById('lap').innerHTML = Shared.renderLaporan({ halaqah: ownHalaqah, bulan });
       Shared.bindLaporanExport();
     };
@@ -1016,12 +1017,36 @@ const Ustadz = (() => {
     return `${h.ayahs} ayat · ${h.pages} hlm`;
   }
 
-  function umumInput(santriId, selectedProgram) {
+  function bayarSetoran(santriId, tanggal, programs) {
+    const santri = Store.findSantri(santriId);
+    const activePrograms = [...new Set(programs || [])].filter(program => santri && Store.santriHasProgram(santri, program));
+    if (!santri || !activePrograms.length) { UI.toast('Jenis setoran santri tidak ditemukan', 'error'); return; }
+    const openInput = program => umumInput(santriId, program, tanggal, () => laporan());
+    if (activePrograms.length === 1) { openInput(activePrograms[0]); return; }
+    UI.openModal({
+      title: 'Bayar Setoran Tertinggal',
+      sub: santri.nama + ' · ' + UI.fmtDate(tanggal),
+      bodyHTML: '<div class="muted">Pilih jenis setoran yang akan dicatat untuk tanggal tersebut.</div>',
+      actions: [
+        { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
+        ...activePrograms.map(program => ({
+          label: program,
+          cls: program === 'Ziyadah' ? 'secondary' : program === 'Mutqin' ? 'success' : 'primary',
+          onClick: (m, c) => { c(); openInput(program); }
+        }))
+      ]
+    });
+  }
+
+  function umumInput(santriId, selectedProgram, tanggalTarget, onSaved) {
     const s = Store.findSantri(santriId);
     if (!s) return;
     const level = selectedProgram || s.level;
     if (!Store.santriHasProgram(s, level)) { UI.toast('Program santri tidak aktif', 'error'); return; }
     const programHalaqah = Store.halaqahForSantriProgram(s, level);
+    const tanggalSetoran = /^\d{4}-\d{2}-\d{2}$/.test(tanggalTarget || '') ? tanggalTarget : Store.todayStr();
+    const isSusulan = tanggalSetoran !== Store.todayStr();
+    const refreshSetoranView = () => typeof onSaved === 'function' ? onSaved() : renderUmum();
     let bacaanRequired = false;
     let skipBacaan = false;
     let hafalanReady = false;
@@ -1032,7 +1057,7 @@ const Ustadz = (() => {
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
       ${UI.field('Kelas', `<input class="clay-input" value="${UI.esc(s.kelas)}" disabled>`)}
       ${UI.field('Halaqah', `<input class="clay-input" value="${UI.esc(programHalaqah ? programHalaqah.nama : '-') }" disabled>`)}
-      ${UI.field('Tanggal', `<input class="clay-input" id="f-tgl" type="date" value="${Store.todayStr()}">`)}`;
+       ${UI.field('Tanggal', `<input class="clay-input" id="f-tgl" type="date" value="${tanggalSetoran}" ${isSusulan ? 'disabled' : ''}>${isSusulan ? '<div class="muted" style="font-size:12px;margin-top:4px">Tanggal dikunci karena ini pembayaran setoran tertinggal.</div>' : ''}`)}`;
     
     if (level === 'Tahsin') {
       body += `
@@ -1041,7 +1066,7 @@ const Ustadz = (() => {
           <div style="flex:1">${UI.field('Halaman Akhir', `<input class="clay-input" id="f-hk" type="number" min="1" value="2">`)}</div>
         </div>`;
     } else if (level === 'Ziyadah') {
-      const t = Store.todayStr();
+      const t = tanggalSetoran;
       const db = Store.get();
       const halaqah = programHalaqah;
       bacaanRequired = !!(halaqah && halaqah.setoranBacaan);
@@ -1129,8 +1154,8 @@ const Ustadz = (() => {
     }
 
     const modal = UI.openModal({
-      title: 'Input ' + level + ' - ' + s.nama,
-      sub: s.kelas + ' · ' + (programHalaqah ? programHalaqah.nama : '-'),
+      title: (isSusulan ? 'Bayar Setoran ' : 'Input ') + level + ' - ' + s.nama,
+      sub: s.kelas + ' · ' + (programHalaqah ? programHalaqah.nama : '-') + (isSusulan ? ' · ' + UI.fmtDate(tanggalSetoran) : ''),
       bodyHTML: body,
       actions: level === 'Ziyadah'
         ? [{ label: 'Tutup', cls: 'ghost', onClick: (m, c) => c() }]
@@ -1170,7 +1195,7 @@ const Ustadz = (() => {
           Store.log('Input umum: ' + s.nama + ' (' + level + ')');
           c();
           UI.toast('Setoran ' + level + ' tersimpan', 'success');
-          renderUmum();
+          refreshSetoranView();
         } }
       ]
     });
@@ -1179,7 +1204,7 @@ const Ustadz = (() => {
       const modalContent = modal.modal;
       const refreshBacaanPreview = bacaanRequired ? bindSetoranPreview(modalContent, 'b') : () => {};
       const refreshHafalanPreview = bindSetoranPreview(modalContent, 'h');
-      const t = Store.todayStr();
+      const t = tanggalSetoran;
       const db = Store.get();
       let hSlide = null;
 
@@ -1225,7 +1250,7 @@ const Ustadz = (() => {
         const d = Store.get();
         d.ziyadahBacaan.push({
           id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId, 'Ziyadah'),
-          tanggal: Store.todayStr(), sAwal: sA, aAwal: +aaEl.value,
+          tanggal: tanggalSetoran, sAwal: sA, aAwal: +aaEl.value,
           sAkhir: sK, aAkhir: +akEl.value, _created: Date.now()
         });
         if (!await Store.save()) return;
@@ -1283,7 +1308,7 @@ const Ustadz = (() => {
         const d = Store.get();
         d.ziyadahHafalan.push({
           id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId, 'Ziyadah'),
-          tanggal: Store.todayStr(), sAwal: sA, aAwal: aA,
+          tanggal: tanggalSetoran, sAwal: sA, aAwal: aA,
           sAkhir: sK, aAkhir: aK, nilai: +modalContent.querySelector('#f-nilai').value,
           catatan: modalContent.querySelector('#f-cat').value.trim(), _created: Date.now()
         });
@@ -1295,7 +1320,7 @@ const Ustadz = (() => {
         if (hSlide) clearInterval(hSlide);
         modal.close();
         UI.toast('Tersimpan · ' + formatHafalan(h), 'success');
-        renderUmum();
+        refreshSetoranView();
       };
     }
   }
