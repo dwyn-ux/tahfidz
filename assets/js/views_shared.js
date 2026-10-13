@@ -220,7 +220,8 @@ const Shared = (() => {
     const s = Store.findSantri(santriId);
     if (!s) return `<div class="empty">Santri tidak ditemukan.</div>`;
     
-    const santri = db.santri.filter(st => st.halaqah === s.halaqah);
+    const halaqahSantri = Store.halaqahForSantri(s);
+    const santri = db.santri.filter(st => halaqahSantri.some(h => Store.santriHasHalaqah(st, h)));
     if (!santri.length) return `<div class="empty">Tidak ada santri di halaqah yang sama.</div>`;
     
     const now = new Date();
@@ -322,8 +323,8 @@ const Shared = (() => {
     const db = Store.get();
     const f = filters || {};
     let santri = db.santri.slice();
-    if (f.halaqah) santri = santri.filter(s => s.halaqah === f.halaqah);
-    if (f.level) santri = santri.filter(s => s.level === f.level);
+    if (f.halaqah) santri = santri.filter(s => Store.santriHasHalaqah(s, f.halaqah));
+    if (f.level) santri = santri.filter(s => Store.santriHasProgram(s, f.level));
     if (f.kelas) santri = santri.filter(s => s.kelas === f.kelas);
     if (f.status) santri = santri.filter(s => s.status === f.status);
     const bulan = f.bulan || Store.todayStr().slice(0, 7);
@@ -349,8 +350,8 @@ const Shared = (() => {
       <td class="center">${r.no}</td>
       <td><b>${UI.esc(r.s.nama)}</b></td>
       <td>${UI.esc(r.s.nis)}</td>
-      <td>${UI.esc(r.s.halaqah)}</td>
-      <td>${UI.esc(r.s.level)}</td>
+      <td>${UI.esc(Store.halaqahSummaryForSantri(r.s))}</td>
+      <td>${UI.esc(Store.programSummaryForSantri(r.s))}</td>
       <td class="center">${UI.esc(r.s.jk || '-')}</td>
       <td class="center">${r.hafalan ? r.hafalan.pages + ' hlm' : '-'}</td>
       <td class="center">${r.hafalan ? (r.hafalan.juzRange === 1 ? 'Juz ' + r.hafalan.juzStart : r.hafalan.juzStart + '–' + r.hafalan.juzEnd) : '-'}</td>
@@ -404,8 +405,8 @@ const Shared = (() => {
       <td class="center">${r.no}</td>
       <td>${UI.esc(r.s.nama)}</td>
       <td>${UI.esc(r.s.nis)}</td>
-      <td>${UI.esc(r.s.halaqah)}</td>
-      <td>${UI.esc(r.s.level)}</td>
+      <td>${UI.esc(Store.halaqahSummaryForSantri(r.s))}</td>
+      <td>${UI.esc(Store.programSummaryForSantri(r.s))}</td>
       <td class="center">${UI.esc(r.s.jk || '-')}</td>
       <td class="center">${r.hafalan ? r.hafalan.pages : 0}</td>
       <td class="center">${r.hafalan ? (r.hafalan.juzRange === 1 ? r.hafalan.juzStart : r.hafalan.juzStart + '-' + r.hafalan.juzEnd) : '-'}</td>
@@ -502,7 +503,6 @@ const Shared = (() => {
       date.setDate(start.getDate() + h.offset);
       return { ...h, tanggal: dateKey(date) };
     });
-    const ustadz = f.ustadzId && db.ustadz.find(u => u.id === f.ustadzId);
     const setoran = new Map();
     Object.keys(JENIS_SETORAN).forEach(type => {
       (db[type] || []).forEach(record => {
@@ -515,15 +515,18 @@ const Shared = (() => {
     });
     let halaqah = db.halaqah.slice();
     if (f.halaqah) halaqah = halaqah.filter(h => h.nama === f.halaqah);
-    if (f.ustadzId) halaqah = halaqah.filter(h => h.ustadzId === f.ustadzId || (ustadz && h.ustadz === ustadz.nama));
+    if (f.ustadzId) halaqah = halaqah.filter(h => Store.ustadzIdsForHalaqah(h).includes(f.ustadzId));
     const today = Store.todayStr();
     const groups = halaqah.map(h => {
+      const relevantTypes = h.level === 'Tahsin' ? ['tahsin']
+        : h.level === 'Ziyadah' ? ['ziyadahBacaan', 'ziyadahHafalan']
+        : h.level === 'Mutqin' ? ['mutqin'] : Object.keys(JENIS_SETORAN);
       const santri = db.santri
-        .filter(s => s.halaqah === h.nama && s.status !== 'Nonaktif')
+        .filter(s => Store.santriHasHalaqah(s, h, h.level) && s.status !== 'Nonaktif')
         .sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
       const rows = santri.map(s => {
         const cells = days.map(day => {
-          const types = setoran.get(s.id + '|' + day.tanggal) || [];
+          const types = (setoran.get(s.id + '|' + day.tanggal) || []).filter(type => relevantTypes.includes(type));
           if (day.tanggal > today) return { status: 'future', types: [] };
           return types.length ? { status: 'submitted', types } : { status: 'missing', types: [] };
         });
@@ -550,14 +553,14 @@ const Shared = (() => {
         return `<tr>
           <td class="center">${index + 1}</td>
           <td><b>${UI.esc(row.s.nama)}</b><div class="muted" style="font-size:12px">${UI.esc(row.s.nis || '-')}</div></td>
-          <td>${UI.esc(row.s.level || '-')}</td>
+          <td>${UI.esc(Store.programSummaryForSantri(row.s) || '-')}</td>
           ${cells}
           <td class="center"><b>${row.missing}</b></td>
         </tr>`;
       }).join('');
       return `<div class="clay-card mb">
         <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px">
-          <div><div class="section-title" style="margin:0">${UI.esc(group.h.nama)}</div><div class="muted" style="font-size:12px">Ustadz: ${UI.esc(group.h.ustadz || 'Belum ditetapkan')} · ${group.rows.length} santri aktif</div></div>
+          <div><div class="section-title" style="margin:0">${UI.esc(group.h.nama)}</div><div class="muted" style="font-size:12px">Ustadz: ${UI.esc(Store.ustadzNamesForHalaqah(group.h).join(', ') || 'Belum ditetapkan')} · ${group.rows.length} santri aktif</div></div>
           <span class="badge blue">${UI.esc(group.h.level || '-')}</span>
         </div>
         <div class="table-wrap"><table class="clay-table">

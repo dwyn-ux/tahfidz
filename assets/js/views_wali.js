@@ -21,6 +21,17 @@ const Wali = (() => {
     return w ? db.santri.find(s => s.id === w.santriId) : null;
   }
 
+  function ustadzNamesForSantri(santri) {
+    if (!santri) return [];
+    const db = Store.get();
+    const names = Store.halaqahForSantri(santri)
+      .flatMap(halaqah => Store.ustadzNamesForHalaqah(halaqah));
+    if (names.length) return [...new Set(names)];
+    // Bootstrap wali hanya mengirim ustadz pengampu anaknya, sehingga fallback
+    // ini tetap aman sekalipun data halaqah belum tersedia dari server lama.
+    return [...new Set(db.ustadz.map(u => u.nama).filter(Boolean))];
+  }
+
   /* ---------------- Dashboard ---------------- */
   function dashboard() {
     Store.checkSetoranTerlewat();
@@ -39,7 +50,7 @@ const Wali = (() => {
     const totalHadir = hadirSubuh + hadirMaghrib + hadirIsya + hadirTalim;
     const pct = kehadiran.length ? Math.round((totalHadir / kehadiran.length) * 100) : 0;
     const lastCat = db.catatan.filter(c => c.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
-    const ustadz = db.ustadz.find(u => u.halaqah === s.halaqah);
+    const ustadzNames = ustadzNamesForSantri(s);
 
     document.getElementById('view-content').innerHTML = `
       <div class="grid cols-2">
@@ -47,8 +58,9 @@ const Wali = (() => {
           <div class="progress-circle" style="--val:${pct}"><span>${pct}%</span></div>
           <div>
             <h3>${UI.esc(s.nama)}</h3>
-            <div class="muted">${UI.esc(s.level)} · ${UI.esc(s.halaqah)}</div>
-            <div class="muted">Ustadz: ${ustadz ? UI.esc(ustadz.nama) : '-'}</div>
+            <div class="muted">${UI.esc(Store.programSummaryForSantri(s))}</div>
+            <div class="muted" style="font-size:12px">${UI.esc(Store.halaqahSummaryForSantri(s))}</div>
+            <div class="muted">Ustadz: ${UI.esc(ustadzNames.join(', ') || '-')}</div>
           </div>
         </div>
         <div class="clay-card">
@@ -183,7 +195,7 @@ const Wali = (() => {
     const s = mySantri();
     Shared.setHeader('Profil', 'Data Wali & Santri');
     const db = Store.get();
-    const ustadz = s ? db.ustadz.find(u => u.halaqah === s.halaqah) : null;
+    const ustadzNames = ustadzNamesForSantri(s);
     document.getElementById('view-content').innerHTML = `
       <div class="grid cols-2">
         <div class="clay-card">
@@ -192,10 +204,10 @@ const Wali = (() => {
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Nama</span><b>${UI.esc(s.nama)}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">NIS</span><b>${UI.esc(s.nis)}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">JK</span><b>${UI.esc(s.jk)}</b></div>
-          <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Level</span><b>${UI.esc(s.level)}</b></div>
+          <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Program Aktif</span><b>${UI.esc(Store.programSummaryForSantri(s))}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Kelas</span><b>${UI.esc(s.kelas)}</b></div>
-          <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Halaqah</span><b>${UI.esc(s.halaqah)}</b></div>
-          <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Ustadz</span><b>${ustadz ? UI.esc(ustadz.nama) : '-'}</b></div>` : '<div class="empty">-</div>'}
+          <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Halaqah</span><b>${UI.esc(Store.halaqahSummaryForSantri(s))}</b></div>
+          <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Ustadz</span><b>${UI.esc(ustadzNames.join(', ') || '-')}</b></div>` : '<div class="empty">-</div>'}
         </div>
         <div class="clay-card">
           <div class="section-title"> Data Wali</div>

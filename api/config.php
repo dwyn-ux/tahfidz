@@ -555,16 +555,44 @@ function bootstrapData($user) {
     // Wali sees only their own notifications
     $notifikasi = array_values(array_filter($notifikasi, fn($n) => $n['userId'] === $user['uid']));
 
-    // Wali sees their own wali record + their child's ustadz (name only)
+    // Wali sees their own wali record + every ustadz who teaches one of their
+    // child's active-program halaqah. Legacy data has one `level`/`halaqah`;
+    // newer data can contain `programAktif` and `halaqahProgram`.
     $waliRecords = $wali ? [$wali] : [];
     $ustadzRecords = [];
+    $halaqahForWali = [];
     if (!empty($santri)) {
-        $halaqahName = $santri[0]['halaqah'] ?? '';
         $halaqahRecords = getRecords('halaqah');
-        $halaqahObj = array_values(array_filter($halaqahRecords, fn($h) => $h['nama'] === $halaqahName));
-        $ustadzName = $halaqahObj[0]['ustadz'] ?? '';
+        $santriData = $santri[0];
+        $references = [];
+        if (!empty($santriData['halaqah'])) $references[] = $santriData['halaqah'];
+        if (!empty($santriData['halaqahProgram']) && is_array($santriData['halaqahProgram'])) {
+            foreach ($santriData['halaqahProgram'] as $reference) if ($reference) $references[] = $reference;
+        }
+        $references = array_values(array_unique($references));
+        $halaqahForWali = array_values(array_filter($halaqahRecords, fn($h) =>
+            in_array($h['id'] ?? '', $references, true) || in_array($h['nama'] ?? '', $references, true)
+        ));
+        $ustadzIds = [];
+        $ustadzNames = [];
+        foreach ($halaqahForWali as $halaqah) {
+            $ids = $halaqah['ustadzIds'] ?? [];
+            $names = $halaqah['ustadzNames'] ?? [];
+            if (!is_array($ids)) $ids = [];
+            if (!is_array($names)) $names = [];
+            if (!$names && !empty($halaqah['ustadz'])) $names[] = $halaqah['ustadz'];
+            $ustadzIds = array_merge($ustadzIds, $ids);
+            $ustadzNames = array_merge($ustadzNames, $names);
+        }
+        $ustadzIds = array_values(array_unique($ustadzIds));
+        $ustadzNames = array_values(array_unique($ustadzNames));
+        $halaqahNames = array_map(fn($h) => $h['nama'] ?? '', $halaqahForWali);
         $allUstadz = getRecords('ustadz');
-        $ustadzRecords = array_values(array_filter($allUstadz, fn($u) => $u['nama'] === $ustadzName));
+        $ustadzRecords = array_values(array_filter($allUstadz, fn($u) =>
+            in_array($u['id'] ?? '', $ustadzIds, true)
+            || in_array($u['nama'] ?? '', $ustadzNames, true)
+            || in_array($u['halaqah'] ?? '', $halaqahNames, true)
+        ));
     }
 
     $db = [
@@ -573,7 +601,7 @@ function bootstrapData($user) {
         'santri' => $santri,
         'wali' => $waliRecords,
         'ustadz' => $ustadzRecords,
-        'halaqah' => [],
+        'halaqah' => $halaqahForWali,
         'kelas' => getSettings()['kelas'],
         'levelTahfidz' => getSettings()['levelTahfidz'],
         'kehadiran' => $kehadiran,

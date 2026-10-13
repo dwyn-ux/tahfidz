@@ -24,43 +24,47 @@ const Admin = (() => {
     return base + i;
   }
 
-  // Satu penugasan ustadz harus punya satu sumber kebenaran. Data lama hanya
-  // menyimpan nama, sedangkan data baru juga menyimpan ID agar aman saat nama
-  // ustadz diubah.
+  // Data lama hanya menyimpan satu nama/ID ustadz. Data baru menyimpan daftar
+  // ID dan nama agar satu halaqah dapat memiliki beberapa pengampu, sambil
+  // mempertahankan kolom lama sebagai pengampu utama untuk kompatibilitas.
+  function applyHalaqahUstadz(db, halaqah, ustadzIds) {
+    const ids = [...new Set((ustadzIds || []).filter(id => db.ustadz.some(u => u.id === id)))];
+    const names = ids.map(id => db.ustadz.find(u => u.id === id)?.nama).filter(Boolean);
+    halaqah.ustadzIds = ids;
+    halaqah.ustadzNames = names;
+    halaqah.ustadzId = ids[0] || '';
+    halaqah.ustadz = names[0] || '';
+  }
+
+  function refreshUstadzHalaqah(db) {
+    db.ustadz.forEach(ustadz => {
+      const halaqah = db.halaqah.find(h => Store.ustadzIdsForHalaqah(h).includes(ustadz.id));
+      ustadz.halaqah = halaqah ? halaqah.nama : '';
+    });
+  }
+
   function assignUstadzToHalaqah(db, ustadzId, halaqahName) {
     const ustadz = db.ustadz.find(u => u.id === ustadzId);
     if (!ustadz) return;
     db.halaqah.forEach(h => {
-      if (h.ustadzId === ustadzId || h.ustadz === ustadz.nama) {
-        h.ustadz = '';
-        h.ustadzId = '';
-      }
+      const ids = Store.ustadzIdsForHalaqah(h);
+      if (ids.includes(ustadzId)) applyHalaqahUstadz(db, h, ids.filter(id => id !== ustadzId));
     });
-    ustadz.halaqah = '';
-    if (!halaqahName) return;
-    const halaqah = db.halaqah.find(h => h.nama === halaqahName);
-    if (!halaqah) return;
-    const previous = db.ustadz.find(u => u.id !== ustadzId && (u.id === halaqah.ustadzId || u.nama === halaqah.ustadz));
-    if (previous) previous.halaqah = '';
-    halaqah.ustadz = ustadz.nama;
-    halaqah.ustadzId = ustadz.id;
-    ustadz.halaqah = halaqah.nama;
+    const halaqah = halaqahName && db.halaqah.find(h => h.nama === halaqahName);
+    if (halaqah) applyHalaqahUstadz(db, halaqah, [...Store.ustadzIdsForHalaqah(halaqah), ustadzId]);
+    refreshUstadzHalaqah(db);
   }
 
-  function syncHalaqahUstadz(db, halaqah, ustadzId) {
-    const selected = db.ustadz.find(u => u.id === ustadzId);
-    const old = db.ustadz.find(u => u.id === halaqah.ustadzId || u.nama === halaqah.ustadz);
-    if (old && (!selected || old.id !== selected.id)) old.halaqah = '';
-    if (!selected) { halaqah.ustadz = ''; halaqah.ustadzId = ''; return; }
+  function syncHalaqahUstadz(db, halaqah, ustadzIds) {
+    const selected = [...new Set((ustadzIds || []).filter(id => db.ustadz.some(u => u.id === id)))];
     db.halaqah.forEach(h => {
-      if (h.id !== halaqah.id && (h.ustadzId === selected.id || h.ustadz === selected.nama)) {
-        h.ustadz = '';
-        h.ustadzId = '';
-      }
+      if (h.id === halaqah.id) return;
+      const ids = Store.ustadzIdsForHalaqah(h);
+      const remaining = ids.filter(id => !selected.includes(id));
+      if (remaining.length !== ids.length) applyHalaqahUstadz(db, h, remaining);
     });
-    halaqah.ustadz = selected.nama;
-    halaqah.ustadzId = selected.id;
-    selected.halaqah = halaqah.nama;
+    applyHalaqahUstadz(db, halaqah, selected);
+    refreshUstadzHalaqah(db);
   }
 
   function bindImportFile(modal, headers) {
@@ -142,9 +146,9 @@ const Admin = (() => {
         ${Shared.statCard(Shared.ICONS.users, db.santri.length, 'Santri', '#16A34A')}
         ${Shared.statCard(Shared.ICONS.teacher, db.ustadz.length, 'Ustadz', '#3B82F6')}
         ${Shared.statCard(Shared.ICONS.building, db.halaqah.length, 'Halaqah', '#FACC15')}
-        ${Shared.statCard(Shared.ICONS.book, db.santri.filter(s => s.level === 'Tahsin').length, 'Tahsin', '#22C55E')}
-        ${Shared.statCard(Shared.ICONS.star, db.santri.filter(s => s.level === 'Ziyadah').length, 'Ziyadah', '#3B82F6')}
-        ${Shared.statCard(Shared.ICONS.star, db.santri.filter(s => s.level === 'Mutqin').length, 'Mutqin', '#16A34A')}
+        ${Shared.statCard(Shared.ICONS.book, db.santri.filter(s => Store.santriHasProgram(s, 'Tahsin')).length, 'Tahsin', '#22C55E')}
+        ${Shared.statCard(Shared.ICONS.star, db.santri.filter(s => Store.santriHasProgram(s, 'Ziyadah')).length, 'Ziyadah', '#3B82F6')}
+        ${Shared.statCard(Shared.ICONS.star, db.santri.filter(s => Store.santriHasProgram(s, 'Mutqin')).length, 'Mutqin', '#16A34A')}
       </div>
       <div class="grid kpi mt">
         ${Shared.statCard(Shared.ICONS.sun, hadirSubuh, 'Kehadiran Subuh', '#22C55E')}
@@ -155,7 +159,7 @@ const Admin = (() => {
 
     // progress hafalan per halaqah (avg pages)
     const halaqahData = db.halaqah.map(h => {
-      const ss = db.santri.filter(s => s.halaqah === h.nama);
+      const ss = db.santri.filter(s => Store.santriHasHalaqah(s, h));
       const avg = ss.length ? Math.round(ss.reduce((a, s) => { const hh = Store.totalHafalanSantri(s.id); return a + (hh ? hh.pages : 0); }, 0) / ss.length) : 0;
       return { label: h.nama.replace('Halaqah ', 'H'), value: avg };
     });
@@ -179,7 +183,7 @@ const Admin = (() => {
         <div class="clay-card">
           <div class="section-title"> Ranking Halaqah</div>
           ${db.halaqah.map((h, i) => {
-            const ss = db.santri.filter(s => s.halaqah === h.nama);
+            const ss = db.santri.filter(s => Store.santriHasHalaqah(s, h));
             const total = ss.reduce((a, s) => { const hh = Store.totalHafalanSantri(s.id); return a + (hh ? hh.pages : 0); }, 0);
             return `<div class="row center" style="justify-content:space-between;padding:8px 0"><div><b>#${i + 1}</b> ${UI.esc(h.nama)}</div><span class="badge green">${total} hlm</span></div>`;
           }).join('')}
@@ -212,8 +216,8 @@ const Admin = (() => {
       return `<tr>
         <td><b>${UI.esc(s.nama)}</b><div class="muted">${UI.esc(s.nis)}</div></td>
         <td>${UI.esc(s.jk)}</td>
-        <td>${UI.esc(s.level)}</td>
-        <td>${UI.esc(s.halaqah)}</td>
+        <td>${UI.esc(Store.programSummaryForSantri(s))}</td>
+        <td>${UI.esc(Store.halaqahSummaryForSantri(s))}</td>
         <td>${UI.esc(s.kelas)}</td>
         <td><span class="badge ${s.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(s.status)}</span></td>
         <td><code>${UI.esc(username)}</code></td>
@@ -238,7 +242,7 @@ const Admin = (() => {
           <input class="clay-input" id="search-santri" type="text" placeholder="Cari santri..." autocomplete="off" />
         </div>
         <div class="table-wrap mt"><table class="clay-table">
-          <thead><tr><th>Nama</th><th>JK</th><th>Level</th><th>Halaqah</th><th>Kelas</th><th>Status</th><th>Username Login</th><th>Aksi</th></tr></thead>
+          <thead><tr><th>Nama</th><th>JK</th><th>Program Aktif</th><th>Halaqah</th><th>Kelas</th><th>Status</th><th>Username Login</th><th>Aksi</th></tr></thead>
           <tbody id="santri-table-body">${rows || `<tr><td colspan="8"><div class="empty">Belum ada santri.</div></td></tr>`}</tbody>
         </table></div>
       </div>`;
@@ -298,9 +302,10 @@ const Admin = (() => {
           const rows = term ? db.santri.filter(s =>
             s.nama.toLowerCase().includes(term) ||
             (s.nis && s.nis.toString().includes(term)) ||
-            s.halaqah.toLowerCase().includes(term) ||
+            Store.programSummaryForSantri(s).toLowerCase().includes(term) ||
+            Store.halaqahSummaryForSantri(s).toLowerCase().includes(term) ||
             s.kelas.toLowerCase().includes(term) ||
-            s.level.toLowerCase().includes(term)
+            (s.level || '').toLowerCase().includes(term)
           ) : db.santri;
           const newRows = rows.map(s => {
             const waliUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
@@ -308,8 +313,8 @@ const Admin = (() => {
             return `<tr>
               <td><b>${UI.esc(s.nama)}</b><div class="muted">${UI.esc(s.nis)}</div></td>
               <td>${UI.esc(s.jk)}</td>
-              <td>${UI.esc(s.level)}</td>
-              <td>${UI.esc(s.halaqah)}</td>
+               <td>${UI.esc(Store.programSummaryForSantri(s))}</td>
+               <td>${UI.esc(Store.halaqahSummaryForSantri(s))}</td>
               <td>${UI.esc(s.kelas)}</td>
               <td><span class="badge ${s.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(s.status)}</span></td>
               <td><code>${UI.esc(username)}</code></td>
@@ -353,6 +358,24 @@ const Admin = (() => {
   function santriForm(id) {
     const db = Store.get();
     const s = id ? Store.findSantri(id) : null;
+    const allPrograms = db.levelTahfidz || ['Tahsin', 'Ziyadah', 'Mutqin'];
+    const activePrograms = s ? Store.activeProgramsForSantri(s) : [(s && s.level) || 'Tahsin'];
+    const primaryProgram = s && activePrograms.includes(s.level) ? s.level : activePrograms[0];
+    const halaqahOptions = program => {
+      const selected = s ? (Store.halaqahForSantriProgram(s, program) || {}).id : '';
+      const choices = db.halaqah.filter(h => h.level === program).map(h => ({ v: h.id, l: h.nama }));
+      return `<option value="">Pilih halaqah ${UI.esc(program)}</option>${UI.optionsFromList(choices, 'v', 'l', selected)}`;
+    };
+    const programChecks = allPrograms.map(program => `
+      <label class="row" style="gap:8px;cursor:pointer;padding:5px 0">
+        <input type="checkbox" data-program-active value="${UI.esc(program)}" ${activePrograms.includes(program) ? 'checked' : ''}>
+        <span>${UI.esc(program)}</span>
+      </label>`).join('');
+    const programHalaqahFields = allPrograms.map(program => `
+      <div data-program-halaqah-row="${UI.esc(program)}" class="row" style="align-items:end;gap:12px;margin-top:8px">
+        <div style="min-width:100px"><b>${UI.esc(program)}</b></div>
+        <div style="flex:1"><select class="clay-select" data-program-halaqah="${UI.esc(program)}">${halaqahOptions(program)}</select></div>
+      </div>`).join('');
     const body = `
       ${UI.field('Nama', `<input class="clay-input" id="f-nama" value="${s ? UI.esc(s.nama) : ''}">`)}
       <div class="row">
@@ -373,12 +396,13 @@ const Admin = (() => {
       <button class="clay-btn sm secondary" id="btn-gen-uname" type="button">⚙️ Generate Username</button>
       <div class="row mt">
         <div style="flex:1">${UI.field('Status', `<select class="clay-select" id="f-status"><option ${s && s.status === 'Aktif' ? 'selected' : ''}>Aktif</option><option ${s && s.status === 'Nonaktif' ? 'selected' : ''}>Nonaktif</option></select>`)}</div>
-        <div style="flex:1">${UI.field('Level', `<select class="clay-select" id="f-level">${UI.optionsFromList(db.levelTahfidz.map(l => ({ v: l, l })), 'v', 'l', s ? s.level : 'Tahsin')}</select>`)}</div>
+        <div style="flex:1">${UI.field('Program Utama', `<select class="clay-select" id="f-level"></select><div class="muted" style="font-size:12px;margin-top:4px">Ditampilkan sebagai level utama pada laporan lama.</div>`)}</div>
       </div>
       <div class="row">
         <div style="flex:1">${UI.field('Kelas', `<select class="clay-select" id="f-kelas">${UI.optionsFromList(db.kelas.map(k => ({ v: k, l: k })), 'v', 'l', s ? s.kelas : db.kelas[0])}</select>`)}</div>
-        <div style="flex:1">${UI.field('Halaqah', `<select class="clay-select" id="f-halaqah">${UI.optionsFromList(db.halaqah.map(h => ({ v: h.nama, l: h.nama })), 'v', 'l', s ? s.halaqah : (db.halaqah[0] && db.halaqah[0].nama))}</select>`)}</div>
-      </div>`;
+      </div>
+      ${UI.field('Program Aktif', `<div class="clay-card pad-sm">${programChecks}</div><div class="muted" style="font-size:12px;margin-top:4px">Santri dapat aktif di lebih dari satu program pada waktu yang sama.</div>`) }
+      ${UI.field('Halaqah per Program', `<div class="clay-card pad-sm">${programHalaqahFields}</div><div class="muted" style="font-size:12px;margin-top:4px">Pilih halaqah sesuai program yang dicentang. Contoh: Tahsin tetap aktif sambil mengikuti Ziyadah.</div>`)}`;
     const modal = UI.openModal({
       title: id ? 'Edit Santri' : 'Tambah Santri', sub: id ? '' : 'Akun wali otomatis dibuat',
       bodyHTML: body,
@@ -396,14 +420,23 @@ const Admin = (() => {
             namaWali: m.querySelector('#f-wali').value.trim(),
             noHpWali: m.querySelector('#f-hpwali').value.trim(),
             status: m.querySelector('#f-status').value,
-            level: m.querySelector('#f-level').value,
-            kelas: m.querySelector('#f-kelas').value,
-            halaqah: m.querySelector('#f-halaqah').value
+            kelas: m.querySelector('#f-kelas').value
           };
           if (!data.nama) { UI.toast('Nama wajib diisi', 'error'); return; }
+          const programs = [...m.querySelectorAll('[data-program-active]:checked')].map(input => input.value);
+          const primary = m.querySelector('#f-level').value;
+          if (!programs.length) { UI.toast('Pilih minimal satu program aktif', 'error'); return; }
+          const programHalaqah = {};
+          for (const program of programs) {
+            const halaqahId = m.querySelector(`[data-program-halaqah="${program}"]`).value;
+            if (!halaqahId) { UI.toast('Pilih halaqah untuk program ' + program, 'error'); return; }
+            programHalaqah[program] = halaqahId;
+          }
           if (id) {
-            Object.assign(Store.findSantri(id), data);
-            const waliUser = db.users.find(u => u.role === 'wali' && u.refId === Store.findSantri(id).waliId);
+            const santri = Store.findSantri(id);
+            Object.assign(santri, data);
+            Store.configureSantriPrograms(santri, programs, programHalaqah, primary);
+            const waliUser = db.users.find(u => u.role === 'wali' && u.refId === santri.waliId);
             if (waliUser) {
               waliUser.username = m.querySelector('#f-uname').value.trim() || waliUser.username;
               const pass = m.querySelector('#f-pass').value.trim();
@@ -418,6 +451,7 @@ const Admin = (() => {
           } else {
             const waliId = Store.uid('w');
             const newS = { id: Store.uid('s'), ...data, waliId };
+            Store.configureSantriPrograms(newS, programs, programHalaqah, primary);
             db.santri.push(newS);
             // akun wali otomatis
             const wali = { id: waliId, nama: data.namaWali || data.nama, noHp: data.noHpWali, santriId: newS.id };
@@ -438,6 +472,21 @@ const Admin = (() => {
       const taken = new Set(db.users.filter(u => u.username).map(u => u.username));
       modal.modal.querySelector('#f-uname').value = uniqueUsername(base, taken);
     };
+    const syncProgramInputs = () => {
+      const checked = [...modal.modal.querySelectorAll('[data-program-active]:checked')].map(input => input.value);
+      const primarySelect = modal.modal.querySelector('#f-level');
+      const previous = primarySelect.value || primaryProgram;
+      primarySelect.innerHTML = UI.optionsFromList(checked.map(program => ({ v: program, l: program })), 'v', 'l', checked.includes(previous) ? previous : checked[0]);
+      allPrograms.forEach(program => {
+        const row = modal.modal.querySelector(`[data-program-halaqah-row="${program}"]`);
+        const select = modal.modal.querySelector(`[data-program-halaqah="${program}"]`);
+        const enabled = checked.includes(program);
+        row.style.display = enabled ? 'flex' : 'none';
+        select.disabled = !enabled;
+      });
+    };
+    modal.modal.querySelectorAll('[data-program-active]').forEach(input => { input.onchange = syncProgramInputs; });
+    syncProgramInputs();
   }
 
   /* ---------------- Bulk Import Santri ---------------- */
@@ -505,12 +554,13 @@ const Admin = (() => {
     const rows = db.ustadz.map(u => {
       const acc = db.users.find(usr => usr.role === 'ustadz' && usr.refId === u.id);
       const uname = acc ? acc.username : '-';
+      const halaqahNames = db.halaqah.filter(h => Store.halaqahHasUstadz(h, u)).map(h => h.nama);
       return `<tr>
         <td><b>${UI.esc(u.nama)}</b></td>
         <td><code>${UI.esc(uname)}</code></td>
         <td>${UI.esc(u.noHp)}</td>
         <td>${UI.esc(u.email)}</td>
-        <td>${UI.esc(u.halaqah)}</td>
+        <td>${UI.esc(halaqahNames.join(', ') || u.halaqah || '-')}</td>
         <td><span class="badge ${u.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(u.status)}</span></td>
         <td>
           <button class="clay-btn sm" data-edit="${u.id}">✏️</button>
@@ -540,13 +590,14 @@ const Admin = (() => {
         const db = Store.get();
         const deleted = db.ustadz.find(x => x.id === b.dataset.del);
         db.halaqah.forEach(h => {
-          if (h.ustadzId === b.dataset.del || (deleted && h.ustadz === deleted.nama)) {
-            h.ustadz = '';
-            h.ustadzId = '';
+          const ids = Store.ustadzIdsForHalaqah(h);
+          if (ids.includes(b.dataset.del) || (deleted && h.ustadz === deleted.nama)) {
+            applyHalaqahUstadz(db, h, ids.filter(id => id !== b.dataset.del));
           }
         });
         db.ustadz = db.ustadz.filter(x => x.id !== b.dataset.del);
         db.users = db.users.filter(u => u.refId !== b.dataset.del);
+        refreshUstadzHalaqah(db);
         Store.log('Hapus ustadz'); Store.save(); UI.toast('Ustadz dihapus'); ustadz();
       });
     });
@@ -588,13 +639,13 @@ const Admin = (() => {
           if (password && password.length < 6) { UI.toast('Password minimal 6 karakter', 'error'); return; }
           
           if (id) { 
-            const oldName = Store.findUstadz(id).nama;
-            Object.assign(Store.findUstadz(id), data);
-            db.halaqah.forEach(h => {
-              if (h.ustadzId === id || h.ustadz === oldName) {
-                h.ustadz = data.nama;
-                h.ustadzId = id;
-              }
+            const current = Store.findUstadz(id);
+            const oldName = current.nama;
+            const assigned = db.halaqah.filter(h => Store.halaqahHasUstadz(h, current) || h.ustadz === oldName);
+            Object.assign(current, data);
+            assigned.forEach(h => {
+              const ids = Store.ustadzIdsForHalaqah(h);
+              applyHalaqahUstadz(db, h, ids.includes(id) ? ids : [...ids, id]);
             });
             const user = account;
             if (user) {
@@ -641,6 +692,7 @@ const Admin = (() => {
             db.ustadz.push({ id: nid, nama: c[0], noHp: c[1] || '', email: c[2] || '', status: c[3] || 'Aktif', halaqah: c[4] || '' });
             const uname = c[5] || (c[1] && c[1].replace(/\D/g, '')) || c[0].toLowerCase().replace(/\s/g, '');
             db.users.push({ id: Store.uid('usr'), username: uname, password: c[6] || '12345678', role: 'ustadz', refId: nid });
+            assignUstadzToHalaqah(db, nid, c[4] || '');
             count++;
           });
           Store.save(); Store.log('Import ' + count + ' ustadz'); c(); UI.toast('Import ' + count + ' ustadz', 'success'); ustadz();
@@ -662,34 +714,42 @@ const Admin = (() => {
     Shared.shell('admin', nav('admin_halaqah'), '');
     Shared.setHeader('Manajemen Halaqah', 'Ustadz, halaqah, dan santri');
     const db = Store.get();
-    const options = db.halaqah.map(h => ({ value: h.nama, label: h.nama }));
-    const moveOptions = selected => `<option value="" ${!selected ? 'selected' : ''}>Belum ditetapkan</option>${UI.optionsFromList(options, 'value', 'label', selected)}`;
-    const santriRows = santri => santri.map((s, i) => `<tr>
+    const moveOptions = (program, selected) => {
+      const options = db.halaqah.filter(h => h.level === program).map(h => ({ value: h.id, label: h.nama }));
+      return `<option value="" ${!selected ? 'selected' : ''}>Pilih halaqah</option>${UI.optionsFromList(options, 'value', 'label', selected)}`;
+    };
+    const santriRows = (santri, currentHalaqah) => santri.map((s, i) => {
+      const program = currentHalaqah ? currentHalaqah.level : s.level;
+      const assigned = Store.halaqahForSantriProgram(s, program);
+      return `<tr>
       <td class="center">${i + 1}</td>
       <td><b>${UI.esc(s.nama)}</b><div class="muted" style="font-size:12px">${UI.esc(s.nis || '-')}</div></td>
       <td>${UI.esc(s.kelas || '-')}</td>
-      <td>${UI.esc(s.level || '-')}</td>
-      <td><select class="clay-select" data-move-target style="min-width:160px">${moveOptions(s.halaqah)}</select></td>
-      <td class="center"><button class="clay-btn sm secondary" data-save-move="${UI.esc(s.id)}">Simpan</button></td>
-    </tr>`).join('');
+      <td>${UI.esc(program || '-')}</td>
+      <td><select class="clay-select" data-move-target style="min-width:160px">${moveOptions(program, assigned && assigned.id)}</select></td>
+      <td class="center"><button class="clay-btn sm secondary" data-save-move="${UI.esc(s.id)}" data-program="${UI.esc(program)}">Simpan</button></td>
+    </tr>`;
+    }).join('');
     const group = (title, h, santri) => `<div class="clay-card mb">
       <div class="row" style="justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px">
         <div>
-          <div class="section-title" style="margin:0">${UI.esc(title)}</div>
-          ${h ? `<div class="muted" style="font-size:13px;margin-top:5px">Ustadz: <b>${UI.esc(h.ustadz || 'Belum ditetapkan')}</b> · Level: ${UI.esc(h.level || '-')} · ${UI.esc(h.hari || '-')} · ${UI.esc(h.jam || '-')} · ${UI.esc(h.ruangan || '-')}<br>Setoran Bacaan: <b>${h.setoranBacaan ? 'Aktif' : 'Nonaktif'}</b></div>` : '<div class="muted" style="font-size:13px;margin-top:5px">Santri yang belum memiliki halaqah aktif.</div>'}
+          <div class="section-title" style="margin:0">${UI.esc(title)}${h ? ` <span class="muted" style="font-size:13px;font-weight:400">· ${UI.esc(Store.ustadzNamesForHalaqah(h).join(', ') || 'Belum ditetapkan')}</span>` : ''}</div>
+          ${h ? `<div class="muted" style="font-size:13px;margin-top:5px">Level: ${UI.esc(h.level || '-')} · ${UI.esc(h.hari || '-')} · ${UI.esc(h.jam || '-')} · ${UI.esc(h.ruangan || '-')}<br>Setoran Bacaan: <b>${h.setoranBacaan ? 'Aktif' : 'Nonaktif'}</b></div>` : '<div class="muted" style="font-size:13px;margin-top:5px">Santri yang belum memiliki halaqah aktif.</div>'}
         </div>
         ${h ? `<div><button class="clay-btn sm" data-edit-halaqah="${UI.esc(h.id)}">✏️ Edit Halaqah</button> <button class="clay-btn sm danger" data-del="${UI.esc(h.id)}">🗑</button></div>` : ''}
       </div>
       <div class="table-wrap"><table class="clay-table">
         <thead><tr><th class="center">No</th><th>Santri</th><th>Kelas</th><th>Level</th><th>Pindah ke Halaqah</th><th class="center">Aksi</th></tr></thead>
-        <tbody>${santriRows(santri) || '<tr><td colspan="6"><div class="empty">Belum ada santri.</div></td></tr>'}</tbody>
+        <tbody>${santriRows(santri, h) || '<tr><td colspan="6"><div class="empty">Belum ada santri.</div></td></tr>'}</tbody>
       </table></div>
     </div>`;
-    const groups = db.halaqah.map(h => group(h.nama, h, db.santri.filter(s => s.halaqah === h.nama).sort((a, b) => a.nama.localeCompare(b.nama, 'id')))).join('');
-    const withoutHalaqah = db.santri.filter(s => !db.halaqah.some(h => h.nama === s.halaqah)).sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+    const groups = db.halaqah.map(h => group(h.nama, h, db.santri
+      .filter(s => Store.santriHasHalaqah(s, h, h.level))
+      .sort((a, b) => a.nama.localeCompare(b.nama, 'id')))).join('');
+    const withoutHalaqah = db.santri.filter(s => !Store.halaqahForSantri(s).length).sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
     document.getElementById('view-content').innerHTML = `
       <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:16px">
-        <div class="muted" style="font-size:13px">Pilih halaqah tujuan lalu klik <b>Simpan</b> untuk memindahkan santri.</div>
+      <div class="muted" style="font-size:13px">Penempatan disimpan per program. Santri dapat muncul di lebih dari satu halaqah bila programnya aktif.</div>
         <button class="clay-btn primary" id="btn-add">+ Tambah Halaqah</button>
       </div>
       ${groups || '<div class="empty">Belum ada halaqah.</div>'}
@@ -698,29 +758,45 @@ const Admin = (() => {
     document.querySelectorAll('[data-edit-halaqah]').forEach(b => b.onclick = () => halaqahForm(b.dataset.editHalaqah));
     document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
       UI.confirmDialog('Hapus Halaqah', 'Yakin hapus halaqah?', () => {
-        const db = Store.get(); db.halaqah = db.halaqah.filter(x => x.id !== b.dataset.del); Store.save(); Store.log('Hapus halaqah'); UI.toast('Dihapus'); halaqah();
+        const db = Store.get();
+        db.santri.forEach(santri => {
+          const assignments = Object.assign({}, santri.halaqahProgram || {});
+          Object.keys(assignments).forEach(program => { if (assignments[program] === b.dataset.del) delete assignments[program]; });
+          santri.halaqahProgram = assignments;
+        });
+        db.halaqah = db.halaqah.filter(x => x.id !== b.dataset.del);
+        Store.recalcHalaqah(); Store.save(); Store.log('Hapus halaqah'); UI.toast('Dihapus'); halaqah();
       });
     });
     document.querySelectorAll('[data-save-move]').forEach(button => button.onclick = async () => {
       const row = button.closest('tr');
       const target = row.querySelector('[data-move-target]').value;
       const santri = Store.findSantri(button.dataset.saveMove);
-      if (!santri || santri.halaqah === target) { UI.toast('Belum ada perubahan halaqah', 'error'); return; }
-      const oldHalaqah = santri.halaqah || '';
-      const before = oldHalaqah || 'Belum ditetapkan';
-      santri.halaqah = target;
+      const program = button.dataset.program;
+      const targetHalaqah = Store.findHalaqahById(target);
+      const currentHalaqah = santri && Store.halaqahForSantriProgram(santri, program);
+      if (!santri || !targetHalaqah) { UI.toast('Pilih halaqah tujuan', 'error'); return; }
+      if (currentHalaqah && currentHalaqah.id === targetHalaqah.id) { UI.toast('Belum ada perubahan halaqah', 'error'); return; }
+      const previous = {
+        programAktif: [...Store.activeProgramsForSantri(santri)],
+        halaqahProgram: Object.assign({}, santri.halaqahProgram || {}),
+        level: santri.level,
+        halaqah: santri.halaqah
+      };
+      const assignments = Object.assign({}, previous.halaqahProgram, { [program]: targetHalaqah.id });
+      Store.configureSantriPrograms(santri, previous.programAktif, assignments, previous.level);
       Store.recalcHalaqah();
       button.disabled = true;
       const saved = await Store.save();
       if (!saved) {
-        santri.halaqah = oldHalaqah;
+        Object.assign(santri, previous);
         Store.recalcHalaqah();
         button.disabled = false;
         UI.toast('Perpindahan gagal disimpan', 'error');
         return;
       }
-      Store.log('Pindah santri: ' + santri.nama + ' dari ' + before + ' ke ' + (target || 'Belum ditetapkan'));
-      UI.toast('Halaqah ' + santri.nama + ' diperbarui', 'success');
+      Store.log('Pindah santri: ' + santri.nama + ' ke ' + targetHalaqah.nama + ' (' + program + ')');
+      UI.toast('Halaqah ' + santri.nama + ' untuk ' + program + ' diperbarui', 'success');
       halaqah();
     });
   }
@@ -728,10 +804,16 @@ const Admin = (() => {
   function halaqahForm(id) {
     const db = Store.get();
     const h = id ? db.halaqah.find(x => x.id === id) : null;
+    const selectedUstadzIds = h ? Store.ustadzIdsForHalaqah(h) : [];
+    const ustadzChecks = db.ustadz.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id')).map(u => `
+      <label class="row" style="gap:8px;cursor:pointer;padding:5px 0">
+        <input type="checkbox" data-halaqah-ustadz value="${UI.esc(u.id)}" ${selectedUstadzIds.includes(u.id) ? 'checked' : ''}>
+        <span>${UI.esc(u.nama)} <span class="muted" style="font-size:12px">(${UI.esc(u.halaqah || 'Belum ditugaskan')})</span></span>
+      </label>`).join('');
     const body = `
       ${UI.field('Nama Halaqah', `<input class="clay-input" id="f-nama" value="${h ? UI.esc(h.nama) : ''}">`)}
+      ${UI.field('Ustadz Pengampu', `<div class="clay-card pad-sm" style="max-height:190px;overflow:auto">${ustadzChecks || '<div class="muted">Belum ada ustadz.</div>'}</div><div class="muted" style="font-size:12px;margin-top:4px">Boleh pilih lebih dari satu ustadz. Ustadz yang dipilih akan dipindahkan dari halaqah sebelumnya.</div>`)}
       <div class="row">
-        <div style="flex:1">${UI.field('Ustadz', `<select class="clay-select" id="f-ustadz"><option value="">-</option>${UI.optionsFromList(db.ustadz.map(u => ({ v: u.id, l: u.nama })), 'v', 'l', h ? (h.ustadzId || (db.ustadz.find(u => u.nama === h.ustadz) || {}).id || '') : '')}</select>`)}</div>
         <div style="flex:1">${UI.field('Level', `<select class="clay-select" id="f-level">${UI.optionsFromList(db.levelTahfidz.map(l => ({ v: l, l })), 'v', 'l', h ? h.level : 'Ziyadah')}</select>`)}</div>
       </div>
       <div class="row">
@@ -747,7 +829,7 @@ const Admin = (() => {
         { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
           const db = Store.get();
           const data = { nama: m.querySelector('#f-nama').value.trim(), level: m.querySelector('#f-level').value, hari: m.querySelector('#f-hari').value.trim(), jam: m.querySelector('#f-jam').value.trim(), ruangan: m.querySelector('#f-ruang').value.trim(), setoranBacaan: m.querySelector('#f-setoran-bacaan').checked };
-          const ustadzId = m.querySelector('#f-ustadz').value;
+          const ustadzIds = [...m.querySelectorAll('[data-halaqah-ustadz]:checked')].map(input => input.value);
           if (!data.nama) { UI.toast('Nama wajib', 'error'); return; }
           if (db.halaqah.some(x => x.id !== id && x.nama.toLowerCase() === data.nama.toLowerCase())) { UI.toast('Nama halaqah sudah digunakan', 'error'); return; }
           let target;
@@ -756,7 +838,11 @@ const Admin = (() => {
             const oldName = target.nama;
             Object.assign(target, data);
             if (oldName !== target.nama) {
-              db.santri.forEach(s => { if (s.halaqah === oldName) s.halaqah = target.nama; });
+              db.santri.forEach(s => {
+                if (s.halaqah === oldName) s.halaqah = target.nama;
+                const primaryHalaqah = Store.halaqahForSantriProgram(s, s.level);
+                if (primaryHalaqah && primaryHalaqah.id === target.id) s.halaqah = target.nama;
+              });
               db.ustadz.forEach(u => { if (u.halaqah === oldName) u.halaqah = target.nama; });
               (db.jurnalTalim || []).forEach(j => { if (j.halaqah === oldName) j.halaqah = target.nama; });
             }
@@ -764,7 +850,7 @@ const Admin = (() => {
             target = { id: Store.uid('h'), jumlahSantri: 0, ...data };
             db.halaqah.push(target);
           }
-          syncHalaqahUstadz(db, target, ustadzId);
+          syncHalaqahUstadz(db, target, ustadzIds);
           Store.recalcHalaqah(); Store.log('Simpan halaqah'); await Store.save(); c(); UI.toast('Tersimpan', 'success'); halaqah();
         } }
       ]
@@ -824,7 +910,7 @@ const Admin = (() => {
       
       santriListEl.innerHTML = filtered.map(s => `
         <div class="search-item ${s.id === selectedSantriId ? 'active' : ''}" data-sid="${s.id}" style="padding:8px 12px;cursor:pointer;border-radius:8px;margin:2px 0">
-          <b>${UI.esc(s.nama)}</b> <span class="muted">(${UI.esc(s.nis || '-')})</span> <span class="muted" style="font-size:12px">${UI.esc(s.halaqah)}</span>
+          <b>${UI.esc(s.nama)}</b> <span class="muted">(${UI.esc(s.nis || '-')})</span> <span class="muted" style="font-size:12px">${UI.esc(Store.halaqahSummaryForSantri(s))}</span>
         </div>
       `).join('');
       

@@ -105,6 +105,11 @@ const Store = (() => {
     try {
       const data = await api('bootstrap');
       db = Object.assign(defaultDB(), data.db);
+      // Data lama hanya memiliki satu `level` dan `halaqah`. Normalisasi ini
+      // menjadikannya satu program aktif, tanpa mengubah arti data lamanya.
+      // Data baru dapat menyimpan beberapa program sekaligus, misalnya Tahsin
+      // dan Ziyadah, masing-masing dengan halaqah yang berbeda.
+      db.santri = (db.santri || []).map(normalizeSantriPrograms);
       // Data absensi dari versi awal belum memiliki sesi. Anggap sebagai
       // Subuh supaya tetap muncul di rekap, lalu semua input baru memakai
       // sesi yang eksplisit.
@@ -257,7 +262,7 @@ const Store = (() => {
   }
 
   function recalcHalaqah() {
-    db.halaqah.forEach(h => { h.jumlahSantri = db.santri.filter(s => s.halaqah === h.nama).length; });
+    db.halaqah.forEach(h => { h.jumlahSantri = db.santri.filter(s => santriHasHalaqah(s, h)).length; });
   }
 
   /* ---------- Helpers (operate on in-memory db) ---------- */
@@ -265,11 +270,150 @@ const Store = (() => {
   function findWali(id) { return db.wali.find(w => w.id === id); }
   function findUstadz(id) { return db.ustadz.find(u => u.id === id); }
   function findUstadzByName(name) { return db.ustadz.find(u => u.nama === name); }
+  function findHalaqahById(id) { return db.halaqah.find(h => h.id === id); }
   function findHalaqahByName(name) { return db.halaqah.find(h => h.nama === name); }
+
+  function availablePrograms() {
+    return (db.levelTahfidz || ['Tahsin', 'Ziyadah', 'Mutqin']).filter(Boolean);
+  }
+
+  function normalizeProgramList(programs, fallback) {
+    const available = availablePrograms();
+    const requested = Array.isArray(programs) ? programs : [];
+    const clean = [...new Set(requested.filter(program => available.includes(program)))];
+    return clean.length ? clean : (available.includes(fallback) ? [fallback] : []);
+  }
+
+  function resolveHalaqah(reference) {
+    if (!reference) return null;
+    return findHalaqahById(reference) || findHalaqahByName(reference) || null;
+  }
+
+  // Bentuk data baru:
+  // programAktif: ['Tahsin', 'Ziyadah']
+  // halaqahProgram: { Tahsin: '<id halaqah>', Ziyadah: '<id halaqah>' }
+  // Kolom `level` dan `halaqah` tetap dipertahankan sebagai program utama
+  // supaya laporan dan data dari versi sebelumnya tetap kompatibel.
+  function normalizeSantriPrograms(santri) {
+    if (!santri) return santri;
+    const programs = normalizeProgramList(santri.programAktif, santri.level);
+    const assignments = (santri.halaqahProgram && typeof santri.halaqahProgram === 'object' && !Array.isArray(santri.halaqahProgram))
+      ? Object.assign({}, santri.halaqahProgram) : {};
+    const primary = programs.includes(santri.level) ? santri.level : (programs[0] || santri.level || 'Tahsin');
+    if (!assignments[primary] && santri.halaqah) {
+      const legacyHalaqah = findHalaqahByName(santri.halaqah);
+      assignments[primary] = legacyHalaqah ? legacyHalaqah.id : santri.halaqah;
+    }
+    santri.programAktif = programs.length ? programs : [primary];
+    santri.halaqahProgram = assignments;
+    santri.level = primary;
+    return santri;
+  }
+
+  function activeProgramsForSantri(santri) {
+    if (!santri) return [];
+    return normalizeProgramList(santri.programAktif, santri.level);
+  }
+
+  function halaqahForSantriProgram(santri, program) {
+    if (!santri || !program) return null;
+    const assignments = santri.halaqahProgram && typeof santri.halaqahProgram === 'object' ? santri.halaqahProgram : {};
+    const assigned = resolveHalaqah(assignments[program]);
+    if (assigned) return assigned;
+    return santri.level === program ? findHalaqahByName(santri.halaqah) : null;
+  }
+
+  function halaqahForSantri(santri) {
+    if (!santri) return [];
+    const seen = new Set();
+    return activeProgramsForSantri(santri)
+      .map(program => halaqahForSantriProgram(santri, program))
+      .filter(halaqah => {
+        if (!halaqah || seen.has(halaqah.id)) return false;
+        seen.add(halaqah.id);
+        return true;
+      });
+  }
+
+  function santriHasProgram(santri, program) {
+    return activeProgramsForSantri(santri).includes(program);
+  }
+
+  function santriHasHalaqah(santri, halaqah, program) {
+    if (!santri || !halaqah) return false;
+    const target = typeof halaqah === 'string' ? (findHalaqahById(halaqah) || findHalaqahByName(halaqah)) : halaqah;
+    if (!target) return false;
+    if (program) {
+      const assigned = halaqahForSantriProgram(santri, program);
+      return !!assigned && assigned.id === target.id;
+    }
+    return halaqahForSantri(santri).some(item => item.id === target.id)
+      || santri.halaqah === target.nama;
+  }
+
+  function configureSantriPrograms(santri, programs, halaqahProgram, primaryProgram) {
+    if (!santri) return;
+    const active = normalizeProgramList(programs, primaryProgram || santri.level);
+    const assignments = {};
+    active.forEach(program => {
+      const halaqah = resolveHalaqah(halaqahProgram && halaqahProgram[program]);
+      if (halaqah) assignments[program] = halaqah.id;
+    });
+    const primary = active.includes(primaryProgram) ? primaryProgram : active[0];
+    const primaryHalaqah = halaqahForProgramAssignment(assignments, primary);
+    santri.programAktif = active;
+    santri.halaqahProgram = assignments;
+    santri.level = primary;
+    santri.halaqah = primaryHalaqah ? primaryHalaqah.nama : '';
+  }
+
+  function halaqahForProgramAssignment(assignments, program) {
+    return program ? resolveHalaqah(assignments[program]) : null;
+  }
+
+  function programSummaryForSantri(santri, separator) {
+    return activeProgramsForSantri(santri).join(separator || ' · ');
+  }
+
+  function halaqahSummaryForSantri(santri, separator) {
+    const joiner = separator || ' · ';
+    return activeProgramsForSantri(santri).map(program => {
+      const halaqah = halaqahForSantriProgram(santri, program);
+      return halaqah ? program + ': ' + halaqah.nama : program + ': -';
+    }).join(joiner);
+  }
+
+  // Halaqah lama menyimpan satu `ustadzId`/`ustadz`. Data baru boleh
+  // menyimpan beberapa pengampu tanpa memaksa data lama dimigrasikan ulang.
+  function ustadzIdsForHalaqah(halaqah) {
+    if (!halaqah) return [];
+    const ids = Array.isArray(halaqah.ustadzIds) ? halaqah.ustadzIds.slice() : [];
+    if (halaqah.ustadzId) ids.unshift(halaqah.ustadzId);
+    if (!ids.length && halaqah.ustadz) {
+      const legacy = findUstadzByName(halaqah.ustadz);
+      if (legacy) ids.push(legacy.id);
+    }
+    return [...new Set(ids)].filter(id => !!findUstadz(id));
+  }
+
+  function ustadzNamesForHalaqah(halaqah) {
+    const byId = ustadzIdsForHalaqah(halaqah).map(id => findUstadz(id)?.nama).filter(Boolean);
+    if (byId.length) return byId;
+    const stored = Array.isArray(halaqah?.ustadzNames) ? halaqah.ustadzNames.filter(Boolean) : [];
+    if (stored.length) return [...new Set(stored)];
+    return halaqah?.ustadz ? [halaqah.ustadz] : [];
+  }
+
+  function halaqahHasUstadz(halaqah, ustadz) {
+    if (!halaqah || !ustadz) return false;
+    return ustadzIdsForHalaqah(halaqah).includes(ustadz.id)
+      || halaqah.ustadzId === ustadz.id
+      || halaqah.ustadz === ustadz.nama;
+  }
+
   function findHalaqahForUstadz(ustadz) {
     if (!ustadz) return null;
-    return db.halaqah.find(h => h.ustadzId === ustadz.id)
-      || db.halaqah.find(h => h.ustadz === ustadz.nama)
+    return db.halaqah.find(h => halaqahHasUstadz(h, ustadz))
       || db.halaqah.find(h => h.nama === ustadz.halaqah)
       || null;
   }
@@ -378,14 +522,20 @@ const Store = (() => {
               || db.tahsin.some(z => z.santriId === s.id && z.tanggal === tgl);
             if (!adaSetoran) {
               const wUser = db.settings.notifWali && db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
-              const hObj = Store.findHalaqahByName(s.halaqah);
-              const uObj = hObj ? Store.findUstadzByName(hObj.ustadz) : null;
-              const uUser = db.settings.notifUstadz && uObj ? db.users.find(u => u.role === 'ustadz' && u.refId === uObj.id) : null;
+              const halaqahSantri = halaqahForSantri(s);
+              const ustadzPengampu = db.ustadz.filter(u => halaqahSantri.some(h => halaqahHasUstadz(h, u)));
+              const uUsers = db.settings.notifUstadz
+                ? ustadzPengampu.map(u => db.users.find(user => user.role === 'ustadz' && user.refId === u.id)).filter(Boolean)
+                : [];
               const tglTxt = UI.fmtDate(tgl);
               const pesan = '⚠️ ' + s.nama + ' belum setoran pada ' + tglTxt + '. Mohon dampingi anak untuk setoran.';
               const pesanU = s.nama + ' belum setoran pada ' + tglTxt + '.';
               if (wUser && !db.notifikasi.some(n => n.userId === wUser.id && n.pesan === pesan)) { addNotif(wUser.id, 'wali', pesan); notifCount++; }
-              if (uUser && !db.notifikasi.some(n => n.userId === uUser.id && n.pesan === pesanU)) { addNotif(uUser.id, 'ustadz', pesanU); notifCount++; }
+              uUsers.forEach(uUser => {
+                if (notifCount < maxNotif && !db.notifikasi.some(n => n.userId === uUser.id && n.pesan === pesanU)) {
+                  addNotif(uUser.id, 'ustadz', pesanU); notifCount++;
+                }
+              });
               tandai(s.id, tgl);
             }
           }
@@ -399,7 +549,8 @@ const Store = (() => {
   return {
     load, save, get, reset, uid, log, nowISO, todayStr,
     setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout, changePassword,
-    recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahByName, findHalaqahForUstadz, search,
+    recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahById, findHalaqahByName, ustadzIdsForHalaqah, ustadzNamesForHalaqah, halaqahHasUstadz, findHalaqahForUstadz,
+    activeProgramsForSantri, halaqahForSantriProgram, halaqahForSantri, santriHasProgram, santriHasHalaqah, configureSantriPrograms, programSummaryForSantri, halaqahSummaryForSantri, search,
     waSend, waLog, waReady, waSendWali,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, addNotif, notifFor, clearNotifs, checkSetoranTerlewat
   };

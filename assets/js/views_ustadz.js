@@ -25,8 +25,10 @@ const Ustadz = (() => {
     return (s && s.role === 'admin') ? { role: 'admin', scope: 'all' } : { role: 'ustadz', scope: 'saya' };
   }
 
-  // Kirim laporan WA ke wali; toast hasil (terkirim/gagal) tanpa nunggu simpan.
+  // Saat WA otomatis dimatikan, penyimpanan tidak perlu memunculkan toast
+  // pengiriman apa pun. Ustadz cukup menerima konfirmasi "Tersimpan".
   function waReport(santriId, message) {
+    if (!Store.get().settings.waAuto) return Promise.resolve(false);
     return Store.waSendWali(santriId, message).then(ok => {
       UI.toast(ok ? 'WA terkirim ke wali ✓' : 'WA gagal dikirim ke wali (cek Log WhatsApp di Admin)', ok ? 'success' : 'error');
     });
@@ -39,19 +41,19 @@ const Ustadz = (() => {
     const h = Store.findHalaqahForUstadz(u);
     return h ? h.nama : (u ? u.halaqah : null);
   }
-  function mySantri() {
+  function mySantri(program) {
     const db = Store.get();
     if (_scope === 'all') return db.santri; // admin: semua santri
     const h = myHalaqah();
-    return h ? db.santri.filter(s => s.halaqah === h) : [];
+    return h ? db.santri.filter(s => Store.santriHasHalaqah(s, h, program)) : [];
   }
   // ustadzId yang dicatat: ustadz session, atau ustadz halaqah santri (jika admin)
-  function ustadzIdFor(santriId) {
+  function ustadzIdFor(santriId, program) {
     const session = Store.getSession();
     if (session && session.role === 'ustadz') return session.refId;
     const s = Store.findSantri(santriId);
     if (!s) return null;
-    const h = Store.findHalaqahByName(s.halaqah);
+    const h = Store.halaqahForSantriProgram(s, program || s.level);
     if (!h) return null;
     const u = Store.findUstadzByName(h.ustadz);
     return u ? u.id : null;
@@ -112,7 +114,7 @@ const Ustadz = (() => {
           <div class="section-title"> Daftar Santri</div>
           ${santri.map(s => {
             const h = Store.totalHafalanSantri(s.id);
-            return `<div class="row center" style="justify-content:space-between;padding:6px 0"><span>${UI.esc(s.nama)} <span class="muted" style="font-size:12px">(${UI.esc(s.level)})</span></span><span class="badge green">${h ? formatHafalan(h) : '-'}</span></div>`;
+            return `<div class="row center" style="justify-content:space-between;padding:6px 0"><span>${UI.esc(s.nama)} <span class="muted" style="font-size:12px">(${UI.esc(Store.programSummaryForSantri(s))})</span></span><span class="badge green">${h ? formatHafalan(h) : '-'}</span></div>`;
           }).join('') || '<div class="empty">Tidak ada santri.</div>'}
         </div>
       </div>`;
@@ -146,7 +148,8 @@ const Ustadz = (() => {
 
     function renderAbsensi() {
       // Pencarian nama tidak mengubah cakupan absensi yang akan disimpan.
-      const roster = halaqahFilter ? allSantri.filter(s => s.halaqah === halaqahFilter) : allSantri;
+      const halaqah = Store.findHalaqahByName(halaqahFilter);
+      const roster = halaqah ? allSantri.filter(s => Store.santriHasHalaqah(s, halaqah)) : allSantri;
       const sessionRecords = db.kehadiran.filter(k => k.tanggal === t && k.sesi === sesiAktif && roster.some(s => s.id === k.santriId));
       const hasSaved = sessionRecords.length > 0;
       const isEditing = editing === null ? !hasSaved : editing;
@@ -424,7 +427,7 @@ const Ustadz = (() => {
   /* ----- Tahsin ----- */
   function renderTahsin() {
     const db = Store.get();
-    const santri = mySantri().filter(s => s.level === 'Tahsin');
+    const santri = mySantri('Tahsin').filter(s => Store.santriHasProgram(s, 'Tahsin'));
     const rows = santri.map(s => {
       const rec = db.tahsin.filter(t => t.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
       return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${rec ? 'Hal ' + rec.halAwal + '-' + rec.halAkhir : '<span class="muted">-</span>'}</td><td>${rec ? rec.nilai : '-'}</td><td><button class="clay-btn sm primary" data-input="${s.id}">+ Input</button></td></tr>`;
@@ -514,7 +517,7 @@ const Ustadz = (() => {
         { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
           const db = Store.get();
           const session = Store.getSession();
-          db.tahsin.push({ id: Store.uid('ts'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: m.querySelector('#f-tgl').value, halAwal: +m.querySelector('#f-ha').value, halAkhir: +m.querySelector('#f-hk').value, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim() });
+          db.tahsin.push({ id: Store.uid('ts'), santriId, ustadzId: ustadzIdFor(santriId, 'Tahsin'), tanggal: m.querySelector('#f-tgl').value, halAwal: +m.querySelector('#f-ha').value, halAkhir: +m.querySelector('#f-hk').value, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim() });
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (wUser) Store.addNotif(wUser.id, 'wali', 'Nilai Tahsin baru: ' + s.nama);
           waReport(santriId, '📖 Laporan Tahsin ' + s.nama + ': halaman ' + m.querySelector('#f-ha').value + '-' + m.querySelector('#f-hk').value + ', nilai ' + m.querySelector('#f-nilai').value + '. — ' + db.settings.namaLembaga);
@@ -527,7 +530,7 @@ const Ustadz = (() => {
   /* ----- Ziyadah (Bacaan + Hafalan) ----- */
   function renderZiyadah() {
     const db = Store.get();
-    const santri = mySantri().filter(s => s.level === 'Ziyadah');
+    const santri = mySantri('Ziyadah').filter(s => Store.santriHasProgram(s, 'Ziyadah'));
     const t = Store.todayStr();
     const rows = santri.map(s => {
       const last = Store.lastZiyadah(s.id);
@@ -554,7 +557,7 @@ const Ustadz = (() => {
     const s = Store.findSantri(santriId);
     const db = Store.get();
     const t = Store.todayStr();
-    const halaqah = Store.findHalaqahByName(s.halaqah);
+    const halaqah = Store.halaqahForSantriProgram(s, 'Ziyadah');
     const bacaanRequired = !!(halaqah && halaqah.setoranBacaan);
     const bacaanToday = db.ziyadahBacaan.filter(z => z.santriId === santriId && z.tanggal === t).sort((a, b) => (b._created||0)-(a._created||0))[0];
     const hafalanToday = db.ziyadahHafalan.some(z => z.santriId === santriId && z.tanggal === t);
@@ -689,7 +692,7 @@ const Ustadz = (() => {
 
       const d = Store.get();
       d.ziyadahBacaan.push({
-        id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId),
+        id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId, 'Ziyadah'),
         tanggal: Store.todayStr(), sAwal: sA, aAwal: +aaEl.value,
         sAkhir: sK, aAkhir: +akEl.value, _created: Date.now()
       });
@@ -749,7 +752,7 @@ const Ustadz = (() => {
 
       const d = Store.get();
       d.ziyadahHafalan.push({
-        id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId),
+        id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId, 'Ziyadah'),
         tanggal: Store.todayStr(), sAwal: sA, aAwal: aA,
         sAkhir: sK, aAkhir: aK, nilai: +document.getElementById('f-nilai').value,
         catatan: document.getElementById('f-cat').value.trim(), _created: Date.now()
@@ -769,7 +772,7 @@ const Ustadz = (() => {
   /* ----- Mutqin ----- */
   function renderMutqin() {
     const db = Store.get();
-    const santri = mySantri().filter(s => s.level === 'Mutqin');
+    const santri = mySantri('Mutqin').filter(s => Store.santriHasProgram(s, 'Mutqin'));
     const rows = santri.map(s => {
       const rec = db.mutqin.filter(m => m.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
       return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${rec ? getSurah(rec.sAkhir).latin + ':' + rec.aAkhir : '<span class="muted">-</span>'}</td><td>${rec ? rec.totalHafalan + ' hlm' : '-'}</td><td><button class="clay-btn sm primary" data-input="${s.id}">+ Murajaah</button></td></tr>`;
@@ -814,7 +817,7 @@ const Ustadz = (() => {
           const sAyh = getSurah(sA); const sKyh = getSurah(sK);
           if (sAyh && +m.querySelector('#m-aa').value > sAyh.ayahs) { UI.toast('Awal ayat melebihi batas surat', 'error'); return; }
           if (sKyh && +m.querySelector('#m-ak').value > sKyh.ayahs) { UI.toast('Akhir ayat melebihi batas surat', 'error'); return; }
-          db.mutqin.push({ id: Store.uid('m'), santriId, ustadzId: ustadzIdFor(santriId), tanggal: Store.todayStr(), sAwal: sA, aAwal: +m.querySelector('#m-aa').value, sAkhir: sK, aAkhir: +m.querySelector('#m-ak').value, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(), totalHafalan: +m.querySelector('#m-total').value });
+          db.mutqin.push({ id: Store.uid('m'), santriId, ustadzId: ustadzIdFor(santriId, 'Mutqin'), tanggal: Store.todayStr(), sAwal: sA, aAwal: +m.querySelector('#m-aa').value, sAkhir: sK, aAkhir: +m.querySelector('#m-ak').value, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(), totalHafalan: +m.querySelector('#m-total').value });
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (wUser) Store.addNotif(wUser.id, 'wali', 'Murajaah Mutqin: ' + s.nama);
           waReport(santriId, '🌟 Murajaah Mutqin ' + s.nama + ': ' + getSurah(sA).latin + ':' + m.querySelector('#m-aa').value + ' - ' + getSurah(sK).latin + ':' + m.querySelector('#m-ak').value + '. Total ' + m.querySelector('#m-total').value + ' halaman. — ' + db.settings.namaLembaga);
@@ -864,7 +867,7 @@ const Ustadz = (() => {
       
       santriListEl.innerHTML = filtered.map(s => `
         <div class="search-item ${s.id === selectedSantriId ? 'active' : ''}" data-sid="${s.id}" style="padding:8px 12px;cursor:pointer;border-radius:8px;margin:2px 0">
-          <b>${UI.esc(s.nama)}</b> <span class="muted">(${UI.esc(s.nis || '-')})</span> <span class="muted" style="font-size:12px">${UI.esc(s.halaqah)}</span>
+          <b>${UI.esc(s.nama)}</b> <span class="muted">(${UI.esc(s.nis || '-')})</span> <span class="muted" style="font-size:12px">${UI.esc(Store.halaqahSummaryForSantri(s))}</span>
         </div>
       `).join('');
       
@@ -975,19 +978,26 @@ const Ustadz = (() => {
       body.innerHTML = santri.map(s => {
         const totalH = Store.totalHafalanSantri(s.id);
         const avg = Store.avgNilai(s.id);
-        let btnLabel = '+ Input', btnCls = 'primary';
-        if (s.level === 'Ziyadah') { btnLabel = '+ Setoran'; btnCls = 'secondary'; }
-        else if (s.level === 'Mutqin') { btnLabel = '+ Murajaah'; btnCls = 'success'; }
+        const programs = Store.activeProgramsForSantri(s);
+        const badges = programs.map(program => {
+          const cls = program === 'Tahsin' ? 'blue' : program === 'Ziyadah' ? 'green' : 'warn';
+          return `<span class="badge ${cls}" style="margin:0 3px 3px 0">${UI.esc(program)}</span>`;
+        }).join('');
+        const actions = programs.map(program => {
+          const label = program === 'Ziyadah' ? '+ Setoran' : program === 'Mutqin' ? '+ Murajaah' : '+ Tahsin';
+          const cls = program === 'Ziyadah' ? 'secondary' : program === 'Mutqin' ? 'success' : 'primary';
+          return `<button class="clay-btn sm ${cls}" data-input="${s.id}" data-program="${UI.esc(program)}">${label}</button>`;
+        }).join(' ');
         return `<tr>
           <td><b>${UI.esc(s.nama)}</b><div class="muted" style="font-size:12px">${UI.esc(s.nis)}</div></td>
           <td>${UI.esc(s.kelas)}</td>
-          <td><span class="badge ${s.level === 'Tahsin' ? 'blue' : s.level === 'Ziyadah' ? 'green' : 'warn'}">${UI.esc(s.level)}</span></td>
+          <td>${badges || '<span class="muted">-</span>'}</td>
           <td>${totalH ? formatHafalan(totalH) : '<span class="muted">-</span>'}</td>
           <td>${avg ? '<b>' + avg + '</b>' : '<span class="muted">-</span>'}</td>
-          <td><button class="clay-btn sm ${btnCls}" data-input="${s.id}">${btnLabel}</button></td>
+          <td>${actions}</td>
         </tr>`;
       }).join('');
-      body.querySelectorAll('[data-input]').forEach(b => b.onclick = () => umumInput(b.dataset.input));
+      body.querySelectorAll('[data-input]').forEach(b => b.onclick = () => umumInput(b.dataset.input, b.dataset.program));
     }
 
     const input = document.getElementById('cari-santri');
@@ -1006,10 +1016,12 @@ const Ustadz = (() => {
     return `${h.ayahs} ayat · ${h.pages} hlm`;
   }
 
-  function umumInput(santriId) {
+  function umumInput(santriId, selectedProgram) {
     const s = Store.findSantri(santriId);
     if (!s) return;
-    const level = s.level;
+    const level = selectedProgram || s.level;
+    if (!Store.santriHasProgram(s, level)) { UI.toast('Program santri tidak aktif', 'error'); return; }
+    const programHalaqah = Store.halaqahForSantriProgram(s, level);
     let bacaanRequired = false;
     let skipBacaan = false;
     let hafalanReady = false;
@@ -1019,7 +1031,7 @@ const Ustadz = (() => {
     let body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
       ${UI.field('Kelas', `<input class="clay-input" value="${UI.esc(s.kelas)}" disabled>`)}
-      ${UI.field('Halaqah', `<input class="clay-input" value="${UI.esc(s.halaqah)}" disabled>`)}
+      ${UI.field('Halaqah', `<input class="clay-input" value="${UI.esc(programHalaqah ? programHalaqah.nama : '-') }" disabled>`)}
       ${UI.field('Tanggal', `<input class="clay-input" id="f-tgl" type="date" value="${Store.todayStr()}">`)}`;
     
     if (level === 'Tahsin') {
@@ -1031,7 +1043,7 @@ const Ustadz = (() => {
     } else if (level === 'Ziyadah') {
       const t = Store.todayStr();
       const db = Store.get();
-      const halaqah = Store.findHalaqahByName(s.halaqah);
+      const halaqah = programHalaqah;
       bacaanRequired = !!(halaqah && halaqah.setoranBacaan);
       const bacaanToday = db.ziyadahBacaan.filter(z => z.santriId === santriId && z.tanggal === t).sort((a, b) => (b._created||0)-(a._created||0))[0];
       const hafalanToday = db.ziyadahHafalan.some(z => z.santriId === santriId && z.tanggal === t);
@@ -1118,7 +1130,7 @@ const Ustadz = (() => {
 
     const modal = UI.openModal({
       title: 'Input ' + level + ' - ' + s.nama,
-      sub: s.kelas + ' · ' + s.halaqah,
+      sub: s.kelas + ' · ' + (programHalaqah ? programHalaqah.nama : '-'),
       bodyHTML: body,
       actions: level === 'Ziyadah'
         ? [{ label: 'Tutup', cls: 'ghost', onClick: (m, c) => c() }]
@@ -1129,7 +1141,7 @@ const Ustadz = (() => {
 
           if (level === 'Tahsin') {
             const record = {
-              id: Store.uid('ts'), santriId, ustadzId: ustadzIdFor(santriId),
+              id: Store.uid('ts'), santriId, ustadzId: ustadzIdFor(santriId, 'Tahsin'),
               tanggal: m.querySelector('#f-tgl').value,
               halAwal: +m.querySelector('#f-ha').value, halAkhir: +m.querySelector('#f-hk').value,
               nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim()
@@ -1139,7 +1151,7 @@ const Ustadz = (() => {
             const sA = parseInt(m.querySelector('#f-sa').value) || 2;
             const sK = parseInt(m.querySelector('#f-sk').value) || 2;
             const record = {
-              id: Store.uid('m'), santriId, ustadzId: ustadzIdFor(santriId),
+              id: Store.uid('m'), santriId, ustadzId: ustadzIdFor(santriId, 'Mutqin'),
               tanggal: m.querySelector('#f-tgl').value,
               sAwal: sA, aAwal: +m.querySelector('#f-aa').value,
               sAkhir: sK, aAkhir: +m.querySelector('#f-ak').value,
@@ -1212,7 +1224,7 @@ const Ustadz = (() => {
 
         const d = Store.get();
         d.ziyadahBacaan.push({
-          id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId),
+          id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId, 'Ziyadah'),
           tanggal: Store.todayStr(), sAwal: sA, aAwal: +aaEl.value,
           sAkhir: sK, aAkhir: +akEl.value, _created: Date.now()
         });
@@ -1270,7 +1282,7 @@ const Ustadz = (() => {
 
         const d = Store.get();
         d.ziyadahHafalan.push({
-          id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId),
+          id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId, 'Ziyadah'),
           tanggal: Store.todayStr(), sAwal: sA, aAwal: aA,
           sAkhir: sK, aAkhir: aK, nilai: +modalContent.querySelector('#f-nilai').value,
           catatan: modalContent.querySelector('#f-cat').value.trim(), _created: Date.now()
