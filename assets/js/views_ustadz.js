@@ -134,7 +134,10 @@ const Ustadz = (() => {
     const allSantri = db.santri;
     const t = Store.todayStr();
     let sesiAktif = initialSesi;
-    let halaqahFilter = '';
+    const ownHalaqah = myHalaqah();
+    // Prioritaskan roster halaqah ustadz; seluruh santri tetap bisa dipilih
+    // secara sadar bila memang perlu mencatat absensi lintas halaqah.
+    let halaqahFilter = ownHalaqah || '';
     let searchTerm = '';
     let editing = null;
     // Status yang belum disimpan harus tetap ada saat daftar dirender ulang
@@ -142,8 +145,7 @@ const Ustadz = (() => {
     let pendingStatus = {};
 
     function renderAbsensi() {
-      // Admin dapat memilih satu halaqah; pencarian nama tidak mengubah
-      // cakupan absensi yang akan disimpan.
+      // Pencarian nama tidak mengubah cakupan absensi yang akan disimpan.
       const roster = halaqahFilter ? allSantri.filter(s => s.halaqah === halaqahFilter) : allSantri;
       const sessionRecords = db.kehadiran.filter(k => k.tanggal === t && k.sesi === sesiAktif && roster.some(s => s.id === k.santriId));
       const hasSaved = sessionRecords.length > 0;
@@ -203,9 +205,8 @@ const Ustadz = (() => {
       const halaqahSelect = document.getElementById('abs-halaqah');
       // Ustadz memilih antara seluruh santri atau halaqah yang diampunya.
       // Jangan tampilkan daftar halaqah lain pada form absensi.
-      const ownHalaqah = myHalaqah();
-      halaqahSelect.innerHTML = '<option value="">Semua Santri</option>'
-        + (ownHalaqah ? '<option value="' + UI.esc(ownHalaqah) + '">' + UI.esc(ownHalaqah) + '</option>' : '');
+      halaqahSelect.innerHTML = (ownHalaqah ? '<option value="' + UI.esc(ownHalaqah) + '">' + UI.esc(ownHalaqah) + '</option>' : '')
+        + '<option value="">Semua Santri</option>';
       halaqahSelect.value = halaqahFilter;
       const searchInput = document.getElementById('abs-search');
       searchInput.value = searchTerm;
