@@ -79,12 +79,14 @@ const Ustadz = (() => {
       const k = Store.kehadiranBulan(s.id, bulanIni);
       return {
         subuh: k.filter(k => k.sesi === 'Subuh' && k.status === 'Hadir').length,
+        ashar: k.filter(k => k.sesi === 'Ashar' && k.status === 'Hadir').length,
         maghrib: k.filter(k => k.sesi === 'Maghrib' && k.status === 'Hadir').length,
         isya: k.filter(k => k.sesi === 'Isya' && k.status === 'Hadir').length,
         talim: k.filter(k => k.sesi === 'Ta’lim Malam' && k.status === 'Hadir').length
       };
     });
     const totalSubuh = kehadiranBulan.reduce((a, b) => a + b.subuh, 0);
+    const totalAshar = kehadiranBulan.reduce((a, b) => a + b.ashar, 0);
     const totalMaghrib = kehadiranBulan.reduce((a, b) => a + b.maghrib, 0);
     const totalIsya = kehadiranBulan.reduce((a, b) => a + b.isya, 0);
     const totalTalim = kehadiranBulan.reduce((a, b) => a + b.talim, 0);
@@ -93,11 +95,12 @@ const Ustadz = (() => {
       <div class="grid kpi">
         ${Shared.statCard(Shared.ICONS.users, santri.length, 'Santri Diampu', '#16A34A')}
         ${sesiStats.map(st => Shared.statCard(
-          st.s === 'Subuh' ? Shared.ICONS.sun : st.s === 'Maghrib' ? Shared.ICONS.sunset : Shared.ICONS.moon,
+          st.s === 'Subuh' || st.s === 'Ashar' ? Shared.ICONS.sun : st.s === 'Maghrib' ? Shared.ICONS.sunset : Shared.ICONS.moon,
           st.h + '/' + santri.length + ' Hadir', st.s, '#22C55E')).join('')}
       </div>
       <div class="grid kpi mt">
         ${Shared.statCard(Shared.ICONS.sun, totalSubuh, 'Kehadiran Subuh (Bulan Ini)', '#22C55E')}
+        ${Shared.statCard(Shared.ICONS.sun, totalAshar, 'Kehadiran Ashar (Bulan Ini)', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.sunset, totalMaghrib, 'Kehadiran Maghrib (Bulan Ini)', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.moon, totalIsya, 'Kehadiran Isya (Bulan Ini)', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.book, totalTalim, 'Kehadiran Ta’lim Malam (Bulan Ini)', '#22C55E')}
@@ -122,7 +125,7 @@ const Ustadz = (() => {
   }
 
   /* ---------------- Absensi (multi-sesi) ---------------- */
-  const SESI = ['Subuh', 'Maghrib', 'Isya', 'Ta’lim Malam'];
+  const SESI = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
 
   function absensi(initialSesi = 'Subuh') {
     const c = ctx(); _scope = c.scope;

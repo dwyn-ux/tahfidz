@@ -142,6 +142,7 @@ const Admin = (() => {
     const totalHafalanPages = db.santri.reduce((acc, s) => { const h = Store.totalHafalanSantri(s.id); return acc + (h ? h.pages : 0); }, 0);
     const bulanIni = Store.todayStr().slice(0, 7);
     const hadirSubuh = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Subuh' && k.status === 'Hadir').length;
+    const hadirAshar = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Ashar' && k.status === 'Hadir').length;
     const hadirMaghrib = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Maghrib' && k.status === 'Hadir').length;
     const hadirIsya = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Isya' && k.status === 'Hadir').length;
     const hadirTalim = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Ta’lim Malam' && k.status === 'Hadir').length;
@@ -157,6 +158,7 @@ const Admin = (() => {
       </div>
       <div class="grid kpi mt">
         ${Shared.statCard(Shared.ICONS.sun, hadirSubuh, 'Kehadiran Subuh', '#22C55E')}
+        ${Shared.statCard(Shared.ICONS.sun, hadirAshar, 'Kehadiran Ashar', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.sunset, hadirMaghrib, 'Kehadiran Maghrib', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.moon, hadirIsya, 'Kehadiran Isya', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.book, hadirTalim, 'Kehadiran Ta’lim Malam', '#22C55E')}

@@ -44,10 +44,11 @@ const Wali = (() => {
     const bulan = Store.todayStr().slice(0, 7);
     const kehadiran = Store.kehadiranBulan(s.id, bulan);
     const hadirSubuh = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Subuh').length;
+    const hadirAshar = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Ashar').length;
     const hadirMaghrib = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Maghrib').length;
     const hadirIsya = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Isya').length;
     const hadirTalim = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Ta’lim Malam').length;
-    const totalHadir = hadirSubuh + hadirMaghrib + hadirIsya + hadirTalim;
+    const totalHadir = hadirSubuh + hadirAshar + hadirMaghrib + hadirIsya + hadirTalim;
     const pct = kehadiran.length ? Math.round((totalHadir / kehadiran.length) * 100) : 0;
     const lastCat = db.catatan.filter(c => c.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
     const ustadzNames = ustadzNamesForSantri(s);
@@ -68,6 +69,7 @@ const Wali = (() => {
           <div class="row" style="justify-content:space-between;padding:6px 0"><span>Total Hafalan</span><b>${h ? formatHafalan(h) : '-'}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span>Kehadiran Bulan Ini</span><b>${totalHadir}/${kehadiran.length || 0} (${pct}%)</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Subuh</span><b>${hadirSubuh}</b></div>
+          <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Ashar</span><b>${hadirAshar}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Maghrib</span><b>${hadirMaghrib}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Isya</span><b>${hadirIsya}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Ta’lim Malam</span><b>${hadirTalim}</b></div>
