@@ -368,6 +368,29 @@ function publicSettings(array $s, string $role): array {
 }
 
 /* ---------------- Attendance summaries for guardians ---------------- */
+/**
+ * Satu halaqah boleh diampu beberapa ustadz sehingga satu sesi dapat memuat
+ * lebih dari satu catatan untuk wali yang sama. Rekap memilih satu status
+ * per sesi: catatan paling baru (`_created`), sehingga koreksi terakhir selalu
+ * yang ditampilkan dan angka rekap tidak pernah dobel.
+ */
+function attendanceEffectiveRecords(array $records): array {
+    $latest = [];
+    foreach ($records as $record) {
+        $key = implode('|', [
+            $record['santriId'] ?? '',
+            $record['tanggal'] ?? '',
+            $record['sesi'] ?? 'Subuh',
+        ]);
+        $previous = $latest[$key] ?? null;
+        if ($previous === null || ((int)($record['_created'] ?? 0)) >= ((int)($previous['_created'] ?? 0))) {
+            $latest[$key] = $record;
+        }
+    }
+    ksort($latest);
+    return array_values($latest);
+}
+
 function attendancePeriodInfo(string $mode, string $date, string $halaqah = ''): array {
     $dt = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
     if (!$dt) return [$date, $date];
@@ -405,7 +428,8 @@ function syncAttendanceWaliNotifications(): void {
     if (!in_array($mode, ['harian', 'halaqah', 'mingguan', 'bulanan'], true)) $mode = 'harian';
 
     $today = date('Y-m-d');
-    $todayRecords = array_values(array_filter(getRecords('kehadiran'), fn($k) => ($k['tanggal'] ?? '') === $today));
+    $allAttendance = attendanceEffectiveRecords(getRecords('kehadiran'));
+    $todayRecords = array_values(array_filter($allAttendance, fn($k) => ($k['tanggal'] ?? '') === $today));
     if (!$todayRecords) return;
 
     $santriById = [];
@@ -413,7 +437,6 @@ function syncAttendanceWaliNotifications(): void {
     $waliUsers = [];
     $stmt = pdo()->query("SELECT id, refId FROM users WHERE role = 'wali'");
     foreach ($stmt->fetchAll() as $user) $waliUsers[$user['refId']] = $user['id'];
-    $allAttendance = getRecords('kehadiran');
 
     foreach ($todayRecords as $todayRecord) {
         $santriId = $todayRecord['santriId'] ?? '';
@@ -463,6 +486,8 @@ function publicUser($u) {
 
 /* ---------------- Bootstrap (role-filtered data for current user) ---------------- */
 function bootstrapData($user) {
+    // Terapkan kolom/tabel baru (mis. absensi ustadz) sebelum data dibaca.
+    NormalizedStore::ensureUpgrade();
     $settings = publicSettings(getSettings(), $user['role']);
 
     // Admin: return everything (same as before)
@@ -477,6 +502,7 @@ function bootstrapData($user) {
             'kelas' => getSettings()['kelas'],
             'levelTahfidz' => getSettings()['levelTahfidz'],
             'kehadiran' => getRecords('kehadiran'),
+            'absensiUstadz' => getRecords('absensiUstadz'),
             'jurnalTalim' => getRecords('jurnalTalim'),
             'tahsin' => getRecords('tahsin'),
             'ziyadahBacaan' => getRecords('ziyadahBacaan'),
@@ -506,6 +532,7 @@ function bootstrapData($user) {
             'kelas' => getSettings()['kelas'],
             'levelTahfidz' => getSettings()['levelTahfidz'],
             'kehadiran' => getRecords('kehadiran'),
+            'absensiUstadz' => getRecords('absensiUstadz'),
             'jurnalTalim' => getRecords('jurnalTalim'),
             'tahsin' => getRecords('tahsin'),
             'ziyadahBacaan' => getRecords('ziyadahBacaan'),
@@ -560,6 +587,7 @@ function bootstrapData($user) {
     // newer data can contain `programAktif` and `halaqahProgram`.
     $waliRecords = $wali ? [$wali] : [];
     $ustadzRecords = [];
+    $ustadzIds = [];
     $halaqahForWali = [];
     if (!empty($santri)) {
         $halaqahRecords = getRecords('halaqah');
@@ -595,6 +623,14 @@ function bootstrapData($user) {
         ));
     }
 
+    // Wali hanya melihat absensi ustadz yang mengampu halaqah anaknya.
+    $absensiUstadz = [];
+    if ($ustadzIds) {
+        $absensiUstadz = array_values(array_filter(getRecords('absensiUstadz'), fn($a) =>
+            in_array($a['ustadzId'] ?? '', $ustadzIds, true)
+        ));
+    }
+
     $db = [
         'settings' => $settings,
         'users' => [['id' => $user['uid'], 'username' => '', 'role' => 'wali', 'refId' => $user['refId']]],
@@ -605,6 +641,7 @@ function bootstrapData($user) {
         'kelas' => getSettings()['kelas'],
         'levelTahfidz' => getSettings()['levelTahfidz'],
         'kehadiran' => $kehadiran,
+        'absensiUstadz' => $absensiUstadz,
         'jurnalTalim' => $jurnalTalim,
         'tahsin' => $tahsin,
         'ziyadahBacaan' => $ziyadahBacaan,

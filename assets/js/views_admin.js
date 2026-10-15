@@ -109,6 +109,7 @@ const Admin = (() => {
       { view: 'admin_halaqah', label: 'Halaqah', active: active === 'admin_halaqah' },
       { view: 'admin_master', label: 'Master Surat', active: active === 'admin_master' },
       { view: 'ustadz_absensi', label: 'Absensi', active: active === 'ustadz_absensi' },
+      { view: 'admin_absensi_ustadz', label: 'Absensi Ustadz', active: active === 'admin_absensi_ustadz' },
       { view: 'ustadz_talim', label: 'Ta’lim Malam', active: active === 'ustadz_talim' },
       { view: 'ustadz_pembelajaran', label: 'Pembelajaran', active: active === 'ustadz_pembelajaran' },
       { view: 'admin_riwayat', label: 'Riwayat', active: active === 'admin_riwayat' },
@@ -141,11 +142,18 @@ const Admin = (() => {
     const db = Store.get();
     const totalHafalanPages = db.santri.reduce((acc, s) => { const h = Store.totalHafalanSantri(s.id); return acc + (h ? h.pages : 0); }, 0);
     const bulanIni = Store.todayStr().slice(0, 7);
-    const hadirSubuh = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Subuh' && k.status === 'Hadir').length;
-    const hadirAshar = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Ashar' && k.status === 'Hadir').length;
-    const hadirMaghrib = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Maghrib' && k.status === 'Hadir').length;
-    const hadirIsya = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Isya' && k.status === 'Hadir').length;
-    const hadirTalim = db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni) && k.sesi === 'Ta’lim Malam' && k.status === 'Hadir').length;
+    // Satu sesi bisa dicatat lebih dari satu ustadz (satu halaqah boleh diampu
+    // beberapa ustadz), jadi rekap memakai satu status per sesi.
+    const hadirBulanIni = Store.dedupeKehadiran(db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni)));
+    const countHadir = sesi => hadirBulanIni.filter(k => k.sesi === sesi && k.status === 'Hadir').length;
+    const hadirSubuh = countHadir('Subuh');
+    const hadirAshar = countHadir('Ashar');
+    const hadirMaghrib = countHadir('Maghrib');
+    const hadirIsya = countHadir('Isya');
+    const hadirTalim = countHadir('Ta’lim Malam');
+    const ustadzHadirHariIni = new Set((db.absensiUstadz || [])
+      .filter(a => a.tanggal === Store.todayStr() && a.status === 'Hadir')
+      .map(a => a.ustadzId)).size;
 
     const kpi = `
       <div class="grid kpi">
@@ -162,6 +170,7 @@ const Admin = (() => {
         ${Shared.statCard(Shared.ICONS.sunset, hadirMaghrib, 'Kehadiran Maghrib', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.moon, hadirIsya, 'Kehadiran Isya', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.book, hadirTalim, 'Kehadiran Ta’lim Malam', '#22C55E')}
+        ${Shared.statCard(Shared.ICONS.teacher, ustadzHadirHariIni + '/' + db.ustadz.length, 'Ustadz Hadir Hari Ini', '#3B82F6')}
       </div>`;
 
     // progress hafalan per halaqah (avg pages)
@@ -172,7 +181,7 @@ const Admin = (() => {
     });
     // kehadiran mingguan (dummy per hari dari data)
     const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-    const kehadiranData = days.map(d => ({ label: d, value: db.kehadiran.filter(k => new Date(k.tanggal).getDay() === (days.indexOf(d) + 1) % 7).length + Math.floor(Math.random() * 3) }));
+    const kehadiranData = days.map(d => ({ label: d, value: hadirBulanIni.filter(k => new Date(k.tanggal).getDay() === (days.indexOf(d) + 1) % 7).length + Math.floor(Math.random() * 3) }));
 
     const content = `
       ${kpi}
@@ -996,6 +1005,165 @@ const Admin = (() => {
     apply();
   }
 
+/* ---------------- Absensi Ustadz ---------------- */
+  const SESI_ABSENSI = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
+  const STATUS_ABSENSI = ['Hadir', 'Izin', 'Sakit'];
+
+  function absensiBadgeClass(status) {
+    return status === 'Hadir' ? 'green' : status === 'Izin' ? 'warn' : status === 'Sakit' ? 'blue' : 'danger';
+  }
+
+  /* Rekap absensi ustadz untuk admin/koordinator. Satu ustadz hanya punya satu
+     catatan per sesi, jadi tabel ini bisa dibaca apa adanya. */
+  function absensiUstadz() {
+    Shared.shell('admin', nav('admin_absensi_ustadz'), '');
+    Shared.setHeader('Absensi Ustadz', 'Kehadiran ustadz pengampu per sesi');
+    const db = Store.get();
+    const ustadzAktif = db.ustadz.filter(u => u.status !== 'Nonaktif');
+
+    document.getElementById('view-content').innerHTML = `
+      <div class="clay-card mb">
+        <div class="row">
+          <div style="flex:1;min-width:150px">${UI.field('Tanggal', `<input type="date" class="clay-input" id="au-tanggal" value="${Store.todayStr()}">`)}</div>
+          <div style="flex:1;min-width:130px">${UI.field('Sesi', `<select class="clay-select" id="au-sesi"><option value="">Semua Sesi</option>${SESI_ABSENSI.map(x => `<option>${UI.esc(x)}</option>`).join('')}</select>`)}</div>
+          <div style="flex:1;min-width:140px">${UI.field('Status', `<select class="clay-select" id="au-status"><option value="">Semua</option>${STATUS_ABSENSI.map(x => `<option>${UI.esc(x)}</option>`).join('')}<option value="__none">Belum Absen</option></select>`)}</div>
+          <div style="flex:1;min-width:160px">${UI.field('Halaqah', `<select class="clay-select" id="au-halaqah"><option value="">Semua Halaqah</option>${UI.optionsFromList(db.halaqah.map(h => ({ v: h.id, l: halaqahOptionLabel(h, false) })), 'v', 'l')}</select>`)}</div>
+          <div style="flex:1;min-width:160px">${UI.field('Cari Ustadz', `<input class="clay-input" id="au-cari" placeholder="Nama ustadz" autocomplete="off">`)}</div>
+        </div>
+        <div class="row mt">
+          <button class="clay-btn secondary" id="au-export">Export Excel</button>
+          <button class="clay-btn ghost" id="au-hari-ini">Hari Ini</button>
+        </div>
+      </div>
+      <div id="au-content"></div>`;
+
+    function filter() {
+      return {
+        tanggal: document.getElementById('au-tanggal').value,
+        sesi: document.getElementById('au-sesi').value,
+        status: document.getElementById('au-status').value,
+        halaqahId: document.getElementById('au-halaqah').value,
+        term: document.getElementById('au-cari').value.trim().toLowerCase()
+      };
+    }
+
+    function rowsOf(f) {
+      const sesiList = f.sesi ? [f.sesi] : SESI_ABSENSI;
+      const target = f.halaqahId ? Store.findHalaqahById(f.halaqahId) : null;
+      const rows = [];
+      ustadzAktif.forEach(u => {
+        if (target && !Store.halaqahHasUstadz(target, u)) return;
+        if (f.term && !(u.nama || '').toLowerCase().includes(f.term)) return;
+        sesiList.forEach(sesi => {
+          const rec = db.absensiUstadz.find(a => a.ustadzId === u.id && a.tanggal === f.tanggal && a.sesi === sesi);
+          if (f.status === '__none') { if (rec) return; }
+          else if (f.status) { if (!rec || rec.status !== f.status) return; }
+          rows.push({ ustadz: u, sesi, rec });
+        });
+      });
+      return rows;
+    }
+
+    function render() {
+      const f = filter();
+      const rows = rowsOf(f);
+      const sesiList = f.sesi ? [f.sesi] : SESI_ABSENSI;
+      const total = ustadzAktif.length;
+      const kpi = sesiList.map(sesi => {
+        const list = rows.filter(r => r.sesi === sesi);
+        const count = status => list.filter(r => r.rec && r.rec.status === status).length;
+        const belum = list.filter(r => !r.rec).length;
+        return `<div class="grid kpi">
+          ${Shared.statCard(Shared.ICONS.moon, count('Hadir') + '/' + total, sesi + ' - Hadir', '#22C55E')}
+          ${Shared.statCard(Shared.ICONS.users, count('Izin') + '/' + total, sesi + ' - Izin', '#FACC15')}
+          ${Shared.statCard(Shared.ICONS.teacher, count('Sakit') + '/' + total, sesi + ' - Sakit', '#3B82F6')}
+          ${Shared.statCard(Shared.ICONS.book, belum + '/' + total, sesi + ' - Belum Absen', '#EF4444')}
+        </div>`;
+      }).join('');
+
+      const body = rows.map(r => {
+        const halaqah = Store.findHalaqahForUstadz(r.ustadz);
+        return `<tr>
+          <td><b>${UI.esc(r.ustadz.nama)}</b><div class="muted" style="font-size:11px">${UI.esc(halaqah ? halaqah.nama : (r.ustadz.halaqah || '-'))}</div></td>
+          <td>${UI.esc(r.sesi)}</td>
+          <td>${r.rec ? `<span class="badge ${absensiBadgeClass(r.rec.status)}">${UI.esc(r.rec.status)}</span>` : '<span class="badge gray">Belum Absen</span>'}</td>
+          <td>${r.rec && r.rec.waktu ? UI.fmtDateTime(r.rec.waktu) : '<span class="muted">-</span>'}</td>
+          <td style="font-size:12px">${UI.esc(r.rec && r.rec.catatan ? r.rec.catatan : '-')}</td>
+          <td>${r.rec ? `<button class="clay-btn ghost sm" data-hapus-au="${UI.esc(r.rec.id)}">Hapus</button>` : ''}</td>
+        </tr>`;
+      }).join('');
+
+      document.getElementById('au-content').innerHTML = `
+        ${kpi}
+        <div class="clay-card mt">
+          <div class="row" style="justify-content:space-between">
+            <div class="section-title" style="margin:0">${UI.esc(f.tanggal ? UI.fmtDate(f.tanggal) : '-')}${f.sesi ? ' - ' + UI.esc(f.sesi) : ''}</div>
+            <span class="muted" style="font-size:13px">${rows.length} baris</span>
+          </div>
+          <div class="table-wrap mt"><table class="clay-table">
+            <thead><tr><th>Ustadz</th><th>Sesi</th><th>Status</th><th>Jam</th><th>Catatan</th><th></th></tr></thead>
+            <tbody>${body || `<tr><td colspan="6"><div class="empty">Belum ada absensi ustadz.</div></td></tr>`}</tbody>
+          </table></div>
+        </div>`;
+
+      document.querySelectorAll('[data-hapus-au]').forEach(btn => {
+        btn.onclick = () => {
+          const id = btn.dataset.hapusAu;
+          UI.confirmDialog('Hapus Absensi Ustadz', 'Ustadz akan diminta absen ulang di sesi ini. Yakin dihapus?', async () => {
+            const d = Store.get();
+            d.absensiUstadz = d.absensiUstadz.filter(a => a.id !== id);
+            if (await Store.save()) { UI.toast('Absensi ustadz dihapus', 'success'); render(); }
+          });
+        };
+      });
+    }
+
+    ['au-tanggal', 'au-sesi', 'au-status', 'au-halaqah'].forEach(id => {
+      document.getElementById(id).onchange = render;
+    });
+    document.getElementById('au-cari').oninput = render;
+    document.getElementById('au-hari-ini').onclick = () => {
+      document.getElementById('au-tanggal').value = Store.todayStr();
+      render();
+    };
+    document.getElementById('au-export').onclick = () => {
+      const f = filter();
+      const rows = rowsOf(f);
+      if (!rows.length) { UI.toast('Tidak ada data untuk diekspor', 'error'); return; }
+      const bodyHtml = rows.map(r => `<tr>
+        <td class="center">${UI.esc(f.tanggal)}</td>
+        <td>${UI.esc(r.ustadz.nama)}</td>
+        <td>${UI.esc((Store.findHalaqahForUstadz(r.ustadz) || {}).nama || r.ustadz.halaqah || '-')}</td>
+        <td>${UI.esc(r.sesi)}</td>
+        <td>${UI.esc(r.rec ? r.rec.status : 'Belum Absen')}</td>
+        <td>${r.rec && r.rec.waktu ? UI.esc(UI.fmtDateTime(r.rec.waktu)) : '-'}</td>
+        <td>${UI.esc(r.rec && r.rec.catatan ? r.rec.catatan : '-')}</td>
+      </tr>`).join('');
+      const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><style>
+  body{font-family:Calibri,Arial,sans-serif}
+  table{border-collapse:collapse;font-size:11pt}
+  th,td{border:1px solid #999;padding:5px 8px}
+  th{background:#16a34a;color:#fff;text-align:center}
+  .center{text-align:center}
+  .title{font-size:16pt;font-weight:bold;text-align:center}
+  .sub{font-size:11pt;color:#555;text-align:center;margin-bottom:2px}
+</style></head>
+<body>
+  <div class="title">ABSENSI USTADZ</div>
+  <div class="sub">${UI.esc(db.settings.namaLembaga)}</div>
+  <div class="sub">Tanggal: ${UI.esc(UI.fmtDate(f.tanggal))}${f.sesi ? ' - ' + UI.esc(f.sesi) : ''}</div>
+  <table>
+    <thead><tr><th class="center">Tanggal</th><th>Nama Ustadz</th><th>Halaqah</th><th>Sesi</th><th>Status</th><th>Jam</th><th>Catatan</th></tr></thead>
+    <tbody>${bodyHtml}</tbody>
+  </table>
+</body></html>`;
+      Shared.downloadExcel('Absensi_Ustadz_' + f.tanggal + (f.sesi ? '_' + f.sesi : ''), html);
+      UI.toast('Berhasil export Excel', 'success');
+    };
+    render();
+  }
+
   /* ---------------- Rekap Setoran Mingguan ---------------- */
   function rekapSetoran() {
     Shared.shell('admin', nav('admin_rekap_setoran'), '');
@@ -1294,5 +1462,5 @@ const Admin = (() => {
     if (waLogBtn) waLogBtn.onclick = renderWaLog;
   }
 
-  return { nav, dashboard, santri, ustadz, halaqah, master, riwayat, laporan, rekapSetoran, notif, settings, importSantriDialog };
+  return { nav, dashboard, santri, ustadz, halaqah, master, absensiUstadz, riwayat, laporan, rekapSetoran, notif, settings, importSantriDialog };
 })();

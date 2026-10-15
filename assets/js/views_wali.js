@@ -159,7 +159,7 @@ const Wali = (() => {
     if (!s) { document.getElementById('view-content').innerHTML = '<div class="empty">Data anak tidak ditemukan.</div>'; return; }
     Shared.setHeader('Absensi', s.nama);
     const db = Store.get();
-    const kehadiran = db.kehadiran.filter(k => k.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+    const kehadiran = Store.dedupeKehadiran(db.kehadiran.filter(k => k.santriId === s.id)).sort((a, b) => b.tanggal.localeCompare(a.tanggal) || String(b.sesi).localeCompare(String(a.sesi)));
     const counts = { Hadir: 0, Izin: 0, Sakit: 0, Alfa: 0 };
     kehadiran.forEach(k => counts[k.status]++);
     const rows = kehadiran.slice(0, 30).map(k => `<tr><td>${UI.fmtDate(k.tanggal)}</td><td>${k.sesi ? '<span class="pill sm" style="font-size:11px;padding:2px 8px">' + UI.esc(k.sesi) + '</span>' : ''}</td><td><span class="badge ${k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : 'danger'}">${UI.esc(k.status)}</span></td></tr>`).join('');

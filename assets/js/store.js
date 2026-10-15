@@ -15,7 +15,7 @@ const Store = (() => {
   // hanya mengirim perubahan, bukan menimpa seluruh database dengan cache
   // yang mungkin sudah tertinggal dari perangkat lain.
   let persisted = null;
-  const recordTypes = ['santri', 'wali', 'ustadz', 'halaqah', 'kehadiran', 'jurnalTalim', 'tahsin', 'ziyadahBacaan', 'ziyadahHafalan', 'mutqin', 'catatan', 'notifikasi', 'logAktivitas', 'logWa'];
+  const recordTypes = ['santri', 'wali', 'ustadz', 'halaqah', 'kehadiran', 'absensiUstadz', 'jurnalTalim', 'tahsin', 'ziyadahBacaan', 'ziyadahHafalan', 'mutqin', 'catatan', 'notifikasi', 'logAktivitas', 'logWa'];
 
   function defaultDB() {
     return {
@@ -33,7 +33,7 @@ const Store = (() => {
       users: [], santri: [], wali: [], ustadz: [], halaqah: [],
       kelas: ['TK Al-Qur\'an', 'SD', 'SMP', 'SMA'],
       levelTahfidz: ['Tahsin', 'Ziyadah', 'Mutqin'],
-      kehadiran: [], jurnalTalim: [], tahsin: [], ziyadahBacaan: [], ziyadahHafalan: [], mutqin: [], catatan: [],
+      kehadiran: [], absensiUstadz: [], jurnalTalim: [], tahsin: [], ziyadahBacaan: [], ziyadahHafalan: [], mutqin: [], catatan: [],
       tahunAjaran: ['2024/2025', '2025/2026', '2026/2027'], semester: ['Ganjil', 'Genap'],
       notifikasi: [], logAktivitas: [], logWa: [], setoranNotif: []
     };
@@ -114,6 +114,7 @@ const Store = (() => {
       // Subuh supaya tetap muncul di rekap, lalu semua input baru memakai
       // sesi yang eksplisit.
       db.kehadiran = (db.kehadiran || []).map(k => k.sesi ? k : Object.assign({}, k, { sesi: 'Subuh' }));
+      db.absensiUstadz = db.absensiUstadz || [];
       db.jurnalTalim = db.jurnalTalim || [];
       persisted = snapshot(db);
       return db;
@@ -450,23 +451,26 @@ const Store = (() => {
     };
   }
 
+  /* Setoran bisa diinput dengan tanggal lama (bayar setoran tertinggal),
+     sehingga tanggal terbesar belum tentu ayat terakhir. Patokan melanjutkan
+     setoran adalah catatan yang paling baru DIINPUT, supaya ayat yang sudah
+     disetor tidak terulang walaupun tanggalnya lebih lama. */
+  function lastSetoran(a, b) {
+    const byInput = (b._created || 0) - (a._created || 0);
+    if (byInput !== 0) return byInput;
+    return String(b.tanggal || '').localeCompare(String(a.tanggal || ''));
+  }
+
   function lastZiyadah(santriId) {
-    const haf = db.ziyadahHafalan.filter(z => z.santriId === santriId);
-    const bac = db.ziyadahBacaan.filter(z => z.santriId === santriId);
-    const all = [...haf, ...bac].sort((a, b) => {
-      const d = b.tanggal.localeCompare(a.tanggal);
-      if (d !== 0) return d;
-      return (b._created || 0) - (a._created || 0);
-    });
+    const all = [
+      ...db.ziyadahHafalan.filter(z => z.santriId === santriId),
+      ...db.ziyadahBacaan.filter(z => z.santriId === santriId),
+    ].sort(lastSetoran);
     return all[0] || null;
   }
 
   function lastHafalan(santriId) {
-    const haf = db.ziyadahHafalan.filter(z => z.santriId === santriId).sort((a, b) => {
-      const d = b.tanggal.localeCompare(a.tanggal);
-      if (d !== 0) return d;
-      return (b._created || 0) - (a._created || 0);
-    });
+    const haf = db.ziyadahHafalan.filter(z => z.santriId === santriId).sort(lastSetoran);
     return haf[0] || null;
   }
 
@@ -492,7 +496,66 @@ const Store = (() => {
   }
 
   function kehadiranBulan(santriId, bulan) {
-    return db.kehadiran.filter(k => k.santriId === santriId && k.tanggal.startsWith(bulan));
+    return dedupeKehadiran(db.kehadiran.filter(k => k.santriId === santriId && k.tanggal.startsWith(bulan)));
+  }
+
+  /* ---------- Absensi ustadz ----------
+     Satu halaqah boleh diampu lebih dari satu ustadz, sehingga absensi ustadz
+     dan absensi santrinya disimpan terpisah dan tidak saling menimpa. */
+  function absensiUstadzOf(ustadzId, tanggal, sesi) {
+    if (!ustadzId) return null;
+    return db.absensiUstadz.find(a => a.ustadzId === ustadzId && a.tanggal === tanggal && a.sesi === sesi) || null;
+  }
+
+  function absensiUstadzTanggal(ustadzId, tanggal) {
+    if (!ustadzId) return [];
+    return db.absensiUstadz.filter(a => a.ustadzId === ustadzId && a.tanggal === tanggal);
+  }
+
+  function absensiUstadzBulan(ustadzId, bulan) {
+    if (!ustadzId) return [];
+    return db.absensiUstadz.filter(a => a.ustadzId === ustadzId && String(a.tanggal || '').startsWith(bulan));
+  }
+
+  /** Catat/koreksi absensi ustadz untuk satu sesi. Satu ustadz hanya punya
+   * satu catatan per (tanggal, sesi) sehingga koreksi memperbarui baris yang
+   * sama, bukan membuat baris baru. */
+  async function simpanAbsensiUstadz(ustadzId, sesi, status, catatan, tanggal) {
+    const ustadz = findUstadz(ustadzId);
+    if (!ustadz || !status) return false;
+    const t = tanggal || todayStr();
+    const existing = absensiUstadzOf(ustadzId, t, sesi);
+    const halaqah = findHalaqahForUstadz(ustadz);
+    const record = {
+      id: existing ? existing.id : uid('au'),
+      ustadzId,
+      ustadz: ustadz.nama || '',
+      halaqahId: halaqah ? halaqah.id : '',
+      halaqah: halaqah ? halaqah.nama : (ustadz.halaqah || ''),
+      tanggal: t,
+      sesi,
+      status,
+      waktu: existing ? (existing.waktu || nowISO()) : nowISO(),
+      catatan: catatan === undefined ? (existing ? (existing.catatan || '') : '') : catatan
+    };
+    db.absensiUstadz = db.absensiUstadz.filter(a => a.id !== record.id);
+    db.absensiUstadz.push(record);
+    return save();
+  }
+
+  /* ---------- Rekap absensi ---------- */
+  // Satu halaqah boleh diampu lebih dari satu ustadz sehingga satu sesi dapat
+  // memuat lebih dari satu catatan untuk Santri yang sama. Rekap tetap memakai
+  // satu status per sesi: catatan paling baru yang dihitung, sehingga koreksi
+  // terakhir tampil sekali dan angka rekap tidak pernah dobel.
+  function dedupeKehadiran(records) {
+    const latest = {};
+    (records || []).forEach(k => {
+      const key = [k.santriId, k.tanggal, k.sesi || 'Subuh'].join('|');
+      const prev = latest[key];
+      if (!prev || (k._created || 0) >= (prev._created || 0)) latest[key] = k;
+    });
+    return Object.keys(latest).sort().map(key => latest[key]);
   }
 
   function addNotif(userId, tipe, pesan) {
@@ -571,6 +634,8 @@ const Store = (() => {
     recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahById, findHalaqahByName, ustadzIdsForHalaqah, ustadzNamesForHalaqah, halaqahHasUstadz, findHalaqahForUstadz,
     activeProgramsForSantri, halaqahForSantriProgram, halaqahForSantri, santriHasProgram, santriHasHalaqah, programsForSantriHalaqah, configureSantriPrograms, programSummaryForSantri, halaqahSummaryForSantri, search,
     waSend, waLog, waReady, waAutoEnabled, waSendWali,
-    lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, addNotif, notifFor, clearNotifs, checkSetoranTerlewat
+    lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,
+    absensiUstadzOf, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,
+    addNotif, notifFor, clearNotifs, checkSetoranTerlewat
   };
 })();

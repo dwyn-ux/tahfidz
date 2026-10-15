@@ -62,7 +62,8 @@ switch ($action) {
         if (!$type) err('type required', 400);
 
         // Define allowed record types per role
-        $ustadzWritable = ['kehadiran','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
+        NormalizedStore::ensureUpgrade();
+        $ustadzWritable = ['kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
 
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             if ($u['role'] === 'wali') {
@@ -137,8 +138,12 @@ switch ($action) {
         $b = body();
 
         // Define allowed types per role
-        $adminTypes = ['santri','wali','ustadz','halaqah','kehadiran','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
-        $ustadzTypes = ['kehadiran','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
+        $adminTypes = ['santri','wali','ustadz','halaqah','kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
+        $ustadzTypes = ['kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
+
+        // Basis data lama bisa belum punya kolom/tabel terbaru. Penanda upgrade
+        // membuat pemanggilan berikutnya tanpa biaya DDL.
+        NormalizedStore::ensureUpgrade();
 
         if ($u['role'] === 'wali') {
             // Wali is read-only EXCEPT their own wali record (nama/noHp, Profil page).

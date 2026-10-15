@@ -8,6 +8,8 @@
  */
 final class NormalizedStore {
     public const MIGRATION_NAME = '2026_10_normalize_records';
+    // Penanda penambahan kolom/tabel setelah migrasi records (absensi per ustadz).
+    public const UPGRADE_NAME = '2026_10_absensi_ustadz';
 
     /**
      * Pemetaan nama rekaman yang dipakai frontend ke tabel dan kolom SQL.
@@ -62,10 +64,29 @@ final class NormalizedStore {
                 'table' => 'kehadiran',
                 'fields' => [
                     'santriId' => ['santri_id', $short], 'halaqahId' => ['halaqah_id', $short],
+                    'ustadzId' => ['ustadz_id', $short],
                     'tanggal' => ['tanggal', $date], 'sesi' => ['sesi', $short], 'status' => ['status', $short],
+                    '_created' => ['created_ms', $integer],
                 ],
-                'indexes' => [['santri_id', 'tanggal'], ['halaqah_id', 'tanggal']],
-                'unique' => [['santri_id', 'tanggal', 'sesi']],
+                // Several ustadz can teach one halaqah, so one session may hold
+                // more than one row for the same santri. That combination is no
+                // longer unique; recap always uses a single status per session.
+                'indexes' => [
+                    ['santri_id', 'tanggal'], ['halaqah_id', 'tanggal'],
+                    ['ustadz_id', 'tanggal'], ['santri_id', 'ustadz_id', 'tanggal', 'sesi'],
+                ],
+            ],
+            'absensiUstadz' => [
+                'table' => 'absensi_ustadz',
+                'fields' => [
+                    'ustadzId' => ['ustadz_id', $short], 'ustadz' => ['ustadz', $short],
+                    'halaqahId' => ['halaqah_id', $short], 'halaqah' => ['halaqah', $short],
+                    'tanggal' => ['tanggal', $date], 'sesi' => ['sesi', $short],
+                    'status' => ['status', $short], 'waktu' => ['waktu', $timestamp],
+                    'catatan' => ['catatan', $text],
+                ],
+                'indexes' => [['tanggal', 'sesi'], ['halaqah_id', 'tanggal']],
+                'unique' => [['ustadz_id', 'tanggal', 'sesi']],
             ],
             'jurnalTalim' => [
                 'table' => 'jurnal_talim',
@@ -185,14 +206,85 @@ final class NormalizedStore {
             $parts[] = self::identifier('metadata') . ' ' . self::columnType('json') . ' NOT NULL';
             $table = self::identifier($definition['table']);
             $db->exec('CREATE TABLE IF NOT EXISTS ' . $table . ' (' . implode(', ', $parts) . ')');
+            self::ensureColumns($definition);
             self::ensureIndexes($definition);
         }
+    }
+
+    /**
+     * Basis data yang sudah aktif mungkin dibuat sebelum ada kolom/tabel baru.
+     * `CREATE TABLE IF NOT EXISTS` tidak menambah kolom pada tabel lama, jadi
+     * setiap kolom yang belum ada ditambahkan secara additive.
+     */
+    private static function ensureColumns(array $definition): void {
+        foreach ($definition['fields'] as $field) {
+            [$column, $kind] = $field;
+            if (self::columnExists($definition['table'], $column)) continue;
+            pdo()->exec('ALTER TABLE ' . self::identifier($definition['table'])
+                . ' ADD COLUMN ' . self::identifier($column) . ' ' . self::columnType($kind) . ' NULL');
+        }
+    }
+
+    private static function columnExists(string $table, string $column): bool {
+        if (DB_DRIVER === 'sqlite') {
+            $rows = pdo()->query('PRAGMA table_info(' . self::identifier($table) . ')')->fetchAll();
+            foreach ($rows as $row) if (($row['name'] ?? '') === $column) return true;
+            return false;
+        }
+        $stmt = pdo()->prepare('SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?');
+        $stmt->execute([$table, $column]);
+        return (bool)$stmt->fetchColumn();
+    }
+
+    /**
+     * Index unik lama tidak lagi berlaku setelah absensi bisa dipecah per
+     * ustadz. Index itu dibuang supaya dua ustadz pada sesi yang sama tidak
+     * saling menimpa atau saling ditolak database.
+     */
+    private static function obsoleteIndexes(string $table): array {
+        return $table === 'kehadiran' ? ['idx_kehadiran_santri_id_tanggal_sesi'] : [];
+    }
+
+    private static function dropObsoleteIndexes(array $definition): void {
+        $table = $definition['table'];
+        foreach (self::obsoleteIndexes($table) as $name) {
+            if (!self::indexExists($table, $name)) continue;
+            $sql = DB_DRIVER === 'sqlite'
+                ? 'DROP INDEX ' . self::identifier($name)
+                : 'ALTER TABLE ' . self::identifier($table) . ' DROP INDEX ' . self::identifier($name);
+            pdo()->exec($sql);
+        }
+    }
+
+    /**
+     * Terapkan penambahan kolom/tabel baru pada basis data yang sudah aktif.
+     * Dijalankan sekali saja lewat penanda migrasi supaya request biasa tidak
+     * melakukan DDL berulang.
+     */
+    public static function ensureUpgrade(): void {
+        try {
+            if (self::upgradeApplied()) return;
+            if (!self::isActive()) return;
+            self::ensureSchema();
+            self::markApplied(self::UPGRADE_NAME, ['upgrade' => self::UPGRADE_NAME]);
+        } catch (Throwable $e) {
+            // Kegagalan upgrade tidak boleh memblokir aplikasi; request berikutnya
+            // akan mencobanya lagi karena penanda belum tersimpan.
+            error_log('[tahfidzku] upgrade skema gagal: ' . $e->getMessage());
+        }
+    }
+
+    private static function upgradeApplied(): bool {
+        $stmt = pdo()->prepare('SELECT 1 FROM app_schema_migrations WHERE name = ?');
+        $stmt->execute([self::UPGRADE_NAME]);
+        return (bool)$stmt->fetchColumn();
     }
 
     /** Tandai basis data baru sebagai aktif setelah skemanya tersedia. */
     public static function activateFreshDatabase(): void {
         self::ensureSchema();
-        self::markApplied(['source' => 'fresh_install', 'records' => []]);
+        self::markApplied(self::MIGRATION_NAME, ['source' => 'fresh_install', 'records' => []]);
+        self::markApplied(self::UPGRADE_NAME, ['upgrade' => self::UPGRADE_NAME]);
     }
 
     /**
@@ -229,7 +321,7 @@ final class NormalizedStore {
                 if ($actual !== $expected) throw new RuntimeException("Validasi jumlah $type gagal: $actual dari $expected tersalin.");
                 $counts[$type] = $actual;
             }
-            self::markApplied(['source' => 'legacy_records', 'records' => $counts]);
+            self::markApplied(self::MIGRATION_NAME, ['source' => 'legacy_records', 'records' => $counts]);
             self::commitMigrationTransaction($manualTransaction);
             return ['status' => 'migrated', 'migration' => self::MIGRATION_NAME, 'records' => $counts];
         } catch (Throwable $e) {
@@ -349,6 +441,7 @@ final class NormalizedStore {
 
     private static function ensureIndexes(array $definition): void {
         $table = $definition['table'];
+        self::dropObsoleteIndexes($definition);
         foreach ([['indexes', false], ['unique', true]] as [$key, $unique]) {
             foreach ($definition[$key] ?? [] as $columns) {
                 $name = 'idx_' . $table . '_' . implode('_', $columns);
@@ -433,12 +526,16 @@ final class NormalizedStore {
     }
 
     private static function validateLegacyRecords(array $legacy): void {
-        // Constraint absensi penting untuk menghentikan duplikasi baru. Bila
-        // arsip lama ternyata sudah duplikat, batalkan migrasi tanpa mengubah
-        // satu pun data agar admin dapat memilih data mana yang dipertahankan.
+        // Constraint absensi lama hanya menolak duplikat untuk satu pasangan
+        // (santri, tanggal, sesi) karena saat itu satu sesi hanya boleh punya
+        // satu catatan. Sekarang setiap ustadz punya catatannya sendiri, jadi
+        // pencacahannya ikut memasukkan ustadzId.
         $seen = [];
         foreach ($legacy['kehadiran'] ?? [] as $record) {
-            $key = implode('|', [$record['santriId'] ?? '', $record['tanggal'] ?? '', $record['sesi'] ?? 'Subuh']);
+            $key = implode('|', [
+                $record['santriId'] ?? '', $record['ustadzId'] ?? '',
+                $record['tanggal'] ?? '', $record['sesi'] ?? 'Subuh',
+            ]);
             if (isset($seen[$key])) throw new RuntimeException('Absensi ganda ditemukan untuk ' . $key . '. Migrasi dibatalkan; tabel lama tetap utuh.');
             $seen[$key] = true;
         }
@@ -455,9 +552,9 @@ final class NormalizedStore {
         return (int)pdo()->query('SELECT COUNT(*) FROM ' . self::identifier($definition['table']))->fetchColumn();
     }
 
-    private static function markApplied(array $details): void {
+    private static function markApplied(string $name, array $details): void {
         $stmt = pdo()->prepare(insertIgnoreSQL('app_schema_migrations', ['name', 'applied_at', 'details']));
-        $stmt->execute([self::MIGRATION_NAME, nowISO(), json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
+        $stmt->execute([$name, nowISO(), json_encode($details, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]);
     }
 
     private static function identifier(string $name): string {

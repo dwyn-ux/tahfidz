@@ -9,6 +9,7 @@ const App = (() => {
     admin_ustadz: () => Admin.ustadz(),
     admin_halaqah: () => Admin.halaqah(),
     admin_master: () => Admin.master(),
+    admin_absensi_ustadz: () => Admin.absensiUstadz(),
     admin_riwayat: () => Admin.riwayat(),
     admin_laporan: () => Admin.laporan(),
     admin_rekap_setoran: () => Admin.rekapSetoran(),

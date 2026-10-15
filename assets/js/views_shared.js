@@ -243,7 +243,8 @@ const Shared = (() => {
     let periodeSetoran = {};
     
     santri.forEach(st => {
-      const kehadiran = db.kehadiran.filter(k => k.santriId === st.id);
+      // Satu sesi dapat punya catatan dari beberapa ustadz; rekap memakai satu status per sesi.
+      const kehadiran = Store.dedupeKehadiran(db.kehadiran.filter(k => k.santriId === st.id));
       const tahsin = db.tahsin.filter(t => t.santriId === st.id);
       const ziyadahHafalan = db.ziyadahHafalan.filter(z => z.santriId === st.id);
       const ziyadahBacaan = db.ziyadahBacaan.filter(z => z.santriId === st.id);
@@ -619,5 +620,5 @@ const Shared = (() => {
     </div>`;
   }
 
-  return { shell, setHeader, setActions, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadTemplateExcel, bulanLabel, mondayOf, renderRekapSetoranMingguan, bindRekapSetoranBayar, renderNotifikasi, ICONS, hafalanMapHTML };
+  return { shell, setHeader, setActions, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadExcel, downloadTemplateExcel, bulanLabel, mondayOf, renderRekapSetoranMingguan, bindRekapSetoranBayar, renderNotifikasi, ICONS, hafalanMapHTML };
 })();

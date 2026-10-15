@@ -68,12 +68,30 @@ const Ustadz = (() => {
     const db = Store.get();
     const santri = mySantri();
     const t = Store.todayStr();
+    // Rekap memakai satu status per sesi walau beberapa ustadz sama-sama
+    // mencatat halaqah yang sama.
+    const hadirHariIni = Store.dedupeKehadiran(db.kehadiran.filter(k => k.tanggal === t && santri.some(x => x.id === k.santriId)));
     const sesiStats = SESI.map(s => {
-      const h = db.kehadiran.filter(k => k.tanggal === t && k.sesi === s && santri.some(x => x.id === k.santriId) && k.status === 'Hadir').length;
-      const i = db.kehadiran.filter(k => k.tanggal === t && k.sesi === s && santri.some(x => x.id === k.santriId) && k.status === 'Izin').length;
-      const b = santri.length - (db.kehadiran.filter(k => k.tanggal === t && k.sesi === s && santri.some(x => x.id === k.santriId)).length);
+      const records = hadirHariIni.filter(k => k.sesi === s);
+      const h = records.filter(k => k.status === 'Hadir').length;
+      const i = records.filter(k => k.status === 'Izin').length;
+      const b = santri.length - records.length;
       return { s, h, i, b };
     });
+    // Ustadz juga punya absensi sendiri; tampilkan ringkasannya di dashboard
+    // supaya bisa absen tanpa membuka halaman absensi.
+    const session = Store.getSession();
+    const selfUstadz = (c.role === 'ustadz' && session) ? Store.findUstadz(session.refId) : null;
+    const absenUstadzCard = selfUstadz ? `
+      <div class="section-title mt">Absensi Ustadz Hari Ini</div>
+      ${SESI.map(s => {
+      const rec = Store.absensiUstadzOf(selfUstadz.id, t, s);
+      return `<div class="row center" style="justify-content:space-between;padding:5px 0">
+          <span style="font-size:13px">${UI.esc(s)}</span>
+          ${rec ? `<span class="badge ${statusBadgeClass(rec.status)}">${UI.esc(rec.status)} ${UI.fmtDateTime(rec.waktu)}</span>` : '<span class="muted" style="font-size:12px">Belum absen</span>'}
+        </div>`;
+    }).join('')}
+      <button class="clay-btn primary mt" id="btn-dashboard-absen-ustadz" style="width:100%;justify-content:center">Absen Ustadz</button>` : '';
     const bulanIni = Store.todayStr().slice(0, 7);
     const kehadiranBulan = santri.map(s => {
       const k = Store.kehadiranBulan(s.id, bulanIni);
@@ -112,6 +130,7 @@ const Ustadz = (() => {
             <button class="clay-btn primary" data-go="ustadz_absensi">Absensi</button>
             <button class="clay-btn secondary" data-go="ustadz_pembelajaran"> Pembelajaran</button>
           </div>
+          ${absenUstadzCard}
         </div>
         <div class="clay-card">
           <div class="section-title"> Daftar Santri</div>
@@ -122,17 +141,90 @@ const Ustadz = (() => {
         </div>
       </div>`;
     document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => App.navigate(b.dataset.go));
+    const btnAbsen = document.getElementById('btn-dashboard-absen-ustadz');
+    if (btnAbsen) btnAbsen.onclick = () => dialogAbsenUstadz(selfUstadz, sesiSaatIni(), t, () => dashboard());
   }
 
   /* ---------------- Absensi (multi-sesi) ---------------- */
   const SESI = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
+  const STATUS_USTADZ = ['Hadir', 'Izin', 'Sakit'];
+
+  // Sesi yang paling mendekati waktu sekarang, dipakai sebagai pilihan awal
+  // pada dialog absensi ustadz.
+  function sesiSaatIni() {
+    const h = new Date().getHours();
+    if (h < 10) return 'Subuh';
+    if (h < 15) return 'Ashar';
+    if (h < 18) return 'Maghrib';
+    if (h < 20) return 'Isya';
+    return 'Ta’lim Malam';
+  }
+
+  function statusBadgeClass(status) {
+    return status === 'Hadir' ? 'green' : status === 'Izin' ? 'warn' : status === 'Sakit' ? 'blue' : 'danger';
+  }
+
+  function paintStatusButton(btn, status) {
+    btn.className = 'clay-btn sm ghost';
+    btn.style = '';
+    if (status === 'Hadir') btn.className = 'clay-btn sm primary';
+    if (status === 'Izin') { btn.className = 'clay-btn sm'; btn.style = 'background:#FACC15;color:#000'; }
+    if (status === 'Sakit') btn.className = 'clay-btn sm secondary';
+    if (status === 'Alfa') btn.className = 'clay-btn sm danger';
+  }
+
+  /* Dialog absen ustadz sendiri. Dipakai dari dashboard dan dari halaman
+     absensi; status tersimpan per (tanggal, sesi) sehingga koreksi memperbarui
+     catatan yang sama. */
+  function dialogAbsenUstadz(ustadz, sesi, tanggal, onDone) {
+    if (!ustadz) return;
+    const existing = Store.absensiUstadzOf(ustadz.id, tanggal, sesi);
+    const picked = { status: (existing && existing.status) || 'Hadir' };
+    const { modal } = UI.openModal({
+      title: 'Absensi Ustadz',
+      sub: ustadz.nama + ' - ' + UI.fmtDate(tanggal) + ' - Sesi ' + sesi,
+      dismissable: false,
+      bodyHTML: `
+        <div class="muted" style="font-size:13px;margin-bottom:10px">Absen diri dulu sebelum mengabsen Santri.</div>
+        <div class="row" style="gap:6px;flex-wrap:wrap" id="au-status">
+          ${STATUS_USTADZ.map(s => `<button type="button" class="clay-btn sm ghost" data-au-st="${UI.esc(s)}">${UI.esc(s)}</button>`).join('')}
+        </div>
+        <div class="mt">
+          ${UI.field('Catatan (opsional)', `<input class="clay-input" id="au-catatan" placeholder="Contoh: diasuh ustadz pengganti">`)}
+        </div>
+        ${existing ? `<div class="muted" style="font-size:12px;margin-top:8px">Sudah absen (${UI.esc(existing.status)}) pukul ${UI.fmtDateTime(existing.waktu)}. Simpan lagi untuk mengoreksi.</div>` : ''}`,
+      actions: [
+        { label: 'Nanti Saja', cls: 'ghost', onClick: (m, c) => { c(); if (onDone) onDone(null); } },
+        {
+          label: 'Simpan & Lanjut', cls: 'primary',
+          onClick: async (m, c) => {
+            const input = m.querySelector('#au-catatan');
+            const catatan = input ? input.value.trim() : '';
+            const ok = await Store.simpanAbsensiUstadz(ustadz.id, sesi, picked.status, catatan, tanggal);
+            if (!ok) return;
+            Store.log('Absensi ustadz ' + picked.status + ' ' + sesi);
+            UI.toast('Absensi ustadz ' + picked.status + ' tersimpan', 'success');
+            c();
+            if (onDone) onDone(picked.status);
+          }
+        }
+      ]
+    });
+    modal.querySelectorAll('[data-au-st]').forEach(btn => {
+      if (btn.dataset.auSt === picked.status) paintStatusButton(btn, picked.status);
+      btn.onclick = () => {
+        picked.status = btn.dataset.auSt;
+        modal.querySelectorAll('[data-au-st]').forEach(b => paintStatusButton(b, b.dataset.auSt === picked.status ? picked.status : ''));
+      };
+    });
+  }
 
   function absensi(initialSesi = 'Subuh') {
     const c = ctx(); _scope = c.scope;
     const isTalim = initialSesi === 'Ta’lim Malam';
     const navItems = (c.role === 'admin') ? Admin.nav(isTalim ? 'ustadz_talim' : 'ustadz_absensi') : nav(isTalim ? 'ustadz_talim' : 'ustadz_absensi');
     Shared.shell(c.role, navItems, '');
-    Shared.setHeader(isTalim ? 'Absensi Ta’lim Malam' : 'Absensi', 'Pilih status untuk santri yang akan diabsen');
+    Shared.setHeader(isTalim ? 'Absensi Ta’lim Malam' : 'Absensi', 'Absen ustadz sendiri, lalu pilih status untuk Santri yang diabsen');
     const db = Store.get();
     // Opsi "Semua Santri" memang harus memperlihatkan seluruh roster,
     // sedangkan opsi kedua membatasi ke halaqah ustadz yang sedang login.
@@ -149,18 +241,32 @@ const Ustadz = (() => {
     // karena pencarian, perpindahan filter, atau perubahan ukuran layar.
     let pendingStatus = {};
 
+    // Absensi dicatat atas nama ustadz yang sedang absen. Satu halaqah boleh
+    // diampu lebih dari satu ustadz, sehingga catatan antar ustadz tidak
+    // saling menimpa. Admin tidak punya identitas ustadz, jadi admin bypass.
+    const session = Store.getSession();
+    const selfUstadz = (c.role === 'ustadz' && session) ? Store.findUstadz(session.refId) : null;
+    const ustadzId = selfUstadz ? selfUstadz.id : '';
+    const selfRecord = () => (selfUstadz ? Store.absensiUstadzOf(selfUstadz.id, t, sesiAktif) : null);
+    // Sebelum absen, halaman tetap tampil tetapi status Santri terkunci.
+    const locked = () => !selfUstadz || !selfRecord();
+
     function renderAbsensi() {
       // Pencarian nama tidak mengubah cakupan absensi yang akan disimpan.
       const halaqah = Store.findHalaqahByName(halaqahFilter);
       const roster = halaqah ? allSantri.filter(s => Store.santriHasHalaqah(s, halaqah)) : allSantri;
-      const sessionRecords = db.kehadiran.filter(k => k.tanggal === t && k.sesi === sesiAktif && roster.some(s => s.id === k.santriId));
+      // Hanya catatan ustadz ini yang ditampilkan dan diedit, sehingga absensi
+      // ustadz lain di halaqah yang sama tetap utuh.
+      const sessionRecords = db.kehadiran.filter(k => k.tanggal === t && k.sesi === sesiAktif && (k.ustadzId || '') === ustadzId && roster.some(s => s.id === k.santriId));
       const hasSaved = sessionRecords.length > 0;
-      const isEditing = editing === null ? !hasSaved : editing;
+      const isLocked = locked();
+      const isEditing = isLocked ? false : (editing === null ? !hasSaved : editing);
       // Semua baris roster tetap berada di DOM. Pencarian hanya menyembunyikan
       // baris yang tidak cocok agar kolom pencarian tidak kehilangan fokus.
       const santri = roster;
       const existing = {};
       sessionRecords.forEach(k => existing[k.santriId] = k.status);
+      const self = selfRecord();
 
       const rows = santri.map(s => {
         const cur = pendingStatus[s.id] || existing[s.id] || '';
@@ -175,18 +281,40 @@ const Ustadz = (() => {
             </div>
           </td>
           <td>${cur
-            ? `<span class="badge ${cur === 'Hadir' ? 'green' : cur === 'Izin' ? 'warn' : cur === 'Sakit' ? 'blue' : 'danger'}">${UI.esc(cur)}</span>`
+            ? `<span class="badge ${statusBadgeClass(cur)}">${UI.esc(cur)}</span>`
             : '<span class="muted">Belum dipilih</span>'}</td>
         </tr>`;
       }).join('');
 
       document.getElementById('view-content').innerHTML = `
+        ${selfUstadz ? (isLocked ? `
+        <div class="clay-card" style="margin-bottom:14px;border-left:4px solid #F59E0B">
+          <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
+            <div>
+              <b>Anda belum absen pada sesi ${UI.esc(sesiAktif)}</b>
+              <div class="muted" style="font-size:12px">Catat kehadiran ustadz lebih dulu, baru pilih status Santri.</div>
+            </div>
+            <button class="clay-btn primary sm" id="btn-absen-ustadz">Absen Ustadz</button>
+          </div>
+        </div>` : `
+        <div class="clay-card" style="margin-bottom:14px;border-left:4px solid #22C55E">
+          <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
+            <div>
+              <b>Absensi ustadz tersimpan</b>
+              <div class="muted" style="font-size:12px">
+                <span class="badge ${statusBadgeClass(self.status)}">${UI.esc(self.status)}</span>
+                pukul ${UI.fmtDateTime(self.waktu)}${self.catatan ? ' - ' + UI.esc(self.catatan) : ''}
+              </div>
+            </div>
+            <button class="clay-btn ghost sm" id="btn-absen-ustadz">Ubah Absensi Ustadz</button>
+          </div>
+        </div>`) : ''}
         <div class="clay-card">
           <div class="row" style="justify-content:space-between">
             <div class="section-title" style="margin:0">Absensi ${UI.fmtDate(t)}</div>
             ${hasSaved && !isEditing
               ? '<div class="row" style="gap:8px"><span class="badge green">Sudah tersimpan</span><button class="clay-btn ghost" id="btn-edit"> Edit Absensi</button></div>'
-              : '<button class="clay-btn primary" id="btn-save"> Simpan Absensi</button>'}
+              : (isLocked ? '<span class="badge warn">Menunggu absensi ustadz</span>' : '<button class="clay-btn primary" id="btn-save"> Simpan Absensi</button>')}
           </div>
           <div class="row mb" style="margin-top:12px">
             <span class="muted" style="font-size:13px">Sesi:</span>
@@ -222,6 +350,9 @@ const Ustadz = (() => {
         editing = null;
         pendingStatus = {};
         renderAbsensi();
+        // Sesi lain punya catatan ustadz sendiri, jadi dialog absen ustadz
+        // ditanyakan lagi untuk sesi yang baru dipilih.
+        openDialog();
       });
       halaqahSelect.onchange = () => { halaqahFilter = halaqahSelect.value; renderAbsensi(); };
       const applySearch = () => {
@@ -239,17 +370,12 @@ const Ustadz = (() => {
         const id = tr.dataset.id;
         tr.querySelectorAll('button[data-st]').forEach(btn => {
           btn.onclick = () => {
+            if (!isEditing) return;
             pendingStatus[id] = btn.dataset.st;
-            tr.querySelectorAll('button[data-st]').forEach(b => {
-              b.className = 'clay-btn sm ghost';
-              if (b.dataset.st === 'Izin') b.style = '';
-            });
-            if (btn.dataset.st === 'Hadir') btn.className = 'clay-btn sm primary';
-            if (btn.dataset.st === 'Izin') { btn.className = 'clay-btn sm'; btn.style = 'background:#FACC15;color:#000'; }
-            if (btn.dataset.st === 'Sakit') btn.className = 'clay-btn sm secondary';
-            if (btn.dataset.st === 'Alfa') btn.className = 'clay-btn sm danger';
+            tr.querySelectorAll('button[data-st]').forEach(b => paintStatusButton(b, ''));
+            paintStatusButton(btn, btn.dataset.st);
             const badge = tr.querySelector('td:last-child span');
-            badge.className = 'badge ' + (btn.dataset.st === 'Hadir' ? 'green' : btn.dataset.st === 'Izin' ? 'warn' : btn.dataset.st === 'Sakit' ? 'blue' : 'danger');
+            badge.className = 'badge ' + statusBadgeClass(btn.dataset.st);
             badge.textContent = btn.dataset.st;
           };
         });
@@ -260,6 +386,9 @@ const Ustadz = (() => {
         editing = true;
         renderAbsensi();
       };
+
+      const absenUstadzButton = document.getElementById('btn-absen-ustadz');
+      if (absenUstadzButton) absenUstadzButton.onclick = openDialog;
 
       const saveButton = document.getElementById('btn-save');
       if (saveButton) saveButton.onclick = async () => {
@@ -273,7 +402,9 @@ const Ustadz = (() => {
           const status = pendingStatus[s.id] || (previous ? previous.status : '');
           if (status) allState[s.id] = status;
         });
-        db.kehadiran = db.kehadiran.filter(k => !(k.tanggal === t && k.sesi === sesiAktif && roster.some(s => s.id === k.santriId)));
+        // Hanya baris milik ustadz ini yang diganti, supaya catatan ustadz
+        // lain pada sesi yang sama tidak ikut terhapus.
+        db.kehadiran = db.kehadiran.filter(k => !(k.tanggal === t && k.sesi === sesiAktif && (k.ustadzId || '') === ustadzId && roster.some(s => s.id === k.santriId)));
         Object.keys(allState).forEach(sid => {
           const sObj = Store.findSantri(sid);
           const hObj = sObj ? Store.findHalaqahByName(sObj.halaqah) : null;
@@ -281,7 +412,18 @@ const Ustadz = (() => {
           // Pertahankan ID catatan yang sama saat koreksi. Dengan demikian
           // dua perangkat yang mengoreksi sesi yang sama akan memperbarui
           // baris yang sama, bukan membuat salinan lalu saling menghapus.
-          db.kehadiran.push({ id: previous ? previous.id : Store.uid('k'), santriId: sid, halaqahId: hObj ? hObj.id : (myHalaqah() || ''), tanggal: t, sesi: sesiAktif, status: allState[sid] });
+          // `_created` hanya diisi saat baris pertama dibuat supaya rekap
+          // selalu tahu catatan mana yang paling baru.
+          db.kehadiran.push({
+            id: previous ? previous.id : Store.uid('k'),
+            santriId: sid,
+            halaqahId: hObj ? hObj.id : (myHalaqah() || ''),
+            ustadzId,
+            tanggal: t,
+            sesi: sesiAktif,
+            status: allState[sid],
+            _created: previous ? (previous._created || Date.now()) : Date.now()
+          });
         });
         if (!await Store.save()) return;
         Store.log('Input absensi ' + sesiAktif); UI.toast('Absensi ' + sesiAktif + ' tersimpan', 'success');
@@ -290,7 +432,17 @@ const Ustadz = (() => {
         renderAbsensi();
       };
     }
+
+    // Popup absensi ustadz muncul lebih dulu setiap kali menu absensi dibuka.
+    // Kalau status untuk sesi ini sudah ada, dialog tetap muncul supaya
+    // ustadz bisa mengoreksinya tanpa membuka halaman lain.
+    function openDialog() {
+      if (!selfUstadz) return;
+      dialogAbsenUstadz(selfUstadz, sesiAktif, t, () => renderAbsensi());
+    }
+
     renderAbsensi();
+    openDialog();
   }
 
   /* ---------------- Ta’lim Malam ---------------- */
@@ -567,19 +719,22 @@ const Ustadz = (() => {
     const skipBacaan = bacaanRequired && !!bacaanToday && !hafalanToday;
     const hafalanReady = !bacaanRequired || skipBacaan;
 
+    // Ayat terakhir yang disetorkan menjadi patokan, bukan catatan dengan
+    // tanggal terbesar: setoran tertinggal bisa diinput belakangan dengan
+    // tanggal lama, jadi ayat yang sudah lewat tidak boleh diulang.
     const last = Store.lastZiyadah(santriId);
-    const lastH = Store.lastHafalan(santriId);
     let defSA = 2, defAA = 1, defSK = 2, defAK = 5;
     if (bacaanToday) {
       defSA = bacaanToday.sAwal; defAA = bacaanToday.aAwal;
       defSK = bacaanToday.sAkhir; defAK = bacaanToday.aAkhir;
-    } else if (lastH) {
-      const n = nextHafalanPosition(lastH.sAkhir, lastH.aAkhir, db.settings.juzOrder);
-      if (n) { defSA = n.surah; defAA = n.ayah; defSK = n.surah; defAK = n.ayah + 4; }
     } else if (last) {
       const n = nextHafalanPosition(last.sAkhir, last.aAkhir, db.settings.juzOrder);
       if (n) { defSA = n.surah; defAA = n.ayah; defSK = n.surah; defAK = n.ayah + 4; }
     }
+    const patokan = bacaanToday || last;
+    const lanjutanLabel = patokan
+      ? getSurah(patokan.sAkhir).latin + ':' + patokan.aAkhir + ' - ' + UI.fmtDate(patokan.tanggal)
+      : '';
     function surahLabel(n) { const s = getSurah(n); return s ? s.n + '. ' + s.latin : n; }
     function riwayatSingkat() {
       const d = Store.get();
@@ -625,6 +780,7 @@ const Ustadz = (() => {
       </div>
       <div id="sec-hafalan" class="clay-card pad-sm mb" style="background:var(--bg);${hafalanActive}">
         <div class="section-title" style="font-size:14px;margin:0 0 8px 0">📝 Setoran Hafalan</div>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">${lanjutanLabel ? 'Dilanjutkan dari ' + UI.esc(lanjutanLabel) : 'Belum ada riwayat setoran'}</div>
         <div class="row">
           <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="h-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off" ${hafalanDisabled}>`)}</div>
           <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="h-aa" type="number" min="1" max="${getSurah(defSA) ? getSurah(defSA).ayahs : 286}" value="${Math.min(defAA, getSurah(defSA) ? getSurah(defSA).ayahs : 286)}" ${hafalanDisabled}>`)}</div>
@@ -820,7 +976,7 @@ const Ustadz = (() => {
           const sAyh = getSurah(sA); const sKyh = getSurah(sK);
           if (sAyh && +m.querySelector('#m-aa').value > sAyh.ayahs) { UI.toast('Awal ayat melebihi batas surat', 'error'); return; }
           if (sKyh && +m.querySelector('#m-ak').value > sKyh.ayahs) { UI.toast('Akhir ayat melebihi batas surat', 'error'); return; }
-          db.mutqin.push({ id: Store.uid('m'), santriId, ustadzId: ustadzIdFor(santriId, 'Mutqin'), tanggal: Store.todayStr(), sAwal: sA, aAwal: +m.querySelector('#m-aa').value, sAkhir: sK, aAkhir: +m.querySelector('#m-ak').value, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(), totalHafalan: +m.querySelector('#m-total').value });
+          db.mutqin.push({ id: Store.uid('m'), santriId, ustadzId: ustadzIdFor(santriId, 'Mutqin'), tanggal: Store.todayStr(), sAwal: sA, aAwal: +m.querySelector('#m-aa').value, sAkhir: sK, aAkhir: +m.querySelector('#m-ak').value, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(), totalHafalan: +m.querySelector('#m-total').value, _created: Date.now() });
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (wUser) Store.addNotif(wUser.id, 'wali', 'Murajaah Mutqin: ' + s.nama);
           waReport(santriId, '🌟 Murajaah Mutqin ' + s.nama + ': ' + getSurah(sA).latin + ':' + m.querySelector('#m-aa').value + ' - ' + getSurah(sK).latin + ':' + m.querySelector('#m-ak').value + '. Total ' + m.querySelector('#m-total').value + ' halaman. — ' + db.settings.namaLembaga);
@@ -1055,6 +1211,7 @@ const Ustadz = (() => {
     let hafalanReady = false;
     let defSA = 2, defAA = 1, defSK = 2, defAK = 5;
     let surahLabel = n => String(n);
+    let lanjutanLabel = '';
     
     let body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
@@ -1078,18 +1235,21 @@ const Ustadz = (() => {
       skipBacaan = bacaanRequired && !!bacaanToday && !hafalanToday;
       hafalanReady = !bacaanRequired || skipBacaan;
 
+      // Ayat terakhir yang disetorkan menjadi patokan, bukan catatan dengan
+      // tanggal terbesar: setoran tertinggal bisa diinput belakangan dengan
+      // tanggal lama, jadi ayat yang sudah lewat tidak boleh diulang.
       const last = Store.lastZiyadah(santriId);
-      const lastH = Store.lastHafalan(santriId);
       if (bacaanToday) {
         defSA = bacaanToday.sAwal; defAA = bacaanToday.aAwal;
         defSK = bacaanToday.sAkhir; defAK = bacaanToday.aAkhir;
-      } else if (lastH) {
-        const n = nextHafalanPosition(lastH.sAkhir, lastH.aAkhir, db.settings.juzOrder);
-        if (n) { defSA = n.surah; defAA = n.ayah; defSK = n.surah; defAK = n.ayah + 4; }
       } else if (last) {
         const n = nextHafalanPosition(last.sAkhir, last.aAkhir, db.settings.juzOrder);
         if (n) { defSA = n.surah; defAA = n.ayah; defSK = n.surah; defAK = n.ayah + 4; }
       }
+      const patokan = bacaanToday || last;
+      lanjutanLabel = patokan
+        ? getSurah(patokan.sAkhir).latin + ':' + patokan.aAkhir + ' - ' + UI.fmtDate(patokan.tanggal)
+        : '';
 
       surahLabel = n => { const surah = getSurah(n); return surah ? surah.n + '. ' + surah.latin : n; };
 
@@ -1121,6 +1281,7 @@ const Ustadz = (() => {
       const hafalanSection = `
         <div id="sec-hafalan" class="clay-card pad-sm mb" style="background:var(--bg);${hafalanActive}">
           <div class="section-title" style="font-size:14px;margin:0 0 8px 0">📝 Setoran Hafalan</div>
+          <div class="muted" style="font-size:12px;margin-bottom:8px">${lanjutanLabel ? 'Dilanjutkan dari ' + UI.esc(lanjutanLabel) : 'Belum ada riwayat setoran'}</div>
           <div class="row">
             <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="h-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off" ${hafalanDisabled}>`)}</div>
             <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="h-aa" type="number" min="1" max="${getSurah(defSA) ? getSurah(defSA).ayahs : 286}" value="${Math.min(defAA, getSurah(defSA) ? getSurah(defSA).ayahs : 286)}" ${hafalanDisabled}>`)}</div>
@@ -1184,7 +1345,7 @@ const Ustadz = (() => {
               sAwal: sA, aAwal: +m.querySelector('#f-aa').value,
               sAkhir: sK, aAkhir: +m.querySelector('#f-ak').value,
               nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(),
-              totalHafalan: +m.querySelector('#f-total').value
+              totalHafalan: +m.querySelector('#f-total').value, _created: Date.now()
             };
             d.mutqin.push(record);
           } else {
