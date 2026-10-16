@@ -255,7 +255,7 @@ const Admin = (() => {
           </div>
         </div>
         <div class="row" style="margin-top:12px">
-          <input class="clay-input" id="search-santri" type="text" placeholder="Cari santri..." autocomplete="off" />
+          <input class="clay-input" id="search-santri" type="search" placeholder="Cari santri..." autocomplete="off" />
         </div>
         <div class="table-wrap mt"><table class="clay-table">
           <thead><tr><th>Nama</th><th>JK</th><th>Program Aktif</th><th>Halaqah</th><th>Kelas</th><th>Status</th><th>Username Login</th><th>Aksi</th></tr></thead>
@@ -311,7 +311,7 @@ const Admin = (() => {
     const searchInput = document.getElementById('search-santri');
     if (searchInput) {
       let searchTimer = null;
-      searchInput.oninput = () => {
+      const scheduleSearch = () => {
         clearTimeout(searchTimer);
         searchTimer = setTimeout(() => {
           const term = searchInput.value.toLowerCase().trim();
@@ -368,6 +368,7 @@ const Admin = (() => {
           });
         }, 150);
       };
+      Shared.bindSearchInput(searchInput, scheduleSearch);
     }
   }
 
@@ -906,7 +907,7 @@ const Admin = (() => {
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card">
         <label class="field-label">Cari Santri</label>
-        <input class="clay-input" id="riwayat-search" type="text" placeholder="Ketik nama atau NIS santri..." autocomplete="off" />
+        <input class="clay-input" id="riwayat-search" type="search" placeholder="Ketik nama atau NIS santri..." autocomplete="off" />
         <div id="riwayat-santri-list" class="mt" style="max-height:200px;overflow-y:auto"></div>
         <div id="riwayat-content" class="mt"></div>
       </div>`;
@@ -971,10 +972,11 @@ const Admin = (() => {
       });
     }
     
-    searchInput.oninput = () => {
+    const scheduleSearch = () => {
       clearTimeout(searchTimer);
       searchTimer = setTimeout(updateSantriList, 150);
     };
+    Shared.bindSearchInput(searchInput, scheduleSearch);
     
     updateSantriList();
   }
@@ -1028,7 +1030,7 @@ const Admin = (() => {
           <div style="flex:1;min-width:130px">${UI.field('Sesi', `<select class="clay-select" id="au-sesi"><option value="">Semua Sesi</option>${SESI_ABSENSI.map(x => `<option>${UI.esc(x)}</option>`).join('')}</select>`)}</div>
           <div style="flex:1;min-width:140px">${UI.field('Status', `<select class="clay-select" id="au-status"><option value="">Semua</option>${STATUS_ABSENSI.map(x => `<option>${UI.esc(x)}</option>`).join('')}<option value="__none">Belum Absen</option></select>`)}</div>
           <div style="flex:1;min-width:160px">${UI.field('Halaqah', `<select class="clay-select" id="au-halaqah"><option value="">Semua Halaqah</option>${UI.optionsFromList(db.halaqah.map(h => ({ v: h.id, l: halaqahOptionLabel(h, false) })), 'v', 'l')}</select>`)}</div>
-          <div style="flex:1;min-width:160px">${UI.field('Cari Ustadz', `<input class="clay-input" id="au-cari" placeholder="Nama ustadz" autocomplete="off">`)}</div>
+          <div style="flex:1;min-width:160px">${UI.field('Cari Ustadz', `<input class="clay-input" id="au-cari" type="search" placeholder="Nama ustadz" autocomplete="off">`)}</div>
         </div>
         <div class="row mt">
           <button class="clay-btn secondary" id="au-export">Export Excel</button>
@@ -1121,7 +1123,7 @@ const Admin = (() => {
     ['au-tanggal', 'au-sesi', 'au-status', 'au-halaqah'].forEach(id => {
       document.getElementById(id).onchange = render;
     });
-    document.getElementById('au-cari').oninput = render;
+    Shared.bindSearchInput(document.getElementById('au-cari'), render);
     document.getElementById('au-hari-ini').onclick = () => {
       document.getElementById('au-tanggal').value = Store.todayStr();
       render();

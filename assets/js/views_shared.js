@@ -91,6 +91,18 @@ const Shared = (() => {
     if (a) a.innerHTML = html;
   }
 
+  // Beberapa keyboard/fitur autofill ponsel tidak konsisten mengirim `input`.
+  // Dengarkan juga change, search (tombol hapus bawaan), dan keyup agar setiap
+  // kolom pencarian tetap menyaring daftar tanpa menunggu pengguna menekan Enter.
+  function bindSearchInput(input, onSearch) {
+    if (!input || typeof onSearch !== 'function') return;
+    let composing = false;
+    const run = () => { if (!composing) onSearch(); };
+    ['input', 'change', 'search', 'keyup'].forEach(eventName => input.addEventListener(eventName, run));
+    input.addEventListener('compositionstart', () => { composing = true; });
+    input.addEventListener('compositionend', () => { composing = false; run(); });
+  }
+
   /* Ganti password sendiri. Dipakai semua role lewat tombol di kotak user
      sidebar, dan oleh halaman Profil wali. Syarat panjang minimal mengikuti
      aturan server (6 karakter) supaya pesan error dari server tidak pernah
@@ -883,5 +895,5 @@ const Shared = (() => {
     </div>`;
   }
 
-  return { shell, setHeader, setActions, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadExcel, downloadTemplateExcel, bulanLabel, mondayOf, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, ICONS, hafalanMapHTML };
+  return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadExcel, downloadTemplateExcel, bulanLabel, mondayOf, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, ICONS, hafalanMapHTML };
 })();

@@ -327,7 +327,7 @@ const Ustadz = (() => {
             </div>
             <div style="flex:2;min-width:180px">
               <label class="field-label">Cari Santri</label>
-              <input class="clay-input" id="abs-search" placeholder="Nama atau NIS santri">
+              <input class="clay-input" id="abs-search" type="search" placeholder="Nama atau NIS santri">
             </div>
           </div>
           <div class="table-wrap mt"><table class="clay-table">
@@ -363,7 +363,7 @@ const Ustadz = (() => {
           tr.hidden = !matches;
         });
       };
-      searchInput.oninput = () => { searchTerm = searchInput.value; applySearch(); };
+      Shared.bindSearchInput(searchInput, () => { searchTerm = searchInput.value; applySearch(); });
       applySearch();
 
       document.querySelectorAll('#abs-body tr[data-id]').forEach(tr => {
@@ -1001,7 +1001,7 @@ const Ustadz = (() => {
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card">
         <label class="field-label">Cari Santri</label>
-        <input class="clay-input" id="riwayat-search" type="text" placeholder="Ketik nama atau NIS santri..." autocomplete="off" />
+        <input class="clay-input" id="riwayat-search" type="search" placeholder="Ketik nama atau NIS santri..." autocomplete="off" />
         <div id="riwayat-santri-list" class="mt" style="max-height:200px;overflow-y:auto"></div>
         <label class="field-label mt">Riwayat</label>
         <div id="riwayat-content"></div>
@@ -1072,10 +1072,11 @@ const Ustadz = (() => {
       });
     }
     
-    searchInput.oninput = () => {
+    const scheduleSearch = () => {
       clearTimeout(searchTimer);
       searchTimer = setTimeout(updateSantriList, 150);
     };
+    Shared.bindSearchInput(searchInput, scheduleSearch);
     
     updateSantriList();
   }
@@ -1122,7 +1123,7 @@ const Ustadz = (() => {
       <div class="clay-card">
         <div class="row" style="justify-content:space-between">
           <div class="section-title" id="setoran-umum-title" style="margin:0">Setoran Umum (${allSantri.length} santri)</div>
-          <input class="clay-input" id="cari-santri" type="text" placeholder="Cari nama santri..." style="max-width:260px" autocomplete="off" />
+          <input class="clay-input" id="cari-santri" type="search" placeholder="Cari nama santri..." style="max-width:260px" autocomplete="off" />
         </div>
         <div class="table-wrap mt"><table class="clay-table">
           <thead><tr><th>Santri</th><th>Kelas</th><th>Level</th><th>Total Hafalan</th><th>Nilai</th><th>Aksi</th></tr></thead>
@@ -1164,13 +1165,13 @@ const Ustadz = (() => {
     }
 
     const input = document.getElementById('cari-santri');
-    input.oninput = () => {
+    Shared.bindSearchInput(input, () => {
       const term = input.value.trim().toLowerCase();
       renderRows(allSantri.filter(s =>
         s.nama.toLowerCase().includes(term) ||
         (s.nis && s.nis.toString().toLowerCase().includes(term))
       ));
-    };
+    });
     renderRows(allSantri);
   }
 
