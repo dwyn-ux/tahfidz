@@ -224,17 +224,23 @@ const Admin = (() => {
   /* ---------------- Santri ---------------- */
   function downloadSantriXlsx() {
     const db = Store.get();
-    const rows = db.santri.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id')).map(s => ({
-      nama: s.nama, nis: s.nis || '', jk: s.jk || '', tingkat: Store.tingkatForSantri(s), kelas: Store.kelasForSantri(s),
-      program: Store.programSummaryForSantri(s), halaqah: Store.halaqahSummaryForSantri(s), status: s.status || '',
-      wali: s.namaWali || '', hpWali: s.noHpWali || '', hpSantri: s.noHp || '', alamat: s.alamat || '', tglLahir: s.tglLahir || ''
-    }));
+    const rows = db.santri.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id')).map(s => {
+      const waliUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
+      return {
+        nama: s.nama, nis: s.nis || '', jk: s.jk || '', tingkat: Store.tingkatForSantri(s), kelas: Store.kelasForSantri(s),
+        program: Store.programSummaryForSantri(s), halaqah: Store.halaqahSummaryForSantri(s), status: s.status || '',
+        usernameWali: waliUser ? waliUser.username : '',
+        wali: s.namaWali || '', hpWali: s.noHpWali || '', hpSantri: s.noHp || '', alamat: s.alamat || '', tglLahir: s.tglLahir || ''
+      };
+    });
     Shared.downloadXlsx('Data_Santri_' + Store.todayStr(), [{
       name: 'Santri', rows,
       columns: [
         { key: 'nama', label: 'Nama' }, { key: 'nis', label: 'NIS' }, { key: 'jk', label: 'JK' },
         { key: 'tingkat', label: 'Tingkat' }, { key: 'kelas', label: 'Kelas' }, { key: 'program', label: 'Program Aktif' },
-        { key: 'halaqah', label: 'Halaqah' }, { key: 'status', label: 'Status' }, { key: 'wali', label: 'Nama Wali' },
+        { key: 'halaqah', label: 'Halaqah' }, { key: 'status', label: 'Status' },
+        { key: 'usernameWali', label: 'Username Login Wali' },
+        { key: 'wali', label: 'Nama Wali' },
         { key: 'hpWali', label: 'No. HP Wali' }, { key: 'hpSantri', label: 'No. HP Santri' }, { key: 'alamat', label: 'Alamat' }, { key: 'tglLahir', label: 'Tanggal Lahir' }
       ]
     }]);
