@@ -222,6 +222,25 @@ const Admin = (() => {
   }
 
   /* ---------------- Santri ---------------- */
+  function downloadSantriXlsx() {
+    const db = Store.get();
+    const rows = db.santri.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id')).map(s => ({
+      nama: s.nama, nis: s.nis || '', jk: s.jk || '', tingkat: Store.tingkatForSantri(s), kelas: Store.kelasForSantri(s),
+      program: Store.programSummaryForSantri(s), halaqah: Store.halaqahSummaryForSantri(s), status: s.status || '',
+      wali: s.namaWali || '', hpWali: s.noHpWali || '', hpSantri: s.noHp || '', alamat: s.alamat || '', tglLahir: s.tglLahir || ''
+    }));
+    Shared.downloadXlsx('Data_Santri_' + Store.todayStr(), [{
+      name: 'Santri', rows,
+      columns: [
+        { key: 'nama', label: 'Nama' }, { key: 'nis', label: 'NIS' }, { key: 'jk', label: 'JK' },
+        { key: 'tingkat', label: 'Tingkat' }, { key: 'kelas', label: 'Kelas' }, { key: 'program', label: 'Program Aktif' },
+        { key: 'halaqah', label: 'Halaqah' }, { key: 'status', label: 'Status' }, { key: 'wali', label: 'Nama Wali' },
+        { key: 'hpWali', label: 'No. HP Wali' }, { key: 'hpSantri', label: 'No. HP Santri' }, { key: 'alamat', label: 'Alamat' }, { key: 'tglLahir', label: 'Tanggal Lahir' }
+      ]
+    }]);
+    UI.toast('Data santri berhasil diunduh (.xlsx)', 'success');
+  }
+
   function santri() {
     Shared.shell('admin', nav('admin_santri'), '');
     Shared.setHeader('Manajemen Santri', 'Kelola data santri & akun wali otomatis');
@@ -232,9 +251,10 @@ const Admin = (() => {
       return `<tr>
         <td><b>${UI.esc(s.nama)}</b><div class="muted">${UI.esc(s.nis)}</div></td>
         <td>${UI.esc(s.jk)}</td>
+        <td>${UI.esc(Store.tingkatForSantri(s) || '-')}</td>
+        <td>${UI.esc(Store.kelasForSantri(s) || '-')}</td>
         <td>${UI.esc(Store.programSummaryForSantri(s))}</td>
         <td>${UI.esc(Store.halaqahSummaryForSantri(s))}</td>
-        <td>${UI.esc(s.kelas)}</td>
         <td><span class="badge ${s.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(s.status)}</span></td>
         <td><code>${UI.esc(username)}</code></td>
         <td>
@@ -251,6 +271,7 @@ const Admin = (() => {
           <div class="row">
             <button class="clay-btn ghost" id="btn-gen-bulk">⚙️ Generate Username</button>
             <button class="clay-btn ghost" id="btn-import">Import Excel</button>
+            <button class="clay-btn secondary" id="btn-download-xlsx">⬇ Download XLSX</button>
             <button class="clay-btn primary" id="btn-add">+ Tambah Santri</button>
           </div>
         </div>
@@ -258,12 +279,13 @@ const Admin = (() => {
           <input class="clay-input" id="search-santri" type="search" placeholder="Cari santri..." autocomplete="off" />
         </div>
         <div class="table-wrap mt"><table class="clay-table">
-          <thead><tr><th>Nama</th><th>JK</th><th>Program Aktif</th><th>Halaqah</th><th>Kelas</th><th>Status</th><th>Username Login</th><th>Aksi</th></tr></thead>
-          <tbody id="santri-table-body">${rows || `<tr><td colspan="8"><div class="empty">Belum ada santri.</div></td></tr>`}</tbody>
+          <thead><tr><th>Nama</th><th>JK</th><th>Tingkat</th><th>Kelas</th><th>Program Aktif</th><th>Halaqah</th><th>Status</th><th>Username Login</th><th>Aksi</th></tr></thead>
+          <tbody id="santri-table-body">${rows || `<tr><td colspan="9"><div class="empty">Belum ada santri.</div></td></tr>`}</tbody>
         </table></div>
       </div>`;
     document.getElementById('btn-add').onclick = () => santriForm();
     document.getElementById('btn-import').onclick = () => importSantriDialog();
+    document.getElementById('btn-download-xlsx').onclick = downloadSantriXlsx;
     document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => santriForm(b.dataset.edit));
     document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
       UI.confirmDialog('Hapus Santri', 'Yakin ingin menghapus santri ini?', () => {
@@ -318,9 +340,10 @@ const Admin = (() => {
           const rows = term ? db.santri.filter(s =>
             s.nama.toLowerCase().includes(term) ||
             (s.nis && s.nis.toString().includes(term)) ||
+            Store.tingkatForSantri(s).toLowerCase().includes(term) ||
+            Store.kelasForSantri(s).toLowerCase().includes(term) ||
             Store.programSummaryForSantri(s).toLowerCase().includes(term) ||
             Store.halaqahSummaryForSantri(s).toLowerCase().includes(term) ||
-            s.kelas.toLowerCase().includes(term) ||
             (s.level || '').toLowerCase().includes(term)
           ) : db.santri;
           const newRows = rows.map(s => {
@@ -329,9 +352,10 @@ const Admin = (() => {
             return `<tr>
               <td><b>${UI.esc(s.nama)}</b><div class="muted">${UI.esc(s.nis)}</div></td>
               <td>${UI.esc(s.jk)}</td>
-               <td>${UI.esc(Store.programSummaryForSantri(s))}</td>
-               <td>${UI.esc(Store.halaqahSummaryForSantri(s))}</td>
-              <td>${UI.esc(s.kelas)}</td>
+              <td>${UI.esc(Store.tingkatForSantri(s) || '-')}</td>
+              <td>${UI.esc(Store.kelasForSantri(s) || '-')}</td>
+              <td>${UI.esc(Store.programSummaryForSantri(s))}</td>
+              <td>${UI.esc(Store.halaqahSummaryForSantri(s))}</td>
               <td><span class="badge ${s.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(s.status)}</span></td>
               <td><code>${UI.esc(username)}</code></td>
               <td>
@@ -341,7 +365,7 @@ const Admin = (() => {
               </td>
             </tr>`;
           }).join('');
-          document.getElementById('santri-table-body').innerHTML = newRows || `<tr><td colspan="8"><div class="empty">Tidak ada santri yang sesuai.</div></td></tr>`;
+          document.getElementById('santri-table-body').innerHTML = newRows || `<tr><td colspan="9"><div class="empty">Tidak ada santri yang sesuai.</div></td></tr>`;
           document.querySelectorAll('#santri-table-body [data-edit], #santri-table-body [data-del], #santri-table-body [data-reset]').forEach(b => {
             b.onclick = () => {
               if (b.dataset.edit) santriForm(b.dataset.edit);
@@ -378,6 +402,11 @@ const Admin = (() => {
     const allPrograms = db.levelTahfidz || ['Tahsin', 'Ziyadah', 'Mutqin'];
     const activePrograms = s ? Store.activeProgramsForSantri(s) : [(s && s.level) || 'Tahsin'];
     const primaryProgram = s && activePrograms.includes(s.level) ? s.level : activePrograms[0];
+    const selectedTingkat = s ? Store.tingkatForSantri(s) : (Store.tingkatOptions()[0] || '');
+    const selectedKelas = s ? Store.kelasForSantri(s) : '';
+    const kelasOptions = (tingkat, selected = '') => `<option value="">Pilih kelas</option>${UI.optionsFromList(
+      Store.kelasOptions(tingkat).map(kelas => ({ v: kelas, l: 'Kelas ' + kelas })), 'v', 'l', selected
+    )}`;
     const halaqahOptions = program => {
       const selected = s ? (Store.halaqahForSantriProgram(s, program) || {}).id : '';
       const choices = db.halaqah.map(h => ({ v: h.id, l: halaqahOptionLabel(h) }));
@@ -416,7 +445,8 @@ const Admin = (() => {
         <div style="flex:1">${UI.field('Program Utama', `<select class="clay-select" id="f-level"></select><div class="muted" style="font-size:12px;margin-top:4px">Ditampilkan sebagai level utama pada laporan lama.</div>`)}</div>
       </div>
       <div class="row">
-        <div style="flex:1">${UI.field('Kelas', `<select class="clay-select" id="f-kelas">${UI.optionsFromList(db.kelas.map(k => ({ v: k, l: k })), 'v', 'l', s ? s.kelas : db.kelas[0])}</select>`)}</div>
+        <div style="flex:1">${UI.field('Tingkat', `<select class="clay-select" id="f-tingkat"><option value="">Pilih tingkat</option>${UI.optionsFromList(Store.tingkatOptions().map(tingkat => ({ v: tingkat, l: tingkat })), 'v', 'l', selectedTingkat)}</select>`)}</div>
+        <div style="flex:1">${UI.field('Kelas', `<select class="clay-select" id="f-kelas">${kelasOptions(selectedTingkat, selectedKelas)}</select>`)}</div>
       </div>
       ${UI.field('Program Aktif', `<div class="clay-card pad-sm">${programChecks}</div><div class="muted" style="font-size:12px;margin-top:4px">Santri dapat aktif di lebih dari satu program pada waktu yang sama.</div>`) }
       ${UI.field('Halaqah per Jenis Setoran', `<div class="clay-card pad-sm">${programHalaqahFields}</div><div class="muted" style="font-size:12px;margin-top:4px">Jenis setoran mengikuti Program Aktif, bukan level halaqah. Contoh: centang Ziyadah lalu pilih halaqah Mutqin agar masuk kelompok Mutqin, tetapi setorannya tetap Ziyadah.</div>`)}`;
@@ -437,9 +467,13 @@ const Admin = (() => {
             namaWali: m.querySelector('#f-wali').value.trim(),
             noHpWali: m.querySelector('#f-hpwali').value.trim(),
             status: m.querySelector('#f-status').value,
+            tingkat: m.querySelector('#f-tingkat').value,
             kelas: m.querySelector('#f-kelas').value
           };
           if (!data.nama) { UI.toast('Nama wajib diisi', 'error'); return; }
+          if (!data.tingkat || !data.kelas || !Store.kelasOptions(data.tingkat).includes(data.kelas)) {
+            UI.toast('Pilih tingkat dan kelas yang sesuai', 'error'); return;
+          }
           const programs = [...m.querySelectorAll('[data-program-active]:checked')].map(input => input.value);
           const primary = m.querySelector('#f-level').value;
           if (!programs.length) { UI.toast('Pilih minimal satu program aktif', 'error'); return; }
@@ -489,6 +523,13 @@ const Admin = (() => {
       const taken = new Set(db.users.filter(u => u.username).map(u => u.username));
       modal.modal.querySelector('#f-uname').value = uniqueUsername(base, taken);
     };
+    const syncKelasInput = () => {
+      const tingkat = modal.modal.querySelector('#f-tingkat').value;
+      const select = modal.modal.querySelector('#f-kelas');
+      const previous = select.value;
+      select.innerHTML = kelasOptions(tingkat, Store.kelasOptions(tingkat).includes(previous) ? previous : '');
+    };
+    modal.modal.querySelector('#f-tingkat').onchange = syncKelasInput;
     const syncProgramInputs = () => {
       const checked = [...modal.modal.querySelectorAll('[data-program-active]:checked')].map(input => input.value);
       const primarySelect = modal.modal.querySelector('#f-level');
@@ -509,14 +550,14 @@ const Admin = (() => {
   /* ---------------- Bulk Import Santri ---------------- */
   function importSantriDialog() {
     const body = `
-      <p class="muted">Kolom: Nama | NIS | JK (L/P) | Wali | HP Wali | Level | Halaqah</p>
+      <p class="muted">Kolom: Nama | NIS | JK (L/P) | Wali | HP Wali | Program | Halaqah | Tingkat | Kelas</p>
       <div class="row">
         <button class="clay-btn ghost" id="imp-template">Download Template Excel</button>
       </div>
       <label class="field-label mt" for="imp-file">Pilih file template yang sudah diisi (.xls atau .csv)</label>
       <input class="clay-input" id="imp-file" type="file" accept=".xls,.csv,text/csv,application/vnd.ms-excel" />
       <label class="field-label mt">Atau tempel data dari Excel/CSV</label>
-      <textarea class="clay-textarea" id="imp-data" placeholder="Ahmad, S010, L, Bpk Ali, 0812..., Ziyadah, Halaqah 1&#10;Fatimah, S011, P, Ibu Sara, 0812..., Tahsin, Halaqah 2"></textarea>
+      <textarea class="clay-textarea" id="imp-data" placeholder="Ahmad, S010, L, Bpk Ali, 0812..., Ziyadah, Halaqah 1, SD, 4&#10;Fatimah, S011, P, Ibu Sara, 0812..., Tahsin, Halaqah 2, SMP, 8"></textarea>
       <div id="imp-preview" class="mt"></div>`;
     const modal = UI.openModal({
       title: 'Import Santri (Excel/CSV)', sub: 'Validasi otomatis, preview sebelum import',
@@ -529,8 +570,8 @@ const Admin = (() => {
           const lines = parseImportRows(raw);
           const valid = lines.filter(c => c.length >= 7 && c[0]);
           m.querySelector('#imp-preview').innerHTML = `<div class="clay-card pad-sm"><div class="muted" style="font-size:13px">${valid.length} baris valid dari ${lines.length}.</div>
-            <div class="table-wrap mt"><table class="clay-table"><thead><tr><th>Nama</th><th>NIS</th><th>JK</th><th>Wali</th><th>HP</th><th>Level</th><th>Halaqah</th></tr></thead>
-            <tbody>${valid.map(c => `<tr><td>${UI.esc(c[0])}</td><td>${UI.esc(c[1])}</td><td>${UI.esc(c[2])}</td><td>${UI.esc(c[3])}</td><td>${UI.esc(c[4])}</td><td>${UI.esc(c[5])}</td><td>${UI.esc(c[6])}</td></tr>`).join('')}</tbody></table></div></div>`;
+            <div class="table-wrap mt"><table class="clay-table"><thead><tr><th>Nama</th><th>NIS</th><th>JK</th><th>Wali</th><th>HP</th><th>Program</th><th>Halaqah</th><th>Tingkat</th><th>Kelas</th></tr></thead>
+            <tbody>${valid.map(c => `<tr><td>${UI.esc(c[0])}</td><td>${UI.esc(c[1])}</td><td>${UI.esc(c[2])}</td><td>${UI.esc(c[3])}</td><td>${UI.esc(c[4])}</td><td>${UI.esc(c[5])}</td><td>${UI.esc(c[6])}</td><td>${UI.esc(c[7] || '-')}</td><td>${UI.esc(c[8] || '-')}</td></tr>`).join('')}</tbody></table></div></div>`;
         } },
         { label: 'Import', cls: 'primary', onClick: (m, c) => {
           const db = Store.get();
@@ -539,7 +580,8 @@ const Admin = (() => {
           let count = 0;
           lines.forEach(c => {
             const waliId = Store.uid('w');
-            const newS = { id: Store.uid('s'), nama: c[0], nis: c[1], jk: c[2], tglLahir: '', alamat: '', noHp: '', namaWali: c[3], noHpWali: c[4], status: 'Aktif', level: c[5], kelas: '', halaqah: c[6], waliId };
+            const newS = { id: Store.uid('s'), nama: c[0], nis: c[1], jk: c[2], tglLahir: '', alamat: '', noHp: '', namaWali: c[3], noHpWali: c[4], status: 'Aktif', level: c[5], tingkat: c[7] || '', kelas: c[8] || '', halaqah: c[6], waliId };
+            Store.normalizeSantriEducation(newS);
             db.santri.push(newS);
             const wali = { id: waliId, nama: c[3], noHp: c[4], santriId: newS.id };
             db.wali.push(wali);
@@ -553,17 +595,41 @@ const Admin = (() => {
         } }
       ]
     });
-    bindImportFile(modal.modal, ['Nama', 'NIS', 'JK (L/P)', 'Wali', 'HP Wali', 'Level', 'Halaqah']);
+    bindImportFile(modal.modal, ['Nama', 'NIS', 'JK (L/P)', 'Wali', 'HP Wali', 'Program', 'Halaqah', 'Tingkat', 'Kelas']);
     modal.modal.querySelector('#imp-template').onclick = () => Shared.downloadTemplateExcel(
       'Template_Import_Santri',
-      ['Nama', 'NIS', 'JK (L/P)', 'Wali', 'HP Wali', 'Level', 'Halaqah'],
-      [['Ahmad Fauzi', 'S010', 'L', 'Bpk Ali', '081234567890', 'Ziyadah', 'Halaqah 1'],
-       ['Fatimah Zahra', 'S011', 'P', 'Ibu Sara', '081234567891', 'Tahsin', 'Halaqah 2']],
+      ['Nama', 'NIS', 'JK (L/P)', 'Wali', 'HP Wali', 'Program', 'Halaqah', 'Tingkat', 'Kelas'],
+      [['Ahmad Fauzi', 'S010', 'L', 'Bpk Ali', '081234567890', 'Ziyadah', 'Halaqah 1', 'SD', '4'],
+       ['Fatimah Zahra', 'S011', 'P', 'Ibu Sara', '081234567891', 'Tahsin', 'Halaqah 2', 'SMP', '8']],
       'Isi tiap baris untuk 1 santri. Simpan sebagai .xls lalu salin isinya ke kolom di bawah, atau tempel langsung dari Excel.'
     );
   }
 
   /* ---------------- Ustadz ---------------- */
+  function talimAssignmentSummary(ustadz) {
+    return Store.talimAssignmentsForUstadz(ustadz).map(assignment => {
+      const classes = assignment.kelasKeys.map(Store.talimClassLabel).join(', ');
+      return assignment.mapel.nama + (classes ? ' · ' + classes : ' · Belum ada kelas');
+    }).join('; ');
+  }
+
+  function downloadUstadzXlsx() {
+    const db = Store.get();
+    const rows = db.ustadz.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id')).map(u => {
+      const account = db.users.find(user => user.role === 'ustadz' && user.refId === u.id);
+      const halaqah = db.halaqah.filter(h => Store.halaqahHasUstadz(h, u)).map(h => h.nama).join(', ') || u.halaqah || '';
+      return { nama: u.nama, username: account?.username || '', noHp: u.noHp || '', email: u.email || '', status: u.status || '', halaqah, talim: talimAssignmentSummary(u) };
+    });
+    Shared.downloadXlsx('Data_Ustadz_' + Store.todayStr(), [{
+      name: 'Ustadz', rows,
+      columns: [
+        { key: 'nama', label: 'Nama' }, { key: 'username', label: 'Username Login' }, { key: 'noHp', label: 'No. HP' },
+        { key: 'email', label: 'Email' }, { key: 'status', label: 'Status' }, { key: 'halaqah', label: 'Halaqah' }, { key: 'talim', label: 'Penugasan Ta’lim' }
+      ]
+    }]);
+    UI.toast('Data ustadz berhasil diunduh (.xlsx)', 'success');
+  }
+
   function ustadz() {
     Shared.shell('admin', nav('admin_ustadz'), '');
     Shared.setHeader('Manajemen Ustadz', 'Kelola pengajar');
@@ -572,12 +638,14 @@ const Admin = (() => {
       const acc = db.users.find(usr => usr.role === 'ustadz' && usr.refId === u.id);
       const uname = acc ? acc.username : '-';
       const halaqahNames = db.halaqah.filter(h => Store.halaqahHasUstadz(h, u)).map(h => h.nama);
+      const penugasanTalim = talimAssignmentSummary(u);
       return `<tr>
         <td><b>${UI.esc(u.nama)}</b></td>
         <td><code>${UI.esc(uname)}</code></td>
         <td>${UI.esc(u.noHp)}</td>
         <td>${UI.esc(u.email)}</td>
         <td>${UI.esc(halaqahNames.join(', ') || u.halaqah || '-')}</td>
+        <td>${UI.esc(penugasanTalim || '-')}</td>
         <td><span class="badge ${u.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(u.status)}</span></td>
         <td>
           <button class="clay-btn sm" data-edit="${u.id}">✏️</button>
@@ -591,16 +659,18 @@ const Admin = (() => {
           <div class="section-title" style="margin:0">Daftar Ustadz (${db.ustadz.length})</div>
           <div class="row">
             <button class="clay-btn ghost" id="btn-import">Import Excel</button>
+            <button class="clay-btn secondary" id="btn-download-xlsx">⬇ Download XLSX</button>
             <button class="clay-btn primary" id="btn-add">+ Tambah Ustadz</button>
           </div>
         </div>
         <div class="table-wrap mt"><table class="clay-table">
-          <thead><tr><th>Nama</th><th>Username Login</th><th>No HP</th><th>Email</th><th>Halaqah</th><th>Status</th><th>Aksi</th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="7"><div class="empty">Belum ada ustadz.</div></td></tr>`}</tbody>
+          <thead><tr><th>Nama</th><th>Username Login</th><th>No HP</th><th>Email</th><th>Halaqah</th><th>Penugasan Ta’lim</th><th>Status</th><th>Aksi</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="8"><div class="empty">Belum ada ustadz.</div></td></tr>`}</tbody>
         </table></div>
       </div>`;
     document.getElementById('btn-add').onclick = () => ustadzForm();
     document.getElementById('btn-import').onclick = () => importUstadzDialog();
+    document.getElementById('btn-download-xlsx').onclick = downloadUstadzXlsx;
     document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => ustadzForm(b.dataset.edit));
     document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
       UI.confirmDialog('Hapus Ustadz', 'Yakin hapus ustadz ini?', () => {
@@ -746,7 +816,7 @@ const Admin = (() => {
     }).map(({ s, program, assigned }, i) => `<tr>
       <td class="center">${i + 1}</td>
       <td><b>${UI.esc(s.nama)}</b><div class="muted" style="font-size:12px">${UI.esc(s.nis || '-')}</div></td>
-      <td>${UI.esc(s.kelas || '-')}</td>
+      <td>${UI.esc(Store.educationLabel(s))}</td>
       <td><span class="badge ${program === 'Ziyadah' ? 'green' : program === 'Mutqin' ? 'warn' : 'blue'}">${UI.esc(program || '-')}</span></td>
       <td><select class="clay-select" data-move-target style="min-width:160px">${moveOptions(assigned && assigned.id)}</select></td>
       <td class="center"><button class="clay-btn sm secondary" data-save-move="${UI.esc(s.id)}" data-program="${UI.esc(program)}">Simpan</button></td>
@@ -760,7 +830,7 @@ const Admin = (() => {
         ${h ? `<div><button class="clay-btn sm" data-edit-halaqah="${UI.esc(h.id)}">✏️ Edit Halaqah</button> <button class="clay-btn sm danger" data-del="${UI.esc(h.id)}">🗑</button></div>` : ''}
       </div>
       <div class="table-wrap"><table class="clay-table">
-        <thead><tr><th class="center">No</th><th>Santri</th><th>Kelas</th><th>Jenis Setoran</th><th>Pindah ke Halaqah</th><th class="center">Aksi</th></tr></thead>
+        <thead><tr><th class="center">No</th><th>Santri</th><th>Tingkat & Kelas</th><th>Jenis Setoran</th><th>Pindah ke Halaqah</th><th class="center">Aksi</th></tr></thead>
         <tbody>${santriRows(santri, h) || '<tr><td colspan="6"><div class="empty">Belum ada santri.</div></td></tr>'}</tbody>
       </table></div>
     </div>`;
@@ -993,15 +1063,22 @@ const Admin = (() => {
           <div style="flex:1">${UI.field('Bulan', `<input type="month" class="clay-input" id="f-bulan" value="${Store.todayStr().slice(0, 7)}">`)}</div>
           <div style="flex:1">${UI.field('Halaqah', `<select class="clay-select" id="f-halaqah"><option value="">Semua</option>${UI.optionsFromList(db.halaqah.map(h => ({ v: h.nama, l: halaqahOptionLabel(h) })), 'v', 'l')}</select>`)}</div>
           <div style="flex:1">${UI.field('Level', `<select class="clay-select" id="f-level"><option value="">Semua</option>${UI.optionsFromList(db.levelTahfidz.map(l => ({ v: l, l })), 'v', 'l')}</select>`)}</div>
-          <div style="flex:1">${UI.field('Kelas', `<select class="clay-select" id="f-kelas"><option value="">Semua</option>${UI.optionsFromList(db.kelas.map(k => ({ v: k, l: k })), 'v', 'l')}</select>`)}</div>
+          <div style="flex:1">${UI.field('Tingkat', `<select class="clay-select" id="f-tingkat"><option value="">Semua</option>${UI.optionsFromList(Store.tingkatOptions().map(t => ({ v: t, l: t })), 'v', 'l')}</select>`)}</div>
+          <div style="flex:1">${UI.field('Kelas', `<select class="clay-select" id="f-kelas"><option value="">Semua</option>${UI.optionsFromList(Store.kelasOptions(Store.tingkatOptions()[0] || '').map(k => ({ v: k, l: 'Kelas ' + k })), 'v', 'l')}</select>`)}</div>
           <div style="flex:1">${UI.field('Status', `<select class="clay-select" id="f-status"><option value="">Semua</option><option>Aktif</option><option>Nonaktif</option></select>`)}</div>
         </div>
       </div>
       <div id="laporan-content"></div>`;
     const apply = () => {
-      const f = { bulan: document.getElementById('f-bulan').value, halaqah: document.getElementById('f-halaqah').value, level: document.getElementById('f-level').value, kelas: document.getElementById('f-kelas').value, status: document.getElementById('f-status').value };
+      const f = { bulan: document.getElementById('f-bulan').value, halaqah: document.getElementById('f-halaqah').value, level: document.getElementById('f-level').value, tingkat: document.getElementById('f-tingkat').value, kelas: document.getElementById('f-kelas').value, status: document.getElementById('f-status').value };
       document.getElementById('laporan-content').innerHTML = Shared.renderLaporan(f);
       Shared.bindLaporanExport();
+    };
+    document.getElementById('f-tingkat').onchange = () => {
+      const tingkat = document.getElementById('f-tingkat').value;
+      const kelasSelect = document.getElementById('f-kelas');
+      kelasSelect.innerHTML = `<option value="">Semua</option>${UI.optionsFromList(Store.kelasOptions(tingkat).map(k => ({ v: k, l: 'Kelas ' + k })), 'v', 'l')}`;
+      apply();
     };
     ['f-bulan', 'f-halaqah', 'f-level', 'f-kelas', 'f-status'].forEach(id => document.getElementById(id).onchange = apply);
     apply();
@@ -1221,6 +1298,7 @@ const Admin = (() => {
     document.getElementById('view-content').innerHTML = `
       <div class="pill-tabs" id="set-tab-bar">
         <button class="pill active" data-set-tab="lembaga">Lembaga</button>
+        <button class="pill" data-set-tab="talim">Ta’lim</button>
         <button class="pill" data-set-tab="notifikasi">Notifikasi</button>
         <button class="pill" data-set-tab="wa">WhatsApp</button>
         <button class="pill" data-set-tab="akun">Akun &amp; Data</button>
@@ -1256,6 +1334,35 @@ const Admin = (() => {
             <span id="s-setoran-label" style="font-size:13px">${s.setoranMulti ? 'Berkali-kali per hari' : 'Sekali sehari'}</span>
           </label>
         </div>
+      </div>
+      </div>
+      <div data-set-panel="talim" style="display:none">
+      <div class="clay-card mb">
+        <div class="section-title">Mata Pelajaran Ta’lim</div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">Tambahkan mapel yang tersedia di Ta’lim. Satu mapel dapat diajar oleh beberapa ustadz.</div>
+        <div class="row">
+          <input class="clay-input" id="talim-mapel-nama" placeholder="Contoh: Fiqih">
+          <button class="clay-btn secondary" id="btn-talim-add-mapel" type="button">+ Tambah Mapel</button>
+        </div>
+        <div class="table-wrap mt"><table class="clay-table">
+          <thead><tr><th>Mapel</th><th>Jumlah Ustadz</th><th>Aksi</th></tr></thead>
+          <tbody id="talim-mapel-list"></tbody>
+        </table></div>
+      </div>
+      <div class="clay-card mb">
+        <div class="section-title">Penugasan Mengajar Ustadz</div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">Pilih ustadz dan mapel, lalu centang semua kelas yang diajar untuk mapel tersebut. Satu ustadz boleh mengajar beberapa mapel, dan satu mapel boleh diajar untuk beberapa kelas sekaligus.</div>
+        <div class="row">
+          <div style="flex:1">${UI.field('Ustadz', `<select class="clay-select" id="talim-ustadz"></select>`)}</div>
+          <div style="flex:1">${UI.field('Mapel', `<select class="clay-select" id="talim-mapel"></select>`)}</div>
+        </div>
+        <div class="field-label">Kelas yang Diajar</div>
+        <div class="clay-card pad-sm" id="talim-kelas-checks" style="margin-top:6px"></div>
+        <div class="row mt"><button class="clay-btn primary" id="btn-talim-save-assignment" type="button">Simpan Penugasan</button></div>
+        <div class="table-wrap mt"><table class="clay-table">
+          <thead><tr><th>Ustadz</th><th>Mapel</th><th>Kelas</th><th>Aksi</th></tr></thead>
+          <tbody id="talim-assignment-list"></tbody>
+        </table></div>
       </div>
       </div>
       <div data-set-panel="notifikasi">
@@ -1400,6 +1507,108 @@ const Admin = (() => {
       if (tab === 'wa') { renderWaLog(); startWaTimer(); } else stopWaTimer();
     }
     document.querySelectorAll('#set-tab-bar [data-set-tab]').forEach(b => b.onclick = () => showTab(b.dataset.setTab));
+
+    const talimClassesByTingkat = () => Store.tingkatOptions().map(tingkat => ({
+      tingkat,
+      items: Store.kelasOptions(tingkat).map(kelas => ({ key: Store.talimClassKey(tingkat, kelas), kelas }))
+    })).filter(group => group.items.length);
+    const renderTalimSettings = (preferred = {}) => {
+      const currentDb = Store.get();
+      const mapel = Store.talimMapel();
+      const ustadz = currentDb.ustadz.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+      const ustadzSelect = document.getElementById('talim-ustadz');
+      const mapelSelect = document.getElementById('talim-mapel');
+      const selectedUstadzId = preferred.ustadzId ?? ustadzSelect?.value ?? ustadz[0]?.id ?? '';
+      const selectedMapelId = preferred.mapelId ?? mapelSelect?.value ?? mapel[0]?.id ?? '';
+      ustadzSelect.innerHTML = `<option value="">Pilih ustadz</option>${UI.optionsFromList(ustadz.map(u => ({ v: u.id, l: u.nama })), 'v', 'l', selectedUstadzId)}`;
+      mapelSelect.innerHTML = `<option value="">Pilih mapel</option>${UI.optionsFromList(mapel.map(item => ({ v: item.id, l: item.nama })), 'v', 'l', selectedMapelId)}`;
+
+      const selectedUstadz = currentDb.ustadz.find(u => u.id === ustadzSelect.value);
+      const assignment = Store.talimAssignmentsForUstadz(selectedUstadz).find(item => item.mapel.id === mapelSelect.value);
+      const assignedKeys = new Set(assignment?.kelasKeys || []);
+      const groups = talimClassesByTingkat();
+      document.getElementById('talim-kelas-checks').innerHTML = groups.length
+        ? groups.map(group => `<div style="margin-bottom:8px">
+            <div class="muted" style="font-size:12px;font-weight:600;margin-bottom:2px">${UI.esc(group.tingkat)}</div>
+            ${group.items.map(item => `<label style="display:inline-flex;align-items:center;gap:6px;margin:2px 14px 2px 0;cursor:pointer"><input type="checkbox" data-talim-kelas value="${UI.esc(item.key)}" ${assignedKeys.has(item.key) ? 'checked' : ''}> Kelas ${UI.esc(item.kelas)}</label>`).join('')}
+          </div>`).join('')
+        : '<span class="muted">Belum ada kelas yang dapat dipilih.</span>';
+
+      const mapelRows = mapel.map(item => {
+        const pengajar = currentDb.ustadz.filter(u => Store.talimAssignmentsForUstadz(u).some(a => a.mapel.id === item.id)).length;
+        return `<tr><td><b>${UI.esc(item.nama)}</b></td><td>${pengajar} ustadz</td><td><button class="clay-btn sm danger" type="button" data-del-talim-mapel="${UI.esc(item.id)}">Hapus</button></td></tr>`;
+      }).join('');
+      document.getElementById('talim-mapel-list').innerHTML = mapelRows || '<tr><td colspan="3"><div class="empty">Belum ada mapel.</div></td></tr>';
+
+      const assignmentRows = ustadz.flatMap(u => Store.talimAssignmentsForUstadz(u).map(item => `<tr>
+        <td>${UI.esc(u.nama)}</td><td>${UI.esc(item.mapel.nama)}</td><td>${UI.esc(item.kelasKeys.map(Store.talimClassLabel).join(', ') || '-')}</td>
+        <td><button class="clay-btn sm danger" type="button" data-remove-talim-ustadz="${UI.esc(u.id)}" data-remove-talim-mapel="${UI.esc(item.mapel.id)}">Hapus</button></td>
+      </tr>`)).join('');
+      document.getElementById('talim-assignment-list').innerHTML = assignmentRows || '<tr><td colspan="4"><div class="empty">Belum ada penugasan Ta’lim.</div></td></tr>';
+
+      ustadzSelect.onchange = () => renderTalimSettings({ ustadzId: ustadzSelect.value, mapelId: mapelSelect.value });
+      mapelSelect.onchange = () => renderTalimSettings({ ustadzId: ustadzSelect.value, mapelId: mapelSelect.value });
+      document.querySelectorAll('[data-del-talim-mapel]').forEach(button => button.onclick = () => {
+        const mapelId = button.dataset.delTalimMapel;
+        const mapelName = Store.findTalimMapel(mapelId)?.nama || 'mapel ini';
+        UI.confirmDialog('Hapus Mapel Ta’lim', `Hapus ${mapelName}? Penugasan mapel ini pada semua ustadz juga akan dihapus.`, () => {
+          const data = Store.get();
+          data.settings.talimMapel = (data.settings.talimMapel || []).filter(item => item.id !== mapelId);
+          data.ustadz.forEach(u => { u.talimMengajar = (u.talimMengajar || []).filter(item => item.mapelId !== mapelId); });
+          Store.save();
+          renderTalimSettings({ ustadzId: ustadzSelect.value });
+          UI.toast('Mapel dan penugasannya dihapus', 'success');
+        });
+      });
+      document.querySelectorAll('[data-remove-talim-ustadz]').forEach(button => button.onclick = () => {
+        const ustadzId = button.dataset.removeTalimUstadz;
+        const mapelId = button.dataset.removeTalimMapel;
+        const teacher = Store.findUstadz(ustadzId);
+        const mapelName = Store.findTalimMapel(mapelId)?.nama || 'mapel ini';
+        UI.confirmDialog('Hapus Penugasan', `Hapus penugasan ${mapelName} dari ${teacher?.nama || 'ustadz ini'}?`, () => {
+          if (teacher) teacher.talimMengajar = (teacher.talimMengajar || []).filter(item => item.mapelId !== mapelId);
+          Store.save();
+          renderTalimSettings({ ustadzId, mapelId });
+          UI.toast('Penugasan dihapus', 'success');
+        });
+      });
+    };
+    document.getElementById('btn-talim-add-mapel').onclick = () => {
+      const input = document.getElementById('talim-mapel-nama');
+      const nama = input.value.trim();
+      if (!nama) { UI.toast('Nama mapel wajib diisi', 'error'); return; }
+      const data = Store.get();
+      data.settings.talimMapel = Array.isArray(data.settings.talimMapel) ? data.settings.talimMapel : [];
+      if (data.settings.talimMapel.some(item => item.nama.toLowerCase() === nama.toLowerCase())) {
+        UI.toast('Mapel sudah ada', 'error'); return;
+      }
+      const newMapel = { id: Store.uid('mapel'), nama };
+      data.settings.talimMapel.push(newMapel);
+      input.value = '';
+      Store.save();
+      renderTalimSettings({ mapelId: newMapel.id });
+      UI.toast('Mapel ditambahkan', 'success');
+    };
+    document.getElementById('btn-talim-save-assignment').onclick = () => {
+      const ustadzId = document.getElementById('talim-ustadz').value;
+      const mapelId = document.getElementById('talim-mapel').value;
+      const kelasKeys = [...document.querySelectorAll('[data-talim-kelas]:checked')].map(input => input.value);
+      const teacher = Store.findUstadz(ustadzId);
+      if (!teacher || !mapelId) { UI.toast('Pilih ustadz dan mapel', 'error'); return; }
+      if (!kelasKeys.length) { UI.toast('Pilih minimal satu kelas', 'error'); return; }
+      const assignments = Array.isArray(teacher.talimMengajar) ? teacher.talimMengajar.slice() : [];
+      const existing = assignments.find(item => item.mapelId === mapelId);
+      if (existing) existing.kelasKeys = kelasKeys;
+      else assignments.push({ mapelId, kelasKeys });
+      teacher.talimMengajar = assignments;
+      Store.save();
+      renderTalimSettings({ ustadzId, mapelId });
+      UI.toast('Penugasan Ta’lim tersimpan', 'success');
+    };
+    renderTalimSettings();
+    document.getElementById('talim-mapel-nama').onkeydown = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-talim-add-mapel').click(); }
+    };
     document.getElementById('btn-ganti-pass-admin').onclick = () => Shared.gantiPassModal();
     showTab('lembaga');
 

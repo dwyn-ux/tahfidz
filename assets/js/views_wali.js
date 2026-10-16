@@ -207,7 +207,7 @@ const Wali = (() => {
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">NIS</span><b>${UI.esc(s.nis)}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">JK</span><b>${UI.esc(s.jk)}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Program Aktif</span><b>${UI.esc(Store.programSummaryForSantri(s))}</b></div>
-          <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Kelas</span><b>${UI.esc(s.kelas)}</b></div>
+          <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Tingkat &amp; Kelas</span><b>${UI.esc(Store.educationLabel(s))}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Halaqah</span><b>${UI.esc(Store.halaqahSummaryForSantri(s))}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Ustadz</span><b>${UI.esc(ustadzNames.join(', ') || '-')}</b></div>` : '<div class="empty">-</div>'}
         </div>

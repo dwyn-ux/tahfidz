@@ -1154,7 +1154,7 @@ const Ustadz = (() => {
         }).join(' ');
         return `<tr>
           <td><b>${UI.esc(s.nama)}</b><div class="muted" style="font-size:12px">${UI.esc(s.nis)}</div></td>
-          <td>${UI.esc(s.kelas)}</td>
+          <td>${UI.esc(Store.educationLabel(s))}</td>
           <td>${badges || '<span class="muted">-</span>'}</td>
           <td>${totalH ? formatHafalan(totalH) : '<span class="muted">-</span>'}</td>
           <td>${avg ? '<b>' + avg + '</b>' : '<span class="muted">-</span>'}</td>
@@ -1219,7 +1219,7 @@ const Ustadz = (() => {
     
     let body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
-      ${UI.field('Kelas', `<input class="clay-input" value="${UI.esc(s.kelas)}" disabled>`)}
+      ${UI.field('Kelas', `<input class="clay-input" value="${UI.esc(Store.educationLabel(s))}" disabled>`)}
       ${UI.field('Halaqah', `<input class="clay-input" value="${UI.esc(programHalaqah ? programHalaqah.nama : '-') }" disabled>`)}
        ${UI.field('Tanggal', `<input class="clay-input" id="f-tgl" type="date" value="${tanggalSetoran}" ${isSusulan ? 'disabled' : ''}>${isSusulan ? '<div class="muted" style="font-size:12px;margin-top:4px">Tanggal dikunci karena ini pembayaran setoran tertinggal.</div>' : ''}`)}`;
     
@@ -1323,7 +1323,7 @@ const Ustadz = (() => {
 
     const modal = UI.openModal({
       title: (isSusulan ? 'Bayar Setoran ' : 'Input ') + level + ' - ' + s.nama,
-      sub: s.kelas + ' · ' + (programHalaqah ? programHalaqah.nama : '-') + (isSusulan ? ' · ' + UI.fmtDate(tanggalSetoran) : ''),
+      sub: Store.educationLabel(s) + ' · ' + (programHalaqah ? programHalaqah.nama : '-') + (isSusulan ? ' · ' + UI.fmtDate(tanggalSetoran) : ''),
       bodyHTML: body,
       actions: level === 'Ziyadah'
         ? [{ label: 'Tutup', cls: 'ghost', onClick: (m, c) => c() }]

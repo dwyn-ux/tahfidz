@@ -59,7 +59,14 @@ try {
     // Instalasi baru langsung memakai tabel per-entitas. Tabel `records`
     // hanya dipertahankan pada instalasi lama sebagai arsip saat migrasi.
     NormalizedStore::activateFreshDatabase();
-    saveSettings(defaultSettings());
+    $seedSettings = defaultSettings();
+    $seedSettings['talimMapel'] = [
+        ['id' => 'mapel_quran', 'nama' => 'Al-Qur\'an & Tahsin'],
+        ['id' => 'mapel_fiqih', 'nama' => 'Fiqih'],
+        ['id' => 'mapel_akhlak', 'nama' => 'Akhlak'],
+        ['id' => 'mapel_hadits', 'nama' => 'Hadits'],
+    ];
+    saveSettings($seedSettings);
 
     $ins = function ($type, $obj) {
         $id = $obj['id'] ?? uid($type);
@@ -68,8 +75,16 @@ try {
         return $id;
     };
 
-    $u1 = ['nama' => 'Ust. Ahmad Fauzi', 'noHp' => '0812000001', 'email' => 'ahmad@tahfidz.id', 'status' => 'Aktif', 'halaqah' => 'Halaqah 1'];
-    $u2 = ['nama' => 'Ustz. Siti Aminah', 'noHp' => '0812000002', 'email' => 'siti@tahfidz.id', 'status' => 'Aktif', 'halaqah' => 'Halaqah 2'];
+    $u1 = ['nama' => 'Ust. Ahmad Fauzi', 'noHp' => '0812000001', 'email' => 'ahmad@tahfidz.id', 'status' => 'Aktif', 'halaqah' => 'Halaqah 1',
+        'talimMengajar' => [
+            ['mapelId' => 'mapel_quran', 'kelasKeys' => ['SD|3', 'SD|4', 'SMP|7']],
+            ['mapelId' => 'mapel_fiqih', 'kelasKeys' => ['SMP|7', 'SMP|8']],
+        ]];
+    $u2 = ['nama' => 'Ustz. Siti Aminah', 'noHp' => '0812000002', 'email' => 'siti@tahfidz.id', 'status' => 'Aktif', 'halaqah' => 'Halaqah 2',
+        'talimMengajar' => [
+            ['mapelId' => 'mapel_quran', 'kelasKeys' => ['TPQ|1', 'TPQ|2', 'SD|3']],
+            ['mapelId' => 'mapel_akhlak', 'kelasKeys' => ['SD|3', 'SD|4']],
+        ]];
     $u1id = $ins('ustadz', $u1);
     $u2id = $ins('ustadz', $u2);
 
@@ -81,8 +96,8 @@ try {
     $w1id = $ins('wali', $w1);
     $w2id = $ins('wali', $w2);
 
-    $s1 = ['nama' => 'Muhammad Rizki', 'nis' => 'S001', 'jk' => 'L', 'tglLahir' => '2012-05-10', 'alamat' => 'Jl. Mawar 1', 'noHp' => '0812333333', 'namaWali' => $w1['nama'], 'noHpWali' => $w1['noHp'], 'status' => 'Aktif', 'level' => 'Ziyadah', 'kelas' => 'SD', 'halaqah' => 'Halaqah 1', 'waliId' => $w1id];
-    $s2 = ['nama' => 'Aisyah Putri', 'nis' => 'S002', 'jk' => 'P', 'tglLahir' => '2013-02-20', 'alamat' => 'Jl. Melati 2', 'noHp' => '0812444444', 'namaWali' => $w2['nama'], 'noHpWali' => $w2['noHp'], 'status' => 'Aktif', 'level' => 'Tahsin', 'kelas' => 'SD', 'halaqah' => 'Halaqah 2', 'waliId' => $w2id];
+    $s1 = ['nama' => 'Muhammad Rizki', 'nis' => 'S001', 'jk' => 'L', 'tglLahir' => '2012-05-10', 'alamat' => 'Jl. Mawar 1', 'noHp' => '0812333333', 'namaWali' => $w1['nama'], 'noHpWali' => $w1['noHp'], 'status' => 'Aktif', 'level' => 'Ziyadah', 'tingkat' => 'SD', 'kelas' => '4', 'halaqah' => 'Halaqah 1', 'waliId' => $w1id];
+    $s2 = ['nama' => 'Aisyah Putri', 'nis' => 'S002', 'jk' => 'P', 'tglLahir' => '2013-02-20', 'alamat' => 'Jl. Melati 2', 'noHp' => '0812444444', 'namaWali' => $w2['nama'], 'noHpWali' => $w2['noHp'], 'status' => 'Aktif', 'level' => 'Tahsin', 'tingkat' => 'SD', 'kelas' => '3', 'halaqah' => 'Halaqah 2', 'waliId' => $w2id];
     $s1id = $ins('santri', $s1);
     $s2id = $ins('santri', $s2);
     $w1['santriId'] = $s1id; $w2['santriId'] = $s2id;

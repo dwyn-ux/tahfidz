@@ -9,6 +9,13 @@ const API_BASE = 'api/index.php';
 const TOKEN_KEY = 'tahfidzku_token_v1';
 
 const Store = (() => {
+  const DEFAULT_TINGKAT = ['TPQ', 'SD', 'SMP', 'SMA'];
+  const DEFAULT_KELAS_PER_TINGKAT = {
+    TPQ: ['1', '2', '3', '4', '5', '6'],
+    SD: ['1', '2', '3', '4', '5', '6'],
+    SMP: ['7', '8', '9'],
+    SMA: ['10', '11', '12']
+  };
   let db = defaultDB();
   let saveChain = Promise.resolve();
   // Salinan data terakhir yang dimuat/disimpan. Ini dipakai agar browser
@@ -25,13 +32,14 @@ const Store = (() => {
         standarPenilaian: 'A (90-100), B (80-89), C (70-79), D (<70)',
         jamBelajar: '07:00 - 09:00', tema: 'Claymorphism',
         defaultPasswordFormat: '12345678', logo: '', setoranMulti: false,
+        tingkat: DEFAULT_TINGKAT.slice(), kelasPerTingkat: Object.assign({}, DEFAULT_KELAS_PER_TINGKAT), talimMapel: [],
         juzOrder: [30,29,28,27,26,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
         notifActive: true, notifMaxPerDay: 3, notifWali: true, notifUstadz: true,
         notifAbsensiWali: true, notifAbsensiPeriode: 'harian',
         waBridgeUrl: '', waBridgeKey: '', waAuto: false
       },
       users: [], santri: [], wali: [], ustadz: [], halaqah: [],
-      kelas: ['TK Al-Qur\'an', 'SD', 'SMP', 'SMA'],
+      tingkat: DEFAULT_TINGKAT.slice(), kelas: [],
       levelTahfidz: ['Tahsin', 'Ziyadah', 'Mutqin'],
       kehadiran: [], absensiUstadz: [], jurnalTalim: [], tahsin: [], ziyadahBacaan: [], ziyadahHafalan: [], mutqin: [], catatan: [],
       tahunAjaran: ['2024/2025', '2025/2026', '2026/2027'], semester: ['Ganjil', 'Genap'],
@@ -110,11 +118,15 @@ const Store = (() => {
     try {
       const data = await api('bootstrap');
       db = Object.assign(defaultDB(), data.db);
+      // Pengaturan dari server bisa berasal dari versi lama yang belum memiliki
+      // daftar tingkat/kelas atau daftar mapel Ta’lim. Lengkapi agar tab
+      // Pengaturan dan filter laporan selalu punya pilihan yang valid.
+      normalizeSettings();
       // Data lama hanya memiliki satu `level` dan `halaqah`. Normalisasi ini
       // menjadikannya satu program aktif, tanpa mengubah arti data lamanya.
       // Data baru dapat menyimpan beberapa program sekaligus, misalnya Tahsin
       // dan Ziyadah, masing-masing dengan halaqah yang berbeda.
-      db.santri = (db.santri || []).map(normalizeSantriPrograms);
+      db.santri = (db.santri || []).map(santri => normalizeSantriEducation(normalizeSantriPrograms(santri)));
       // Data absensi dari versi awal belum memiliki sesi. Anggap sebagai
       // Subuh supaya tetap muncul di rekap, lalu semua input baru memakai
       // sesi yang eksplisit.
@@ -443,6 +455,104 @@ const Store = (() => {
       || null;
   }
 
+  function normalizeSettings() {
+    const settings = db.settings || (db.settings = {});
+    if (!Array.isArray(settings.tingkat) || !settings.tingkat.filter(Boolean).length) {
+      settings.tingkat = DEFAULT_TINGKAT.slice();
+    } else {
+      settings.tingkat = settings.tingkat.filter(Boolean);
+    }
+    if (!settings.kelasPerTingkat || typeof settings.kelasPerTingkat !== 'object' || Array.isArray(settings.kelasPerTingkat)) {
+      settings.kelasPerTingkat = Object.assign({}, DEFAULT_KELAS_PER_TINGKAT);
+    } else {
+      settings.tingkat.forEach(name => {
+        const values = settings.kelasPerTingkat[name];
+        settings.kelasPerTingkat[name] = (Array.isArray(values) && values.length ? values : (DEFAULT_KELAS_PER_TINGKAT[name] || []))
+          .map(String).filter(Boolean);
+      });
+    }
+    if (!Array.isArray(settings.talimMapel)) settings.talimMapel = [];
+    settings.talimMapel = settings.talimMapel.filter(item => item && item.id && item.nama)
+      .map(item => ({ id: item.id, nama: String(item.nama) }));
+    return settings;
+  }
+
+  function educationSettings() {
+    const settings = db.settings || {};
+    const tingkat = Array.isArray(settings.tingkat) && settings.tingkat.length
+      ? settings.tingkat.filter(Boolean)
+      : DEFAULT_TINGKAT.slice();
+    const source = settings.kelasPerTingkat && typeof settings.kelasPerTingkat === 'object'
+      ? settings.kelasPerTingkat : DEFAULT_KELAS_PER_TINGKAT;
+    const kelasPerTingkat = {};
+    tingkat.forEach(name => {
+      const values = Array.isArray(source[name]) && source[name].length ? source[name] : (DEFAULT_KELAS_PER_TINGKAT[name] || []);
+      kelasPerTingkat[name] = values.map(String).filter(Boolean);
+    });
+    return { tingkat, kelasPerTingkat };
+  }
+
+  function tingkatOptions() { return educationSettings().tingkat; }
+  function kelasOptions(tingkat) { return educationSettings().kelasPerTingkat[tingkat] || []; }
+
+  function tingkatForSantri(santri) {
+    if (!santri) return '';
+    const available = tingkatOptions();
+    if (available.includes(santri.tingkat)) return santri.tingkat;
+    const legacy = String(santri.kelas || '').trim();
+    if (legacy === 'TK Al-Qur\'an' || legacy === 'TK Alquran' || legacy === 'TKQ') return 'TPQ';
+    return available.includes(legacy) ? legacy : '';
+  }
+
+  function kelasForSantri(santri) {
+    if (!santri) return '';
+    const stored = String(santri.kelas || '').trim();
+    const legacyTingkat = tingkatOptions().includes(stored) || ['TK Al-Qur\'an', 'TK Alquran', 'TKQ'].includes(stored);
+    return legacyTingkat ? '' : stored;
+  }
+
+  function normalizeSantriEducation(santri) {
+    if (!santri) return santri;
+    const tingkat = tingkatForSantri(santri);
+    if (tingkat) santri.tingkat = tingkat;
+    santri.kelas = kelasForSantri(santri);
+    return santri;
+  }
+
+  function kelasLabel(tingkat, kelas) {
+    return kelas ? `${tingkat || '-'} · Kelas ${kelas}` : `${tingkat || '-'} · Kelas belum diisi`;
+  }
+
+  function educationLabel(santri) {
+    return kelasLabel(tingkatForSantri(santri), kelasForSantri(santri));
+  }
+
+  function talimMapel() {
+    return Array.isArray(db.settings?.talimMapel) ? db.settings.talimMapel.filter(mapel => mapel && mapel.id && mapel.nama) : [];
+  }
+
+  function findTalimMapel(id) { return talimMapel().find(mapel => mapel.id === id) || null; }
+  function talimClassKey(tingkat, kelas) { return `${tingkat || ''}|${kelas || ''}`; }
+
+  function talimClassFromKey(key) {
+    const [tingkat, kelas] = String(key || '').split('|');
+    return { tingkat: tingkat || '', kelas: kelas || '' };
+  }
+
+  function talimClassLabel(key) {
+    const item = talimClassFromKey(key);
+    return kelasLabel(item.tingkat, item.kelas);
+  }
+
+  function talimAssignmentsForUstadz(ustadz) {
+    const assignments = Array.isArray(ustadz?.talimMengajar) ? ustadz.talimMengajar : [];
+    return assignments.map(assignment => {
+      const mapel = findTalimMapel(assignment.mapelId);
+      const kelasKeys = Array.isArray(assignment.kelasKeys) ? assignment.kelasKeys.filter(Boolean) : [];
+      return mapel ? { mapel, kelasKeys } : null;
+    }).filter(Boolean);
+  }
+
   function search(q) {
     const s = q.toLowerCase().trim();
     if (!s || s.length < 1) return { santri: [], wali: [], ustadz: [], halaqah: [], users: [], surah: [] };
@@ -637,7 +747,9 @@ const Store = (() => {
     load, save, get, reset, uid, log, nowISO, todayStr,
     setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout, changePassword,
     recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahById, findHalaqahByName, ustadzIdsForHalaqah, ustadzNamesForHalaqah, halaqahHasUstadz, findHalaqahForUstadz,
-    activeProgramsForSantri, halaqahForSantriProgram, halaqahForSantri, santriHasProgram, santriHasHalaqah, programsForSantriHalaqah, configureSantriPrograms, programSummaryForSantri, halaqahSummaryForSantri, search,
+    activeProgramsForSantri, halaqahForSantriProgram, halaqahForSantri, santriHasProgram, santriHasHalaqah, programsForSantriHalaqah, configureSantriPrograms, programSummaryForSantri, halaqahSummaryForSantri,
+    tingkatOptions, kelasOptions, tingkatForSantri, kelasForSantri, normalizeSantriEducation, kelasLabel, educationLabel,
+    talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, search,
     waSend, waLog, waReady, waAutoEnabled, waSendWali,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,
     absensiUstadzOf, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,

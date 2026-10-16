@@ -424,7 +424,8 @@ const Shared = (() => {
     let santri = db.santri.slice();
     if (f.halaqah) santri = santri.filter(s => Store.santriHasHalaqah(s, f.halaqah));
     if (f.level) santri = santri.filter(s => Store.santriHasProgram(s, f.level));
-    if (f.kelas) santri = santri.filter(s => s.kelas === f.kelas);
+    if (f.tingkat) santri = santri.filter(s => Store.tingkatForSantri(s) === f.tingkat);
+    if (f.kelas) santri = santri.filter(s => Store.kelasForSantri(s) === f.kelas);
     if (f.status) santri = santri.filter(s => s.status === f.status);
     const bulan = f.bulan || Store.todayStr().slice(0, 7);
     return santri.map((s, i) => {
@@ -492,6 +493,124 @@ const Shared = (() => {
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+  }
+
+  function xlsxEscape(value) {
+    return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+  }
+
+  function xlsxColumnName(index) {
+    let value = index + 1;
+    let result = '';
+    while (value > 0) {
+      const remainder = (value - 1) % 26;
+      result = String.fromCharCode(65 + remainder) + result;
+      value = Math.floor((value - 1) / 26);
+    }
+    return result;
+  }
+
+  function xlsxBytes(value) { return new TextEncoder().encode(value); }
+  function xlsxU16(value) { return new Uint8Array([value & 255, (value >>> 8) & 255]); }
+  function xlsxU32(value) { return new Uint8Array([value & 255, (value >>> 8) & 255, (value >>> 16) & 255, (value >>> 24) & 255]); }
+
+  function xlsxJoin(parts) {
+    const size = parts.reduce((total, part) => total + part.length, 0);
+    const output = new Uint8Array(size);
+    let offset = 0;
+    parts.forEach(part => { output.set(part, offset); offset += part.length; });
+    return output;
+  }
+
+  const XLSX_CRC_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let value = i;
+      for (let bit = 0; bit < 8; bit++) value = (value >>> 1) ^ ((value & 1) ? 0xEDB88320 : 0);
+      table[i] = value >>> 0;
+    }
+    return table;
+  })();
+
+  function xlsxCrc32(bytes) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) crc = (crc >>> 8) ^ XLSX_CRC_TABLE[(crc ^ bytes[i]) & 0xFF];
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+
+  function xlsxZip(entries) {
+    const local = [];
+    const central = [];
+    let offset = 0;
+    entries.forEach(entry => {
+      const name = xlsxBytes(entry.name);
+      const data = xlsxBytes(entry.data);
+      const crc = xlsxCrc32(data);
+      const header = xlsxJoin([
+        xlsxU32(0x04034B50), xlsxU16(20), xlsxU16(0x0800), xlsxU16(0), xlsxU16(0), xlsxU16(0),
+        xlsxU32(crc), xlsxU32(data.length), xlsxU32(data.length), xlsxU16(name.length), xlsxU16(0), name, data
+      ]);
+      local.push(header);
+      central.push(xlsxJoin([
+        xlsxU32(0x02014B50), xlsxU16(20), xlsxU16(20), xlsxU16(0x0800), xlsxU16(0), xlsxU16(0), xlsxU16(0),
+        xlsxU32(crc), xlsxU32(data.length), xlsxU32(data.length), xlsxU16(name.length), xlsxU16(0), xlsxU16(0),
+        xlsxU16(0), xlsxU16(0), xlsxU32(0), xlsxU32(offset), name
+      ]));
+      offset += header.length;
+    });
+    const centralBytes = xlsxJoin(central);
+    return xlsxJoin([...local, centralBytes, xlsxU32(0x06054B50), xlsxU16(0), xlsxU16(0), xlsxU16(entries.length), xlsxU16(entries.length), xlsxU32(centralBytes.length), xlsxU32(offset), xlsxU16(0)]);
+  }
+
+  function xlsxSheetXml(sheet) {
+    const columns = sheet.columns || [];
+    const values = [columns.map(column => column.label), ...(sheet.rows || []).map(row => columns.map(column => typeof column.value === 'function' ? column.value(row) : row[column.key]))];
+    const rows = values.map((row, rowIndex) => `<row r="${rowIndex + 1}">${row.map((value, columnIndex) => {
+      const ref = xlsxColumnName(columnIndex) + (rowIndex + 1);
+      const style = rowIndex === 0 ? ' s="1"' : '';
+      if (typeof value === 'number' && Number.isFinite(value)) return `<c r="${ref}"${style}><v>${value}</v></c>`;
+      return `<c r="${ref}" t="inlineStr"${style}><is><t xml:space="preserve">${xlsxEscape(value)}</t></is></c>`;
+    }).join('')}</row>`).join('');
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rows}</sheetData></worksheet>`;
+  }
+
+  function xlsxSheetName(name, used) {
+    const base = String(name || 'Data').replace(/[\\/*?:\[\]]/g, ' ').trim().slice(0, 31) || 'Data';
+    let candidate = base;
+    let suffix = 2;
+    while (used.has(candidate)) {
+      candidate = `${base.slice(0, 28)} ${suffix++}`;
+    }
+    used.add(candidate);
+    return candidate;
+  }
+
+  function downloadXlsx(filename, sheets) {
+    const usedNames = new Set();
+    const normalizedSheets = (sheets || []).filter(sheet => sheet && Array.isArray(sheet.columns)).map(sheet => Object.assign({}, sheet, { name: xlsxSheetName(sheet.name, usedNames) }));
+    if (!normalizedSheets.length) { UI.toast('Tidak ada data untuk diunduh', 'error'); return null; }
+    const sheetEntries = normalizedSheets.map((sheet, index) => ({ name: `xl/worksheets/sheet${index + 1}.xml`, data: xlsxSheetXml(sheet) }));
+    const workbookSheets = normalizedSheets.map((sheet, index) => `<sheet name="${xlsxEscape(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join('');
+    const workbookRels = normalizedSheets.map((sheet, index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`).join('');
+    const overrides = normalizedSheets.map((sheet, index) => `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('');
+    const entries = [
+      { name: '[Content_Types].xml', data: `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${overrides}</Types>` },
+      { name: '_rels/.rels', data: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
+      { name: 'xl/workbook.xml', data: `<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${workbookSheets}</sheets></workbook>` },
+      { name: 'xl/_rels/workbook.xml.rels', data: `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${workbookRels}<Relationship Id="rId${normalizedSheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+      { name: 'xl/styles.xml', data: `<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>` },
+      ...sheetEntries
+    ];
+    const blob = new Blob([xlsxZip(entries)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename.toLowerCase().endsWith('.xlsx') ? filename : filename + '.xlsx';
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+    setTimeout(() => { anchor.remove(); URL.revokeObjectURL(url); }, 1000);
+    return blob;
   }
 
   /* Export laporan sebagai file Excel (.xls) — 1 baris per santri, siap jadi laporan bulanan */
@@ -927,5 +1046,5 @@ const Shared = (() => {
     </div>`;
   }
 
-  return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadExcel, downloadTemplateExcel, bulanLabel, mondayOf, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, ICONS, hafalanMapHTML };
+  return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadExcel, downloadXlsx, downloadTemplateExcel, bulanLabel, mondayOf, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, ICONS, hafalanMapHTML };
 })();
