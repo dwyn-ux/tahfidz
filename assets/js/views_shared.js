@@ -4,6 +4,10 @@
    ============================================================ */
 const Shared = (() => {
 
+  // Urutan waktu sesi absensi. dedupeKehadiran mengurutkan berdasarkan kunci,
+  // jadi daftar sesi per tanggal perlu disusun ulang agar tampil kronologis.
+  const URUTAN_SESI = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
+
   function shell(role, navItems, contentHTML) {
     const session = Store.getSession();
     const db = Store.get();
@@ -289,9 +293,13 @@ const Shared = (() => {
       const ziyadahBacaan = db.ziyadahBacaan.filter(z => z.santriId === st.id);
       const mutqin = db.mutqin.filter(m => m.santriId === st.id);
       
+      // Satu tanggal bisa punya beberapa sesi (Subuh, Ashar, Maghrib, ...).
+      // Semua sesi dikumpulkan, bukan hanya satu, supaya tidak ada sesi yang
+      // hilang begitu saja karena ditimpa.
       kehadiran.filter(filterFunc).forEach(k => {
         if (!periodeKehadiran[k.tanggal]) periodeKehadiran[k.tanggal] = {};
-        periodeKehadiran[k.tanggal][st.id] = k;
+        if (!periodeKehadiran[k.tanggal][st.id]) periodeKehadiran[k.tanggal][st.id] = [];
+        periodeKehadiran[k.tanggal][st.id].push(k);
       });
       tahsin.filter(filterFunc).forEach(t => {
         if (!periodeSetoran[t.tanggal]) periodeSetoran[t.tanggal] = {};
@@ -328,13 +336,20 @@ const Shared = (() => {
             ${tanggalList.map(tanggal => {
               let cols = `<td class="center" style="font-weight:600;white-space:nowrap">${UI.fmtDate(new Date(tanggal))}</td>`;
               santri.forEach(st => {
-                const k = periodeKehadiran[tanggal] ? periodeKehadiran[tanggal][st.id] : null;
+                const list = periodeKehadiran[tanggal] ? periodeKehadiran[tanggal][st.id] : null;
                 const s = periodeSetoran[tanggal] ? periodeSetoran[tanggal][st.id] : null;
-                let status = k ? k.status : '-';
-                let badge = k ? (k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : 'danger') : 'gray';
-                let info = s ? (s.tipe || '') : '-';
+                const info = s ? (s.tipe || '') : '-';
+                const badgeClass = status => status === 'Hadir' ? 'green' : status === 'Izin' ? 'warn' : status === 'Sakit' ? 'blue' : 'danger';
+                const listUrut = list ? list.slice().sort((x, y) => {
+                  const dx = URUTAN_SESI.indexOf(x.sesi || 'Subuh');
+                  const dy = URUTAN_SESI.indexOf(y.sesi || 'Subuh');
+                  return (dx < 0 ? 99 : dx) - (dy < 0 ? 99 : dy);
+                }) : null;
+                const absen = !listUrut || !listUrut.length
+                  ? '<span class="badge gray" style="font-size:10px;padding:1px 5px">-</span>'
+                  : listUrut.map(k => `<div style="line-height:1.35"><span class="muted" style="font-size:9px">${UI.esc(k.sesi || 'Subuh')}</span> <span class="badge ${badgeClass(k.status)}" style="font-size:10px;padding:1px 5px">${UI.esc(k.status)}</span></div>`).join('');
                 cols += `<td style="padding:4px 6px">
-                  <span class="badge ${badge}" style="font-size:10px;padding:1px 5px">${UI.esc(status)}</span>
+                  ${absen}
                   ${info !== '-' ? `<div class="muted" style="font-size:10px;line-height:1.2">${info}</div>` : ''}
                 </td>`;
               });
@@ -405,7 +420,7 @@ const Shared = (() => {
       <div class="section-title"> Laporan Santri — ${UI.esc(bulanLabel(bulan))}</div>
       <div class="table-wrap">
         <table class="clay-table" id="laporan-table">
-          <thead><tr><th class="center">No</th><th>Santri</th><th>NIS</th><th>Halaqah</th><th>Level</th><th class="center">JK</th><th class="center">Total Hafalan</th><th class="center">Juz</th><th class="center">Rata² Nilai</th><th class="center">S/A/M/I/T</th><th class="center">Kehadiran (${UI.esc(bulanLabel(bulan))})</th><th>Status</th></tr></thead>
+          <thead><tr><th class="center">No</th><th>Santri</th><th>NIS</th><th>Halaqah</th><th>Level</th><th class="center">JK</th><th class="center">Total Hafalan</th><th class="center">Juz</th><th class="center">Rata² Nilai</th><th class="center">Subuh / Ashar / Maghrib / Isya / Ta'lim</th><th class="center">Kehadiran (${UI.esc(bulanLabel(bulan))})</th><th>Status</th></tr></thead>
           <tbody>${body || `<tr><td colspan="12"><div class="empty">Tidak ada data.</div></td></tr>`}</tbody>
         </table>
       </div>
