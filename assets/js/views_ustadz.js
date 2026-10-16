@@ -350,9 +350,9 @@ const Ustadz = (() => {
         editing = null;
         pendingStatus = {};
         renderAbsensi();
-        // Sesi lain punya catatan ustadz sendiri, jadi dialog absen ustadz
-        // ditanyakan lagi untuk sesi yang baru dipilih.
-        openDialog();
+        // Sesi lain punya catatan ustadz sendiri, jadi sesi yang belum absen
+        // tetap meminta absen.
+        mintaAbsenUstadz();
       });
       halaqahSelect.onchange = () => { halaqahFilter = halaqahSelect.value; renderAbsensi(); };
       const applySearch = () => {
@@ -433,16 +433,19 @@ const Ustadz = (() => {
       };
     }
 
-    // Popup absensi ustadz muncul lebih dulu setiap kali menu absensi dibuka.
-    // Kalau status untuk sesi ini sudah ada, dialog tetap muncul supaya
-    // ustadz bisa mengoreksinya tanpa membuka halaman lain.
+    // Popup hanya muncul kalau sesi ini belum absen. Kalau sudah absen,
+    // statusnya tampil di banner hijau dan bisa dikoreksi lewat tombolnya.
     function openDialog() {
       if (!selfUstadz) return;
       dialogAbsenUstadz(selfUstadz, sesiAktif, t, () => renderAbsensi());
     }
+    function mintaAbsenUstadz() {
+      if (selfRecord()) return;
+      openDialog();
+    }
 
     renderAbsensi();
-    openDialog();
+    mintaAbsenUstadz();
   }
 
   /* ---------------- Ta’lim Malam ---------------- */
