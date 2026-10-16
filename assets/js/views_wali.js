@@ -225,7 +225,7 @@ const Wali = (() => {
       </div>`;
 
     document.getElementById('btn-edit-profil').onclick = () => editProfilModal(w);
-    document.getElementById('btn-ganti-pass').onclick = () => gantiPassModal();
+    document.getElementById('btn-ganti-pass').onclick = () => Shared.gantiPassModal();
   }
 
   function editProfilModal(w) {
@@ -247,29 +247,6 @@ const Wali = (() => {
             wali.noHp = noHp;
           }
           await Store.save(); Store.log('Edit profil wali'); c(); UI.toast('Profil tersimpan', 'success'); profil();
-        } }
-      ]
-    });
-  }
-
-  function gantiPassModal() {
-    const body = `
-      ${UI.field('Password Lama', `<input class="clay-input" id="p-old" type="password">`)}
-      ${UI.field('Password Baru', `<input class="clay-input" id="p-new" type="password">`)}
-      ${UI.field('Ulangi Password Baru', `<input class="clay-input" id="p-new2" type="password">`)}`;
-    UI.openModal({
-      title: 'Ganti Password', bodyHTML: body,
-      actions: [
-        { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
-        { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
-          const old = m.querySelector('#p-old').value;
-          const nw = m.querySelector('#p-new').value;
-          const nw2 = m.querySelector('#p-new2').value;
-          if (!old || !nw) { UI.toast('Isi password lama & baru', 'error'); return; }
-          if (nw !== nw2) { UI.toast('Password baru tidak sama', 'error'); return; }
-          const res = await Store.changePassword(old, nw);
-          if (!res.ok) { UI.toast(res.msg, 'error'); return; }
-          await Store.save(); c(); UI.toast('Password berhasil diganti', 'success');
         } }
       ]
     });

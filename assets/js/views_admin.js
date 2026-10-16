@@ -1211,7 +1211,16 @@ const Admin = (() => {
     Shared.shell('admin', nav('admin_settings'), '');
     Shared.setHeader('Setting Umum', 'Konfigurasi lembaga');
     const db = Store.get(); const s = db.settings;
+    const _sesi = Store.getSession() || {};
+    const _akun = db.users.find(u => u.id === _sesi.userId) || { username: '-' };
     document.getElementById('view-content').innerHTML = `
+      <div class="pill-tabs" id="set-tab-bar">
+        <button class="pill active" data-set-tab="lembaga">Lembaga</button>
+        <button class="pill" data-set-tab="notifikasi">Notifikasi</button>
+        <button class="pill" data-set-tab="wa">WhatsApp</button>
+        <button class="pill" data-set-tab="akun">Akun &amp; Data</button>
+      </div>
+      <div data-set-panel="lembaga">
       <div class="clay-card mb">
         <div class="section-title">Informasi Lembaga</div>
         <div class="row">
@@ -1243,6 +1252,8 @@ const Admin = (() => {
           </label>
         </div>
       </div>
+      </div>
+      <div data-set-panel="notifikasi">
       <div class="clay-card mb">
         <div class="section-title"> Pengaturan Notifikasi</div>
         <div class="row">
@@ -1278,6 +1289,8 @@ const Admin = (() => {
         </div>
         <div class="muted" style="font-size:12px">Satu rekap diperbarui saat absensi dikoreksi, sehingga wali tidak menerima notifikasi ganda.</div>
       </div>
+      </div>
+      <div data-set-panel="wa">
       <div class="clay-card mb">
         <div class="section-title"> WhatsApp Otomatis (ke Wali)</div>
         <div class="muted" style="font-size:12px;margin-bottom:10px">
@@ -1311,11 +1324,32 @@ const Admin = (() => {
         </div>
         <div id="wa-log" style="font-size:12px;max-height:280px;overflow:auto"></div>
       </div>
+      </div>
+      <div data-set-panel="akun" style="display:none">
+      <div class="clay-card mb">
+        <div class="section-title">Akun Admin</div>
+        <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Username</span><b>${UI.esc(_akun.username)}</b></div>
+        <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Peran</span><b>Admin</b></div>
+        <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Password</span><b>••••••••</b></div>
+        <div class="row mt">
+          <button class="clay-btn secondary" id="btn-ganti-pass-admin">Ganti Password Admin</button>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:8px">Tombol yang sama juga ada di kotak user pada sidebar.</div>
+      </div>
       <div class="clay-card">
-        <div class="row">
-          <button class="clay-btn primary" id="btn-save"> Simpan</button>
-          <button class="clay-btn ghost" id="btn-backup"> Backup Database</button>
-          <button class="clay-btn danger" id="btn-reset">Reset Data Demo</button>
+        <div class="row" style="align-items:center">
+          <div class="section-title" style="margin:0">Data</div>
+          <div class="row" style="margin-left:auto">
+            <button class="clay-btn ghost" id="btn-backup"> Backup Database</button>
+            <button class="clay-btn danger" id="btn-reset">Reset Data Demo</button>
+          </div>
+        </div>
+      </div>
+      </div>
+      <div class="clay-card" style="margin-top:16px">
+        <div class="row" style="align-items:center">
+          <span class="muted" style="font-size:13px">Perubahan pada tab mana pun langsung ikut disimpan saat tombol ditekan.</span>
+          <button class="clay-btn primary" id="btn-save" style="margin-left:auto">Simpan Pengaturan</button>
         </div>
       </div>`;
     document.getElementById('s-setoran-multi').onclick = function() {
@@ -1337,6 +1371,32 @@ const Admin = (() => {
         else if (id === 's-wa-auto') label.textContent = on ? 'WhatsApp Otomatis: Aktif' : 'WhatsApp Otomatis: Nonaktif';
       };
     });
+
+    /* Tab: semua panel tetap berada di DOM supaya nilai yang belum disimpan
+       tidak hilang saat berpindah tab, dan satu tombol Simpan tetap bisa
+       membaca seluruh field. */
+    let waTimer = null;
+    function stopWaTimer() {
+      if (!waTimer) return;
+      clearInterval(waTimer);
+      waTimer = null;
+    }
+    function startWaTimer() {
+      if (waTimer) return;
+      waTimer = setInterval(() => {
+        if (!document.getElementById('wa-log')) { stopWaTimer(); return; }
+        renderWaLog();
+      }, 5000);
+    }
+    function showTab(tab) {
+      document.querySelectorAll('#set-tab-bar [data-set-tab]').forEach(b => b.classList.toggle('active', b.dataset.setTab === tab));
+      document.querySelectorAll('[data-set-panel]').forEach(p => { p.style.display = p.dataset.setPanel === tab ? '' : 'none'; });
+      // Log WhatsApp hanya perlu berjalan saat tabnya sedang dilihat.
+      if (tab === 'wa') { renderWaLog(); startWaTimer(); } else stopWaTimer();
+    }
+    document.querySelectorAll('#set-tab-bar [data-set-tab]').forEach(b => b.onclick = () => showTab(b.dataset.setTab));
+    document.getElementById('btn-ganti-pass-admin').onclick = () => Shared.gantiPassModal();
+    showTab('lembaga');
 
     document.getElementById('s-logo-upload').onchange = function(e) {
       const file = e.target.files[0];
@@ -1453,11 +1513,6 @@ const Admin = (() => {
           detail + msg + '</div>';
       }).join('');
     }
-    renderWaLog();
-    const waLogTimer = setInterval(() => {
-      if (!document.getElementById('wa-log')) { clearInterval(waLogTimer); return; }
-      renderWaLog();
-    }, 5000);
     const waLogBtn = document.getElementById('btn-wa-log-refresh');
     if (waLogBtn) waLogBtn.onclick = renderWaLog;
   }

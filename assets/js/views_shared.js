@@ -27,7 +27,8 @@ const Shared = (() => {
           <div class="user-box">
             <b>${UI.esc(userName)}</b>
             <span class="muted">${role.toUpperCase()}</span>
-            <button class="clay-btn ghost sm" id="btn-logout" style="width:100%;margin-top:10px;justify-content:center">Keluar</button>
+            <button class="clay-btn ghost sm" id="btn-ganti-pass" style="width:100%;margin-top:8px;justify-content:center">Ganti Password</button>
+            <button class="clay-btn ghost sm" id="btn-logout" style="width:100%;margin-top:6px;justify-content:center">Keluar</button>
           </div>
         </aside>
         <main class="main">
@@ -47,6 +48,10 @@ const Shared = (() => {
     document.getElementById('btn-logout').onclick = () => {
       Store.logout(); UI.toast('Berhasil keluar', 'info'); Auth.renderLogin();
     };
+    // Ganti password tersedia untuk semua role lewat kotak user ini, supaya
+    // tidak harus masuk halaman Profil untuk mengubahnya.
+    const gantiPassBtn = document.getElementById('btn-ganti-pass');
+    if (gantiPassBtn) gantiPassBtn.onclick = () => gantiPassModal();
     const menuToggle = document.getElementById('menu-toggle');
     const sidebar = document.getElementById('sidebar');
     const scrim = document.getElementById('scrim');
@@ -80,6 +85,40 @@ const Shared = (() => {
   function setActions(html) {
     const a = document.getElementById('topbar-actions');
     if (a) a.innerHTML = html;
+  }
+
+  /* Ganti password sendiri. Dipakai semua role lewat tombol di kotak user
+     sidebar, dan oleh halaman Profil wali. Syarat panjang minimal mengikuti
+     aturan server (6 karakter) supaya pesan error dari server tidak pernah
+     muncul setelah lolos validasi di sini. */
+  function gantiPassModal() {
+    const body = `
+      ${UI.field('Password Lama', `<input class="clay-input" id="p-old" type="password" autocomplete="current-password">`)}
+      ${UI.field('Password Baru', `<input class="clay-input" id="p-new" type="password" autocomplete="new-password">`)}
+      ${UI.field('Ulangi Password Baru', `<input class="clay-input" id="p-new2" type="password" autocomplete="new-password">`)}
+      <div class="muted" style="font-size:12px">Password baru minimal 6 karakter.</div>`;
+    UI.openModal({
+      title: 'Ganti Password', bodyHTML: body,
+      actions: [
+        { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
+        {
+          label: 'Simpan', cls: 'primary',
+          onClick: async (m, c) => {
+            const old = m.querySelector('#p-old').value;
+            const nw = m.querySelector('#p-new').value;
+            const nw2 = m.querySelector('#p-new2').value;
+            if (!old || !nw) { UI.toast('Isi password lama & baru', 'error'); return; }
+            if (nw !== nw2) { UI.toast('Password baru tidak sama', 'error'); return; }
+            if (nw.length < 6) { UI.toast('Password baru minimal 6 karakter', 'error'); return; }
+            if (nw === old) { UI.toast('Password baru harus berbeda dari password lama', 'error'); return; }
+            const res = await Store.changePassword(old, nw);
+            if (!res.ok) { UI.toast(res.msg, 'error'); return; }
+            c();
+            UI.toast('Password berhasil diganti', 'success');
+          }
+        }
+      ]
+    });
   }
 
   /* Icons */
@@ -620,5 +659,5 @@ const Shared = (() => {
     </div>`;
   }
 
-  return { shell, setHeader, setActions, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadExcel, downloadTemplateExcel, bulanLabel, mondayOf, renderRekapSetoranMingguan, bindRekapSetoranBayar, renderNotifikasi, ICONS, hafalanMapHTML };
+  return { shell, setHeader, setActions, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadExcel, downloadTemplateExcel, bulanLabel, mondayOf, renderRekapSetoranMingguan, bindRekapSetoranBayar, renderNotifikasi, ICONS, hafalanMapHTML };
 })();
