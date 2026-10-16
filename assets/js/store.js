@@ -88,7 +88,12 @@ const Store = (() => {
       return { ok: false, msg: e.message || 'Login gagal.' };
     }
   }
-  function logout() { clearSession(); }
+  function logout() {
+    clearSession();
+    // Hilangkan hash menu dari sesi sebelumnya agar akun berikutnya tidak
+    // mewarisi tautan seperti #admin_rekap_setoran saat login.
+    window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
 
   async function changePassword(oldPass, newPass) {
     try {

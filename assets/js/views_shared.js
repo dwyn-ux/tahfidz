@@ -604,6 +604,7 @@ const Shared = (() => {
   function renderRekapSetoranMingguan(filters) {
     const recap = weeklyDepositGroups(filters);
     const allowMakeup = !!(filters && filters.allowMakeup);
+    const allowJpgDownload = !!(filters && filters.allowJpgDownload);
     const weekEnd = recap.days[recap.days.length - 1].tanggal;
     const groups = recap.groups.map(group => {
       const body = group.rows.map((row, index) => {
@@ -631,7 +632,10 @@ const Shared = (() => {
       return `<div class="clay-card mb">
         <div class="row" style="justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px">
           <div><div class="section-title" style="margin:0">${UI.esc(group.h.nama)}</div><div class="muted" style="font-size:12px">Ustadz: ${UI.esc(Store.ustadzNamesForHalaqah(group.h).join(', ') || 'Belum ditetapkan')} · ${group.rows.length} santri aktif</div></div>
-          <span class="badge blue">${UI.esc(group.h.level || '-')}</span>
+          <div class="row" style="gap:8px;align-items:center">
+            ${allowJpgDownload ? `<button class="clay-btn sm secondary" type="button" data-download-rekap-jpg data-halaqah-id="${UI.esc(group.h.id)}">⬇ Unduh JPG</button>` : ''}
+            <span class="badge blue">${UI.esc(group.h.level || '-')}</span>
+          </div>
         </div>
         <div class="table-wrap"><table class="clay-table">
           <thead><tr><th class="center">No</th><th>Santri</th><th>Level</th>${recap.days.map(day => `<th class="center">${day.label}<br><span style="font-weight:400;font-size:11px">${day.tanggal.slice(8)}</span></th>`).join('')}<th class="center">Belum</th></tr></thead>
@@ -655,6 +659,211 @@ const Shared = (() => {
     });
   }
 
+  function safeFilename(value) {
+    return (value || 'halaqah')
+      .replace(/[\\/:*?"<>|]/g, '')
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '') || 'halaqah';
+  }
+
+  function canvasRoundedRect(ctx, x, y, width, height, radius) {
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + width, y, x + width, y + height, r);
+    ctx.arcTo(x + width, y + height, x, y + height, r);
+    ctx.arcTo(x, y + height, x, y, r);
+    ctx.arcTo(x, y, x + width, y, r);
+    ctx.closePath();
+  }
+
+  function canvasText(ctx, value, x, y, maxWidth) {
+    const text = String(value || '-');
+    if (ctx.measureText(text).width <= maxWidth) {
+      ctx.fillText(text, x, y);
+      return;
+    }
+    let clipped = text;
+    while (clipped && ctx.measureText(clipped + '…').width > maxWidth) clipped = clipped.slice(0, -1);
+    ctx.fillText((clipped || '').trimEnd() + '…', x, y);
+  }
+
+  function downloadRekapSetoranJpg(filters, halaqahId) {
+    const recap = weeklyDepositGroups(filters);
+    const group = recap.groups.find(item => item.h.id === halaqahId);
+    if (!group) {
+      UI.toast('Data halaqah tidak ditemukan', 'error');
+      return;
+    }
+
+    const logicalWidth = 1600;
+    const padding = 64;
+    const headerHeight = 226;
+    const tableHeaderHeight = 58;
+    const rowHeight = 58;
+    const footerHeight = 82;
+    const logicalHeight = headerHeight + tableHeaderHeight + Math.max(group.rows.length, 1) * rowHeight + footerHeight;
+    const scale = 2;
+    const canvas = document.createElement('canvas');
+    canvas.width = logicalWidth * scale;
+    canvas.height = logicalHeight * scale;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(scale, scale);
+
+    const tableWidth = logicalWidth - (padding * 2);
+    const noWidth = 70;
+    const nameWidth = 420;
+    const programWidth = 260;
+    const missingWidth = 105;
+    const dayWidth = (tableWidth - noWidth - nameWidth - programWidth - missingWidth) / recap.days.length;
+    const columns = [
+      { label: 'No', width: noWidth, align: 'center' },
+      { label: 'Santri', width: nameWidth, align: 'left' },
+      { label: 'Program', width: programWidth, align: 'left' },
+      ...recap.days.map(day => ({ label: day.label, sublabel: day.tanggal.slice(8), width: dayWidth, align: 'center' })),
+      { label: 'Belum', width: missingWidth, align: 'center' }
+    ];
+
+    ctx.fillStyle = '#f3f7f4';
+    ctx.fillRect(0, 0, logicalWidth, logicalHeight);
+    ctx.fillStyle = '#15803d';
+    ctx.fillRect(0, 0, logicalWidth, 18);
+
+    ctx.fillStyle = '#166534';
+    ctx.font = '700 27px Poppins, Arial, sans-serif';
+    ctx.fillText('TAHFIDZKU', padding, 67);
+    ctx.fillStyle = '#1f2937';
+    ctx.font = '700 35px Poppins, Arial, sans-serif';
+    ctx.fillText('Rekap Setoran Mingguan', padding, 116);
+    ctx.fillStyle = '#166534';
+    ctx.font = '700 25px Poppins, Arial, sans-serif';
+    canvasText(ctx, group.h.nama, padding, 157, 900);
+    ctx.fillStyle = '#4b5563';
+    ctx.font = '500 18px Inter, Arial, sans-serif';
+    const weekEnd = recap.days[recap.days.length - 1].tanggal;
+    canvasText(ctx, `Pekan ${UI.fmtDate(recap.week)}–${UI.fmtDate(weekEnd)}`, padding, 190, 690);
+    canvasText(ctx, `Ustadz: ${Store.ustadzNamesForHalaqah(group.h).join(', ') || 'Belum ditetapkan'}`, padding + 720, 190, logicalWidth - padding - (padding + 720));
+
+    const tableY = headerHeight;
+    ctx.fillStyle = '#166534';
+    canvasRoundedRect(ctx, padding, tableY, tableWidth, tableHeaderHeight, 12);
+    ctx.fill();
+    let x = padding;
+    columns.forEach(column => {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '700 17px Inter, Arial, sans-serif';
+      ctx.textAlign = column.align === 'center' ? 'center' : 'left';
+      const textX = column.align === 'center' ? x + (column.width / 2) : x + 15;
+      ctx.fillText(column.label, textX, tableY + 25);
+      if (column.sublabel) {
+        ctx.font = '500 14px Inter, Arial, sans-serif';
+        ctx.fillText(column.sublabel, textX, tableY + 46);
+      }
+      x += column.width;
+    });
+
+    const rows = group.rows.length ? group.rows : [{ empty: true }];
+    rows.forEach((row, index) => {
+      const y = tableY + tableHeaderHeight + (index * rowHeight);
+      ctx.fillStyle = index % 2 === 0 ? '#ffffff' : '#f7fbf8';
+      ctx.fillRect(padding, y, tableWidth, rowHeight);
+      ctx.strokeStyle = '#dce7df';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(padding, y, tableWidth, rowHeight);
+      if (row.empty) {
+        ctx.fillStyle = '#6b7280';
+        ctx.font = '500 18px Inter, Arial, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Belum ada santri aktif di halaqah ini.', logicalWidth / 2, y + 36);
+        return;
+      }
+      let cellX = padding;
+      columns.forEach((column, columnIndex) => {
+        ctx.strokeStyle = '#e3ece5';
+        ctx.beginPath();
+        ctx.moveTo(cellX, y);
+        ctx.lineTo(cellX, y + rowHeight);
+        ctx.stroke();
+        const centerX = cellX + (column.width / 2);
+        if (columnIndex === 0) {
+          ctx.fillStyle = '#374151';
+          ctx.font = '600 17px Inter, Arial, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(String(index + 1), centerX, y + 36);
+        } else if (columnIndex === 1) {
+          ctx.fillStyle = '#1f2937';
+          ctx.font = '700 17px Poppins, Arial, sans-serif';
+          ctx.textAlign = 'left';
+          canvasText(ctx, row.s.nama, cellX + 14, y + 25, column.width - 28);
+          ctx.fillStyle = '#6b7280';
+          ctx.font = '500 13px Inter, Arial, sans-serif';
+          canvasText(ctx, row.s.nis || '-', cellX + 14, y + 45, column.width - 28);
+        } else if (columnIndex === 2) {
+          ctx.fillStyle = '#374151';
+          ctx.font = '500 15px Inter, Arial, sans-serif';
+          ctx.textAlign = 'left';
+          canvasText(ctx, Store.programSummaryForSantri(row.s) || '-', cellX + 14, y + 36, column.width - 28);
+        } else if (columnIndex === columns.length - 1) {
+          ctx.fillStyle = row.missing ? '#b91c1c' : '#15803d';
+          ctx.font = '700 18px Inter, Arial, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(String(row.missing), centerX, y + 36);
+        } else {
+          const dayIndex = columnIndex - 3;
+          const cell = row.cells[dayIndex];
+          ctx.textAlign = 'center';
+          if (cell.status === 'submitted') {
+            ctx.fillStyle = '#dcfce7';
+            ctx.beginPath(); ctx.arc(centerX, y + 29, 16, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#15803d';
+            ctx.font = '700 22px Arial, sans-serif';
+            ctx.fillText('✓', centerX, y + 37);
+          } else if (cell.status === 'future') {
+            ctx.fillStyle = '#6b7280';
+            ctx.font = '600 20px Inter, Arial, sans-serif';
+            ctx.fillText('—', centerX, y + 36);
+          } else {
+            ctx.fillStyle = '#b91c1c';
+            ctx.font = '600 15px Inter, Arial, sans-serif';
+            ctx.fillText('Belum', centerX, y + 35);
+          }
+        }
+        cellX += column.width;
+      });
+    });
+
+    ctx.fillStyle = '#4b5563';
+    ctx.font = '500 16px Inter, Arial, sans-serif';
+    ctx.textAlign = 'left';
+    const footerY = tableY + tableHeaderHeight + rows.length * rowHeight + 43;
+    ctx.fillText('✓ Sudah setoran    •    Belum: belum setoran    •    — Tanggal mendatang', padding, footerY);
+    ctx.textAlign = 'right';
+    ctx.fillText(`Diunduh ${UI.fmtDate(Store.todayStr())}`, logicalWidth - padding, footerY);
+
+    canvas.toBlob(blob => {
+      if (!blob) {
+        UI.toast('Gagal membuat gambar rekap', 'error');
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `Rekap_Setoran_${safeFilename(group.h.nama)}_${recap.week}.jpg`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      UI.toast('Rekap JPG berhasil diunduh', 'success');
+    }, 'image/jpeg', 0.92);
+  }
+
+  function bindRekapSetoranJpgDownload(filters) {
+    document.querySelectorAll('[data-download-rekap-jpg]').forEach(button => {
+      button.onclick = () => downloadRekapSetoranJpg(filters, button.dataset.halaqahId);
+    });
+  }
+
   /* ---------- Notifikasi (shared) ---------- */
   function renderNotifikasi(userId) {
     const list = Store.notifFor(userId);
@@ -674,5 +883,5 @@ const Shared = (() => {
     </div>`;
   }
 
-  return { shell, setHeader, setActions, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadExcel, downloadTemplateExcel, bulanLabel, mondayOf, renderRekapSetoranMingguan, bindRekapSetoranBayar, renderNotifikasi, ICONS, hafalanMapHTML };
+  return { shell, setHeader, setActions, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadExcel, downloadTemplateExcel, bulanLabel, mondayOf, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, ICONS, hafalanMapHTML };
 })();

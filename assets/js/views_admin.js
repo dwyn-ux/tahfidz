@@ -1180,10 +1180,13 @@ const Admin = (() => {
     const apply = () => {
       const weekInput = document.getElementById('f-pekan');
       weekInput.value = Shared.mondayOf(weekInput.value);
-      document.getElementById('rekap-setoran-content').innerHTML = Shared.renderRekapSetoranMingguan({
+      const filters = {
         week: weekInput.value,
-        ustadzId: document.getElementById('f-ustadz').value
-      });
+        ustadzId: document.getElementById('f-ustadz').value,
+        allowJpgDownload: true
+      };
+      document.getElementById('rekap-setoran-content').innerHTML = Shared.renderRekapSetoranMingguan(filters);
+      Shared.bindRekapSetoranJpgDownload(filters);
     };
     document.getElementById('f-pekan').onchange = apply;
     document.getElementById('f-ustadz').onchange = apply;

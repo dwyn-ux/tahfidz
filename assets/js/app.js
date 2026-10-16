@@ -39,6 +39,9 @@ const App = (() => {
     ustadz: 'ustadz_dashboard',
     wali: 'wali_dashboard'
   };
+  // Admin memang dapat membuka beberapa halaman operasional milik ustadz.
+  // Selain pengecualian ini, setiap peran hanya boleh mengakses rutenya sendiri.
+  const adminUstadzRoutes = new Set(['ustadz_absensi', 'ustadz_talim', 'ustadz_pembelajaran']);
 
   let current = null;
   let tableObserverStarted = false;
@@ -68,11 +71,26 @@ const App = (() => {
     return window.location.pathname + window.location.search + '#' + view;
   }
 
+  function isAllowedView(view, role) {
+    if (view === 'quran') return true;
+    if (!role) return false;
+    if (role === 'admin') return view.startsWith('admin_') || adminUstadzRoutes.has(view);
+    return view.startsWith(role + '_');
+  }
+
   function navigate(view, options = {}) {
-    if (!routes[view]) view = defaultRoute[Store.getSession().role] || 'admin_dashboard';
+    const session = Store.getSession();
+    const allowed = !!(routes[view] && isAllowedView(view, session?.role));
+    if (!allowed) {
+      view = session ? (defaultRoute[session.role] || 'quran') : 'quran';
+      // Jangan biarkan URL menyimpan halaman milik role sebelumnya.
+      options = Object.assign({}, options, { replaceHistory: true });
+    }
     // Setiap perpindahan menu dicatat agar tombol Back perangkat kembali ke
     // halaman sebelumnya di aplikasi, bukan langsung keluar dari web.
-    if (!options.fromHistory && current !== view) {
+    if (options.replaceHistory) {
+      window.history.replaceState({ tahfidzView: view }, '', historyUrl(view));
+    } else if (!options.fromHistory && current !== view) {
       window.history.pushState({ tahfidzView: view }, '', historyUrl(view));
     }
     if (view !== 'quran') document.body.classList.remove('q-reading-fullscreen');
@@ -105,7 +123,11 @@ const App = (() => {
     }
     setFavicon();
     const hashView = window.location.hash.slice(1);
-    const initialView = routes[hashView] ? hashView : defaultRoute[role];
+    // Hash dapat tersisa dari akun sebelumnya pada browser yang sama. Hanya
+    // gunakan bila rutenya sah untuk sesi yang baru berhasil login.
+    const initialView = routes[hashView] && isAllowedView(hashView, role)
+      ? hashView
+      : defaultRoute[role];
     // Halaman pertama adalah akar riwayat aplikasi, bukan entri tambahan.
     window.history.replaceState({ tahfidzView: initialView }, '', historyUrl(initialView));
     navigate(initialView, { fromHistory: true });
