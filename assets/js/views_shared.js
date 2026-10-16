@@ -92,15 +92,47 @@ const Shared = (() => {
   }
 
   // Beberapa keyboard/fitur autofill ponsel tidak konsisten mengirim `input`.
-  // Dengarkan juga change, search (tombol hapus bawaan), dan keyup agar setiap
-  // kolom pencarian tetap menyaring daftar tanpa menunggu pengguna menekan Enter.
+  // Dengarkan event standar serta periksa perubahan nilai ketika kolom fokus,
+  // sebab Chrome/WebView dapat mengisi autofill tanpa mengirim event apa pun.
   function bindSearchInput(input, onSearch) {
     if (!input || typeof onSearch !== 'function') return;
     let composing = false;
-    const run = () => { if (!composing) onSearch(); };
-    ['input', 'change', 'search', 'keyup'].forEach(eventName => input.addEventListener(eventName, run));
+    let lastValue = input.value;
+    let valuePoll = null;
+    const run = (force = false) => {
+      if (composing) return;
+      const value = input.value;
+      if (!force && value === lastValue) return;
+      lastValue = value;
+      onSearch();
+    };
+    const stopPolling = () => {
+      if (valuePoll) clearInterval(valuePoll);
+      valuePoll = null;
+    };
+    const startPolling = () => {
+      stopPolling();
+      let checks = 0;
+      valuePoll = setInterval(() => {
+        run();
+        // Cukup lama untuk pilihan autofill setelah sentuhan, tanpa polling
+        // terus-menerus ketika halaman dibiarkan terbuka.
+        if (++checks >= 150) stopPolling();
+      }, 100);
+    };
+    const checkAfterAutofill = () => {
+      run();
+      setTimeout(run, 80);
+      setTimeout(run, 250);
+    };
+    ['input', 'change', 'search', 'keyup', 'paste', 'cut'].forEach(eventName => input.addEventListener(eventName, () => run(true)));
     input.addEventListener('compositionstart', () => { composing = true; });
-    input.addEventListener('compositionend', () => { composing = false; run(); });
+    input.addEventListener('compositionend', () => { composing = false; run(true); });
+    input.addEventListener('focus', () => { startPolling(); checkAfterAutofill(); });
+    input.addEventListener('blur', () => { checkAfterAutofill(); stopPolling(); });
+    input.addEventListener('animationstart', event => {
+      if (event.animationName === 'search-autofill-detected') checkAfterAutofill();
+    });
   }
 
   /* Ganti password sendiri. Dipakai semua role lewat tombol di kotak user
