@@ -14,6 +14,7 @@ const App = (() => {
     admin_laporan: () => Admin.laporan(),
     admin_rekap_setoran: () => Admin.rekapSetoran(),
     admin_notif: () => Admin.notif(),
+    admin_talim: () => Admin.talim(),
     admin_settings: () => Admin.settings(),
     // Ustadz
     ustadz_dashboard: () => Ustadz.dashboard(),

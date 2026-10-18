@@ -177,6 +177,71 @@ function uid($prefix = 'id') {
 }
 function nowISO() { return gmdate('Y-m-d\TH:i:s\Z'); }
 
+/* ---------------- WA bridge proxy ----------------
+   Browser tidak boleh memegang waBridgeKey, jadi semua panggilan ke bridge
+   dilewatkan server. Settings bisa menyimpan nilai sebagai string "false" dari
+   backup lama; nilai teks itu tidak boleh diperlakukan sebagai aktif. */
+function waAutoEnabled(array $settings): bool {
+    $value = $settings['waAuto'] ?? false;
+    return $value === true || $value === 1 || $value === '1' || $value === 'true';
+}
+
+/**
+ * Panggil endpoint bridge dengan X-WA-Key. Tidak ada exception yang dilempar:
+ * kegagalan jaringan dikembalikan sebagai array agar API tetap membalas JSON
+ * yang bisa dibaca antarmuka.
+ */
+function waBridgeCall(string $baseUrl, string $waKey, string $path, ?string $payload = null): array {
+    $url = $baseUrl . $path;
+    $headers = ['X-WA-Key: ' . $waKey, 'Accept: */*'];
+    if ($payload !== null) $headers[] = 'Content-Type: application/json';
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_CONNECTTIMEOUT => 8,
+            CURLOPT_SSL_VERIFYPEER => true,
+        ]);
+        if ($payload !== null) {
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+        }
+        $body = curl_exec($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $failure = curl_error($ch);
+        curl_close($ch);
+        if ($body === false) {
+            return ['ok' => false, 'status' => 0, 'data' => null, 'body' => '', 'detail' => 'Tidak bisa menghubungi bridge: ' . $failure];
+        }
+    } else {
+        $opts = ['http' => [
+            'method' => $payload !== null ? 'POST' : 'GET',
+            'header' => implode("\r\n", $headers),
+            'content' => $payload ?? '',
+            'timeout' => 15,
+            'ignore_errors' => true,
+        ]];
+        $body = @file_get_contents($url, false, stream_context_create($opts));
+        $status = 0;
+        if (isset($http_response_header[0]) && preg_match('#\s(\d{3})\s#', $http_response_header[0], $m)) $status = (int)$m[1];
+        if ($body === false) {
+            return ['ok' => false, 'status' => 0, 'data' => null, 'body' => '', 'detail' => 'Tidak bisa menghubungi bridge.'];
+        }
+    }
+
+    $data = json_decode($body, true);
+    return [
+        'ok' => $status >= 200 && $status < 300,
+        'status' => $status,
+        'data' => is_array($data) ? $data : null,
+        'body' => (string)$body,
+        'detail' => is_array($data) ? (string)($data['error'] ?? '') : '',
+    ];
+}
+
 /* ---------------- Rate limiting (file-based, no dependencies) ----------------
  * rateCheck: read-only, returns true if allowed.
  * rateLimit: increments counter, returns true if still allowed.

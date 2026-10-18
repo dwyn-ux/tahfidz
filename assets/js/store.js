@@ -191,36 +191,48 @@ const Store = (() => {
     return Object.keys(records).length || changes.settings || changes.users ? changes : null;
   }
 
-  // Kirim pesan WhatsApp via WA bridge (jika dikonfigurasi). Fire-and-forget.
-  // Setiap percobaan dicatat ke db.logWa (status: queued/skipped/error).
+  // Setiap percobaan pengiriman dicatat ke db.logWa (queued/skipped/error).
   function waLog(entry) {
     if (!db.logWa) db.logWa = [];
     db.logWa.unshift(Object.assign({ id: uid('wa'), tanggal: nowISO(), message: entry.message ? String(entry.message).slice(0, 150) : '' }, entry));
     if (db.logWa.length > 100) db.logWa.length = 100;
     save();
   }
+
+  // Kirim pesan WhatsApp lewat API, bukan langsung ke bridge. Kredensial bridge
+  // hanya dipegang server sehingga ustadz (dan wali) tidak pernah melihat kunci,
+  // dan mereka tetap bisa mengirim laporan ke wali.
   function waSend(to, message) {
-    const s = db.settings;
-    if (!s.waBridgeUrl) { waLog({ to, status: 'skipped', detail: 'URL bridge belum diatur (Settings → WhatsApp Otomatis)' }); return Promise.resolve(false); }
     if (!to) { waLog({ to: null, status: 'skipped', detail: 'Nomor tujuan kosong' }); return Promise.resolve(false); }
     if (!message) { waLog({ to, status: 'skipped', detail: 'Pesan kosong' }); return Promise.resolve(false); }
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10000);
-    return fetch(s.waBridgeUrl.replace(/\/$/, '') + '/send', {
-      method: 'POST',
-      signal: ctrl.signal,
-      headers: { 'Content-Type': 'application/json', 'X-WA-Key': s.waBridgeKey || '' },
-      body: JSON.stringify({ to, message })
-    }).then(async (r) => {
-      clearTimeout(timer);
-      let detail = '';
-      try { const d = await r.json(); detail = d.error || JSON.stringify(d); } catch (e) { detail = ''; }
-      waLog({ to, status: r.ok ? 'queued' : 'error', detail: detail || ('HTTP ' + r.status), message });
-      return r.ok;
+    return api('wa&op=send', { method: 'POST', body: { to, message } }).then(r => {
+      const detail = (r && r.detail) || 'Pesan masuk antrian bridge.';
+      waLog({ to, status: r && r.ok ? 'queued' : 'error', detail, message });
+      return !!(r && r.ok);
     }).catch(e => {
-      clearTimeout(timer);
-      waLog({ to, status: 'error', detail: 'Fetch gagal: ' + (e && e.message || e), message });
+      waLog({ to, status: 'error', detail: 'Gagal: ' + (e && e.message || e), message });
       return false;
+    });
+  }
+
+  // Status koneksi bridge untuk ditampilkan di Settings (khusus admin).
+  function waStatus() {
+    return api('wa&op=status').then(r => (r && r.data) || null);
+  }
+
+  // QR pairing juga lewat API (endpoint itu butuh Authorization header), lalu
+  // dikembalikan sebagai object URL supaya bisa dipakai sebagai <img src>.
+  function waQrDataUrl() {
+    const token = getToken();
+    return fetch(API_BASE + '?action=wa&op=qr', {
+      headers: token ? { Authorization: 'Bearer ' + token } : {}
+    }).then(async r => {
+      if (!r.ok) {
+        let msg = 'HTTP ' + r.status;
+        try { const d = await r.json(); msg = d.error || msg; } catch (e) { /* biarkan msg default */ }
+        throw new Error(msg);
+      }
+      return URL.createObjectURL(await r.blob());
     });
   }
 
@@ -766,7 +778,7 @@ const Store = (() => {
     activeProgramsForSantri, halaqahForSantriProgram, halaqahForSantri, santriHasProgram, santriHasHalaqah, programsForSantriHalaqah, configureSantriPrograms, programSummaryForSantri, halaqahSummaryForSantri,
     tingkatOptions, kelasOptions, tingkatForSantri, kelasForSantri, normalizeSantriEducation, kelasLabel, educationLabel,
     talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
-    waSend, waLog, waReady, waAutoEnabled, waSendWali,
+    waSend, waLog, waReady, waAutoEnabled, waSendWali, waStatus, waQrDataUrl,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,
     absensiUstadzOf, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,
     addNotif, notifFor, clearNotifs, checkSetoranTerlewat

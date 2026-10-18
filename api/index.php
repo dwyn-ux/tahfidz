@@ -280,6 +280,52 @@ switch ($action) {
         send(['ok' => true]);
         break;
 
+    /* ---------------- WHATSAPP BRIDGE (proksi) ----------------
+       Browser tidak pernah melihat waBridgeKey: bridge hanya hidup di jaringan
+       internal, jadi permintaannya diteruskan server yang holding kredensial.
+      Ustadz pun tetap bisa mengirim laporan ke wali tanpa memegang kunci. */
+    case 'wa':
+        $waUser = requireAuth();
+        $waIsAdmin = ($waUser['role'] ?? '') === 'admin';
+        $waOp = $_GET['op'] ?? 'status';
+        if (!in_array($waOp, ['status', 'qr', 'send'], true)) err('Unknown wa op', 400);
+        // Cek koneksi dan QR hanya untuk admin: keduanya menyangkut nomor
+        // bridge dan kuncinya, bukan data wali.
+        if ($waOp !== 'send' && !$waIsAdmin) err('Method not allowed', 403);
+
+        $waSettings = getSettings();
+        $waUrl = rtrim((string)($waSettings['waBridgeUrl'] ?? ''), '/');
+        $waKey = (string)($waSettings['waBridgeKey'] ?? '');
+        if (!$waUrl) err('WA bridge belum diatur (Settings → WhatsApp).', 400);
+        if (!$waKey) err('Key WA bridge belum diatur (Settings → WhatsApp).', 400);
+
+        $to = null;
+        $message = null;
+        if ($waOp === 'send') {
+            $waBody = body();
+            $to = trim((string)($waBody['to'] ?? ''));
+            $message = trim((string)($waBody['message'] ?? ''));
+            // Ustadz hanya boleh mengirim lewat jalur laporan otomatis.
+            if (!$waIsAdmin && !waAutoEnabled($waSettings)) err('WhatsApp Otomatis sedang nonaktif.', 409);
+            if (!$to || !$message) err('to & message required', 400);
+        }
+
+        $waPath = $waOp === 'qr' ? '/qr' : ($waOp === 'send' ? '/send' : '/status');
+        $waPayload = $waOp === 'send' ? json_encode(['to' => $to, 'message' => $message]) : null;
+        $r = waBridgeCall($waUrl, $waKey, $waPath, $waPayload);
+
+        if ($waOp === 'qr') {
+            if (!$r['ok']) err($r['detail'] ?: ('Bridge menjawab HTTP ' . $r['status']), $r['status'] ?: 502);
+            header('Content-Type: image/png');
+            header('Cache-Control: no-store');
+            http_response_code(200);
+            echo $r['body'];
+            exit;
+        }
+        if ($waOp === 'status') send(['ok' => $r['ok'], 'status' => $r['status'], 'data' => $r['data']]);
+        send(['ok' => $r['ok'], 'status' => $r['status'], 'detail' => $r['detail']]);
+        break;
+
     default:
         err('Unknown action', 404);
 }

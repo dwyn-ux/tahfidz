@@ -33,13 +33,22 @@ terpisah; aplikasi PHP/JS tinggal POST pesan ke bridge.
 ```bash
 cd wa-bridge
 npm install
-export WA_KEY=$(openssl rand -hex 16)   # WAJIB di-set, nilai acak
 npm start                 # default port 3210
 ```
 
-**Scan QR sekali (sesi admin):** buka `http://SERVER:3210/qr` di browser,
-scan dengan WhatsApp Web (multi-device) di HP admin. Sesi tersimpan di
-`wa-bridge/session/`, tidak perlu scan ulang.
+`WA_KEY` dibaca dari `wa-bridge/.env` ( sudah di-`.gitignore`). Buat sekali:
+
+```bash
+printf 'WA_KEY=%s\nPORT=3210\n' "$(openssl rand -hex 16)" > .env
+```
+
+Nilai `WA_KEY` yang sama wajib diisi di aplikasi pada *Key Bridge*. Environment
+variable sistem tetap menang atas isi `.env` bila service dijalankan lewat
+service manager.
+
+**Scan QR sekali (sesi admin):** di aplikasi, Admin → Settings → WhatsApp →
+*Cek Status*, lalu scan QR yang tampil (atau buka `http://SERVER:3210/qr?key=WA_KEY`).
+Sesi tersimpan di `wa-bridge/session/`, tidak perlu scan ulang.
 
 **Endpoint bridge:**
 | Method | Path      | Fungsi |
@@ -48,11 +57,20 @@ scan dengan WhatsApp Web (multi-device) di HP admin. Sesi tersimpan di
 | GET    | `/qr`     | QR PNG untuk scan |
 | POST   | `/send`   | kirim pesan `{to: "628xxx", message}` |
 
+Semua endpoint (termasuk `/qr`) mewajibkan header `X-WA-Key`, atau query
+`?key=` untuk `/qr` yang dibuka langsung di tab browser.
+
+Browser tidak pernah memegang `WA_KEY`: aplikasi mengirim `?action=wa&op=…`
+(`status` / `qr` / `send`) ke API, lalu PHP meneruskannya ke bridge memakai nilai
+yang tersimpan di server. `status` dan `qr` hanya untuk admin; `send` juga
+punya ustadz, namun hanya untuk laporan otomatis ke wali saat `waAuto` aktif.
+
 Pesan antri dengan delay acak 6–12 detik antar pesan (anti-banned).
 Bisa diubah lewat env `WA_MIN_DELAY` / `WA_MAX_DELAY`.
 
-**Hubungkan ke aplikasi:** Admin → Settings → *WhatsApp Otomatis* → isi URL bridge
-(`https://wa.example.com:3210`), Key bridge, lalu Cek Status & Kirim Tes.
+**Hubungkan ke aplikasi:** Admin → Settings → *WhatsApp* → isi URL bridge
+(`http://localhost:3210` atau `https://wa.example.com:3210`) dan Key bridge,
+tekan *Simpan Pengaturan*, lalu *Cek Status* untuk melihat QR dan *Kirim Tes*.
 Laporan tahsin/ziyadah/mutqin otomatis terkirim ke `noHpWali` saat setoran disimpan.
 
 > Keamanan: pasang reverse-proxy dengan HTTPS + jangan ekspos port bridge ke publik

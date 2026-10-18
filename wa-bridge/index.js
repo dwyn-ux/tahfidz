@@ -14,6 +14,23 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 
+// WA_KEY disimpan di wa-bridge/.env agar tidak harus menyetel environment
+// variable setiap kali service dimulai. Nilai environment yang sudah ada tetap
+// menang sehingga mode CLI tetap bisa menimpa isi file.
+(function loadDotEnv() {
+  const file = path.join(__dirname, '.env');
+  if (!fs.existsSync(file)) return;
+  for (const line of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq < 1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    const value = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+})();
+
 const PORT = process.env.PORT || 3210;
 const WA_KEY = process.env.WA_KEY || '';
 
@@ -23,7 +40,9 @@ if (!WA_KEY || WA_KEY === 'tahfidz-wa-bridge') {
   const generated = crypto.randomBytes(16).toString('hex');
   console.error('========================================');
   console.error('ERROR: WA_KEY tidak di-set atau masih default!');
-  console.error('Set environment variable WA_KEY dengan nilai acak.');
+  console.error('Buat file wa-bridge/.env berisi:');
+  console.error(`WA_KEY=${generated}`);
+  console.error('Atur juga environment variable WA_KEY bila ingin menimpa isi file.');
   console.error(`Contoh: WA_KEY=${generated} npm start`);
   console.error('Lalu set nilai yang sama di Settings → WhatsApp Otomatis → waBridgeKey');
   console.error('========================================');

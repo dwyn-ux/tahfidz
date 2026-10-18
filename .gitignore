@@ -4,6 +4,8 @@ api/tahfidzku.sqlite
 # Secrets — NEVER commit these
 api/.env
 api/.secret
+wa-bridge/.env
+wa-bridge/session/
 
 # Test scripts
 api_test/
