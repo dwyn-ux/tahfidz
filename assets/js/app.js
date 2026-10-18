@@ -39,10 +39,6 @@ const App = (() => {
     ustadz: 'ustadz_dashboard',
     wali: 'wali_dashboard'
   };
-  // Admin memang dapat membuka beberapa halaman operasional milik ustadz.
-  // Selain pengecualian ini, setiap peran hanya boleh mengakses rutenya sendiri.
-  const adminUstadzRoutes = new Set(['ustadz_absensi', 'ustadz_talim', 'ustadz_pembelajaran']);
-
   let current = null;
   let tableObserverStarted = false;
 
@@ -74,7 +70,7 @@ const App = (() => {
   function isAllowedView(view, role) {
     if (view === 'quran') return true;
     if (!role) return false;
-    if (role === 'admin') return view.startsWith('admin_') || adminUstadzRoutes.has(view);
+    if (role === 'admin') return view.startsWith('admin_');
     return view.startsWith(role + '_');
   }
 
