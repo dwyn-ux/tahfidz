@@ -111,6 +111,7 @@ const Admin = (() => {
       { view: 'admin_absensi_ustadz', label: 'Absensi Ustadz', active: active === 'admin_absensi_ustadz' },
       { view: 'admin_riwayat', label: 'Riwayat', active: active === 'admin_riwayat' },
       { view: 'admin_laporan', label: 'Laporan', active: active === 'admin_laporan' },
+      { view: 'admin_rekap_kehadiran', label: 'Rekap Kehadiran', active: active === 'admin_rekap_kehadiran' },
       { view: 'admin_rekap_setoran', label: 'Rekap Setoran', active: active === 'admin_rekap_setoran' },
       { view: 'admin_notif', label: 'Notifikasi', active: active === 'admin_notif' },
       { view: 'admin_talim', label: 'Ta’lim', active: active === 'admin_talim' },
@@ -1103,6 +1104,282 @@ const Admin = (() => {
     apply();
   }
 
+  /* ---------------- Rekap Kehadiran ----------------
+     Totalan Hadir/Izin/Sakit/Alfa per orang untuk satu periode. Alfa dihitung
+     dari slot yang tidak ada catatannya, jadi angkanya selalu cocok dengan
+     "jumlah hari x sesi". */
+  function rekapKehadiran() {
+    Shared.shell('admin', nav('admin_rekap_kehadiran'), '');
+    Shared.setHeader('Rekap Kehadiran', 'Totalan hadir, izin, sakit, dan alfa per periode');
+    const db = Store.get();
+    const hariIni = Store.todayStr();
+    const awalBulan = hariIni.slice(0, 8) + '01';
+
+    document.getElementById('view-content').innerHTML = `
+      <div class="clay-card mb">
+        <div class="row">
+          <div style="flex:1;min-width:140px">${UI.field('Dari Tanggal', `<input type="date" class="clay-input" id="rk-dari" value="${awalBulan}">`)}</div>
+          <div style="flex:1;min-width:140px">${UI.field('Sampai Tanggal', `<input type="date" class="clay-input" id="rk-sampai" value="${hariIni}">`)}</div>
+          <div style="flex:1;min-width:140px">${UI.field('Sesi', `<select class="clay-select" id="rk-sesi"><option value="">Semua Sesi</option>${Store.SESI_REKAP.map(s => `<option>${UI.esc(s)}</option>`).join('')}</select>`)}</div>
+          <div style="flex:1;min-width:150px">${UI.field('Halaqah', `<select class="clay-select" id="rk-halaqah"><option value="">Semua Halaqah</option>${UI.optionsFromList(db.halaqah.map(h => ({ v: h.id, l: halaqahOptionLabel(h, false) })), 'v', 'l')}</select>`)}</div>
+        </div>
+        <div class="row mt">
+          <button class="clay-btn ghost" data-rk-preset="today">Hari Ini</button>
+          <button class="clay-btn ghost" data-rk-preset="week">7 Hari</button>
+          <button class="clay-btn ghost" data-rk-preset="month">Bulan Ini</button>
+          <button class="clay-btn ghost" data-rk-preset="lastmonth">Bulan Lalu</button>
+          <button class="clay-btn secondary" id="rk-export">Export Excel</button>
+        </div>
+      </div>
+      <div class="pill-tabs" id="rk-tab-bar">
+        <button class="pill active" data-rk-tab="santri">Santri</button>
+        <button class="pill" data-rk-tab="ustadz">Ustadz</button>
+      </div>
+      <div data-rk-panel="santri"><div id="rk-santri"></div></div>
+      <div data-rk-panel="ustadz" style="display:none"><div id="rk-ustadz"></div></div>`;
+
+    function filter() {
+      const dari = document.getElementById('rk-dari').value;
+      let sampai = document.getElementById('rk-sampai').value || dari;
+      const batas = dari ? Store.tambahHari(dari, 365) : '';
+      if (batas && sampai > batas) sampai = batas;
+      const sesi = document.getElementById('rk-sesi').value;
+      return {
+        dari,
+        sampai,
+        sesiList: sesi ? [sesi] : Store.SESI_REKAP.slice(),
+        halaqahId: document.getElementById('rk-halaqah').value
+      };
+    }
+
+    // Persentase kehadiran dihitung dari Alfa, bukan dari total slot. Alfa
+    // selalu "slot - tercatat", jadi persentase cukup membagi dua angka itu.
+    function persen(total) {
+      if (!total.slot) return 0;
+      return Math.round(((total.Hadir || 0) / total.slot) * 100);
+    }
+
+    function badgeAngka(value, cls) {
+      if (!value) return '<span class="muted">-</span>';
+      return `<span class="badge ${cls}">${value}</span>`;
+    }
+
+    function renderSantri(f) {
+      const target = f.halaqahId ? Store.findHalaqahById(f.halaqahId) : null;
+      const list = db.santri
+        .filter(s => s.status !== 'Nonaktif')
+        .filter(s => !target || Store.santriHasHalaqah(s, target))
+        .sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+
+      const rows = list.map(s => {
+        const r = Store.rekapKehadiranSantri(s.id, f.dari, f.sampai, f.sesiList);
+        return { s, ...r.total, perSesi: r.perSesi };
+      });
+      const jumlah = rows.reduce((acc, r) => ({
+        Hadir: acc.Hadir + r.Hadir, Izin: acc.Izin + r.Izin,
+        Sakit: acc.Sakit + r.Sakit, Alfa: acc.Alfa + r.Alfa
+      }), { Hadir: 0, Izin: 0, Sakit: 0, Alfa: 0 });
+
+      const sesiHeads = f.sesiList.map(sesi => `<th class="center">${UI.esc(sesi)}</th>`).join('');
+      const body = rows.map((r, i) => {
+        const sesiCells = f.sesiList.map(sesi => {
+          const p = r.perSesi[sesi];
+          return `<td class="center" style="font-size:12px">${UI.esc(p.Hadir || 0)}/${UI.esc(p.Izin || 0)}/${UI.esc(p.Sakit || 0)}/${UI.esc(p.Alfa || 0)}</td>`;
+        }).join('');
+        return `<tr>
+          <td class="center">${i + 1}</td>
+          <td><b>${UI.esc(r.s.nama)}</b><div class="muted" style="font-size:11px">${UI.esc(r.s.nis || '-')}</div></td>
+          <td>${UI.esc(Store.educationLabel(r.s))}</td>
+          <td>${UI.esc(Store.halaqahSummaryForSantri(r.s))}</td>
+          ${sesiCells}
+          <td class="center">${badgeAngka(r.Hadir, 'green')}</td>
+          <td class="center">${badgeAngka(r.Izin, 'warn')}</td>
+          <td class="center">${badgeAngka(r.Sakit, 'blue')}</td>
+          <td class="center">${badgeAngka(r.Alfa, 'danger')}</td>
+          <td class="center"><b>${persen(r)}%</b></td>
+        </tr>`;
+      }).join('');
+
+      document.getElementById('rk-santri').innerHTML = `
+        <div class="clay-card">
+          <div class="row" style="justify-content:space-between;margin-bottom:10px">
+            <div class="section-title" style="margin:0">Totalan Santri</div>
+            <span class="muted" style="font-size:13px">${rows.length} santri</span>
+          </div>
+          <div class="grid kpi mb">
+            ${Shared.statCard(Shared.ICONS.moon, jumlah.Hadir, 'Total Hadir', '#22C55E')}
+            ${Shared.statCard(Shared.ICONS.users, jumlah.Izin, 'Total Izin', '#FACC15')}
+            ${Shared.statCard(Shared.ICONS.teacher, jumlah.Sakit, 'Total Sakit', '#3B82F6')}
+            ${Shared.statCard(Shared.ICONS.book, jumlah.Alfa, 'Total Alfa', '#EF4444')}
+          </div>
+          <div class="muted" style="font-size:12px;margin-bottom:8px">Kolom sesi berisi <b>Hadir/Izin/Sakit/Alfa</b>.</div>
+          <div class="table-wrap"><table class="clay-table">
+            <thead><tr><th class="center">No</th><th>Santri</th><th>Tingkat & Kelas</th><th>Halaqah</th>${sesiHeads}<th class="center">Hadir</th><th class="center">Izin</th><th class="center">Sakit</th><th class="center">Alfa</th><th class="center">%</th></tr></thead>
+            <tbody>${body || '<tr><td colspan="10"><div class="empty">Tidak ada santri.</div></td></tr>'}</tbody>
+          </table></div>
+        </div>`;
+    }
+
+    function renderUstadz(f) {
+      const list = db.ustadz
+        .filter(u => u.status !== 'Nonaktif')
+        .filter(u => !f.halaqahId || Store.halaqahHasUstadz(Store.findHalaqahById(f.halaqahId) || {}, u))
+        .sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+
+      const rows = list.map(u => {
+        const r = Store.rekapKehadiranUstadz(u.id, f.dari, f.sampai, f.sesiList);
+        return { u, ...r.total, perSesi: r.perSesi };
+      });
+      const jumlah = rows.reduce((acc, r) => ({
+        Hadir: acc.Hadir + r.Hadir, Izin: acc.Izin + r.Izin,
+        Sakit: acc.Sakit + r.Sakit, Alfa: acc.Alfa + r.Alfa
+      }), { Hadir: 0, Izin: 0, Sakit: 0, Alfa: 0 });
+
+      const body = rows.map((r, i) => {
+        const sesiCells = f.sesiList.map(sesi => {
+          const p = r.perSesi[sesi];
+          return `<td class="center" style="font-size:12px">${UI.esc(p.Hadir || 0)}/${UI.esc(p.Izin || 0)}/${UI.esc(p.Sakit || 0)}/${UI.esc(p.Alfa || 0)}</td>`;
+        }).join('');
+        return `<tr>
+          <td class="center">${i + 1}</td>
+          <td><b>${UI.esc(r.u.nama)}</b></td>
+          <td>${UI.esc(Store.ustadzNamesForHalaqah(Store.findHalaqahForUstadz(r.u) || {}).join(', ') || '-')}</td>
+          ${sesiCells}
+          <td class="center">${badgeAngka(r.Hadir, 'green')}</td>
+          <td class="center">${badgeAngka(r.Izin, 'warn')}</td>
+          <td class="center">${badgeAngka(r.Sakit, 'blue')}</td>
+          <td class="center">${badgeAngka(r.Alfa, 'danger')}</td>
+          <td class="center"><b>${persen(r)}%</b></td>
+        </tr>`;
+      }).join('');
+
+      document.getElementById('rk-ustadz').innerHTML = `
+        <div class="clay-card">
+          <div class="row" style="justify-content:space-between;margin-bottom:10px">
+            <div class="section-title" style="margin:0">Totalan Ustadz</div>
+            <span class="muted" style="font-size:13px">${rows.length} ustadz</span>
+          </div>
+          <div class="grid kpi mb">
+            ${Shared.statCard(Shared.ICONS.moon, jumlah.Hadir, 'Total Hadir', '#22C55E')}
+            ${Shared.statCard(Shared.ICONS.users, jumlah.Izin, 'Total Izin', '#FACC15')}
+            ${Shared.statCard(Shared.ICONS.teacher, jumlah.Sakit, 'Total Sakit', '#3B82F6')}
+            ${Shared.statCard(Shared.ICONS.book, jumlah.Alfa, 'Total Alfa', '#EF4444')}
+          </div>
+          <div class="muted" style="font-size:12px;margin-bottom:8px">Kolom sesi berisi <b>Hadir/Izin/Sakit/Alfa</b>. Alfa = sesi tanpa catatan absensi.</div>
+          <div class="table-wrap"><table class="clay-table">
+            <thead><tr><th class="center">No</th><th>Ustadz</th><th>Halaqah</th>${f.sesiList.map(sesi => `<th class="center">${UI.esc(sesi)}</th>`).join('')}<th class="center">Hadir</th><th class="center">Izin</th><th class="center">Sakit</th><th class="center">Alfa</th><th class="center">%</th></tr></thead>
+            <tbody>${body || '<tr><td colspan="10"><div class="empty">Tidak ada ustadz.</div></td></tr>'}</tbody>
+          </table></div>
+        </div>`;
+    }
+
+    function apply() {
+      const f = filter();
+      if (!f.dari || !f.sampai) {
+        document.getElementById('rk-santri').innerHTML = '<div class="empty">Pilih rentang tanggal.</div>';
+        document.getElementById('rk-ustadz').innerHTML = '<div class="empty">Pilih rentang tanggal.</div>';
+        return;
+      }
+      renderSantri(f);
+      renderUstadz(f);
+    }
+
+    document.querySelectorAll('#rk-tab-bar [data-rk-tab]').forEach(button => button.onclick = () => {
+      document.querySelectorAll('#rk-tab-bar [data-rk-tab]').forEach(b => b.classList.toggle('active', b === button));
+      document.querySelectorAll('[data-rk-panel]').forEach(panel => {
+        panel.style.display = panel.dataset.rkPanel === button.dataset.rkTab ? '' : 'none';
+      });
+    });
+    document.querySelectorAll('[data-rk-preset]').forEach(button => button.onclick = () => {
+      const today = Store.todayStr();
+      const preset = button.dataset.rkPreset;
+      let dari = today, sampai = today;
+      if (preset === 'week') dari = Store.tambahHari(today, -6);
+      if (preset === 'month') dari = today.slice(0, 8) + '01';
+      if (preset === 'lastmonth') {
+        const awal = new Date(today.slice(0, 8) + '01T12:00:00');
+        awal.setMonth(awal.getMonth() - 1);
+        const akhir = new Date(awal.getFullYear(), awal.getMonth() + 1, 0);
+        dari = `${awal.getFullYear()}-${String(awal.getMonth() + 1).padStart(2, '0')}-01`;
+        sampai = `${akhir.getFullYear()}-${String(akhir.getMonth() + 1).padStart(2, '0')}-${String(akhir.getDate()).padStart(2, '0')}`;
+      }
+      document.getElementById('rk-dari').value = dari;
+      document.getElementById('rk-sampai').value = sampai;
+      apply();
+    });
+    ['rk-dari', 'rk-sampai', 'rk-sesi', 'rk-halaqah'].forEach(id => {
+      document.getElementById(id).onchange = apply;
+    });
+    document.getElementById('rk-export').onclick = () => {
+      const f = filter();
+      if (!f.dari || !f.sampai) { UI.toast('Pilih rentang tanggal', 'error'); return; }
+      const periode = UI.fmtDate(f.dari) + ' - ' + UI.fmtDate(f.sampai);
+      const sesiHeads = f.sesiList.map(s => `<th class="center">${UI.esc(s)}</th>`).join('');
+      const baris = (judul, list, ambil) => {
+        const body = list.map((item, i) => {
+          const r = ambil(item);
+          const sesiCells = f.sesiList.map(sesi => {
+            const p = r.perSesi[sesi];
+            return `<td class="center">${UI.esc(p.Hadir || 0)}/${UI.esc(p.Izin || 0)}/${UI.esc(p.Sakit || 0)}/${UI.esc(p.Alfa || 0)}</td>`;
+          }).join('');
+          return `<tr>
+            <td class="center">${i + 1}</td>
+            <td>${UI.esc(r.nama)}</td>
+            ${sesiCells}
+            <td class="center">${UI.esc(r.Hadir || 0)}</td>
+            <td class="center">${UI.esc(r.Izin || 0)}</td>
+            <td class="center">${UI.esc(r.Sakit || 0)}</td>
+            <td class="center">${UI.esc(r.Alfa || 0)}</td>
+            <td class="center">${persen(r)}%</td>
+          </tr>`;
+        }).join('');
+        return `<div class="title">${UI.esc(judul)}</div>
+          <div class="sub">Periode: ${UI.esc(periode)}</div>
+          <table>
+            <thead><tr><th class="center">No</th><th>Nama</th>${sesiHeads}<th class="center">Hadir</th><th class="center">Izin</th><th class="center">Sakit</th><th class="center">Alfa</th><th class="center">%</th></tr></thead>
+            <tbody>${body}</tbody>
+          </table>`;
+      };
+
+      const target = f.halaqahId ? Store.findHalaqahById(f.halaqahId) : null;
+      const daftarSantri = db.santri
+        .filter(s => s.status !== 'Nonaktif')
+        .filter(s => !target || Store.santriHasHalaqah(s, target))
+        .sort((a, b) => a.nama.localeCompare(b.nama, 'id'))
+        .map(s => {
+          const r = Store.rekapKehadiranSantri(s.id, f.dari, f.sampai, f.sesiList);
+          return { nama: s.nama, ...r.total, perSesi: r.perSesi };
+        });
+      const ustadz = db.ustadz
+        .filter(u => u.status !== 'Nonaktif')
+        .filter(u => !f.halaqahId || Store.halaqahHasUstadz(Store.findHalaqahById(f.halaqahId) || {}, u))
+        .sort((a, b) => a.nama.localeCompare(b.nama, 'id'))
+        .map(u => {
+          const r = Store.rekapKehadiranUstadz(u.id, f.dari, f.sampai, f.sesiList);
+          return { nama: u.nama, ...r.total, perSesi: r.perSesi };
+        });
+
+      const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><style>
+  body{font-family:Calibri,Arial,sans-serif}
+  table{border-collapse:collapse;font-size:11pt;margin-bottom:18px}
+  th,td{border:1px solid #999;padding:5px 8px}
+  th{background:#16a34a;color:#fff;text-align:center}
+  .center{text-align:center}
+  .title{font-size:13pt;font-weight:bold;text-align:center}
+  .sub{font-size:10pt;color:#555;text-align:center;margin-bottom:4px}
+</style></head>
+<body>
+  <div class="title">REKAP KEHADIRAN — ${UI.esc(db.settings.namaLembaga)}</div>
+  ${baris('Santri', daftarSantri, x => x)}
+  ${baris('Ustadz', ustadz, x => x)}
+</body></html>`;
+      Shared.downloadExcel('Rekap_Kehadiran_' + f.dari + '_sd_' + f.sampai, html);
+      UI.toast('Berhasil export Excel', 'success');
+    };
+    apply();
+  }
+
 /* ---------------- Absensi Ustadz ---------------- */
   const SESI_ABSENSI = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
   const STATUS_ABSENSI = ['Hadir', 'Izin', 'Sakit'];
@@ -1371,29 +1648,52 @@ const Admin = (() => {
   /* ---------------- Rekap Setoran Mingguan ---------------- */
   function rekapSetoran() {
     Shared.shell('admin', nav('admin_rekap_setoran'), '');
-    Shared.setHeader('Rekap Setoran Mingguan', 'Status setoran per santri dan per hari');
+    Shared.setHeader('Rekap Setoran', 'Setoran dan kehadiran per santri dalam satu periode');
     const db = Store.get();
+    const hariIni = Store.todayStr();
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card mb">
         <div class="row">
-          <div style="flex:1">${UI.field('Pekan (mulai Senin)', `<input type="date" class="clay-input" id="f-pekan" value="${Shared.mondayOf(Store.todayStr())}">`)}</div>
+          <div style="flex:1;min-width:140px">${UI.field('Dari Tanggal', `<input type="date" class="clay-input" id="f-dari" value="${Store.tambahHari(hariIni, -6)}">`)}</div>
+          <div style="flex:1;min-width:140px">${UI.field('Sampai Tanggal', `<input type="date" class="clay-input" id="f-sampai" value="${hariIni}">`)}</div>
           <div style="flex:1">${UI.field('Ustadz', `<select class="clay-select" id="f-ustadz"><option value="">Semua Ustadz</option>${UI.optionsFromList(db.ustadz.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id')).map(u => ({ v: u.id, l: u.nama })), 'v', 'l')}</select>`)}</div>
+        </div>
+        <div class="row mt">
+          <button class="clay-btn ghost" data-rs-preset="today">Hari Ini</button>
+          <button class="clay-btn ghost" data-rs-preset="week">7 Hari</button>
+          <button class="clay-btn ghost" data-rs-preset="month">Bulan Ini</button>
+          <button class="clay-btn ghost" data-rs-preset="lastmonth">Bulan Lalu</button>
         </div>
       </div>
       <div id="rekap-setoran-content"></div>`;
     const apply = () => {
-      const weekInput = document.getElementById('f-pekan');
-      weekInput.value = Shared.mondayOf(weekInput.value);
       const filters = {
-        week: weekInput.value,
+        dari: document.getElementById('f-dari').value,
+        sampai: document.getElementById('f-sampai').value,
         ustadzId: document.getElementById('f-ustadz').value,
         allowJpgDownload: true
       };
       document.getElementById('rekap-setoran-content').innerHTML = Shared.renderRekapSetoranMingguan(filters);
       Shared.bindRekapSetoranJpgDownload(filters);
     };
-    document.getElementById('f-pekan').onchange = apply;
-    document.getElementById('f-ustadz').onchange = apply;
+    document.querySelectorAll('[data-rs-preset]').forEach(button => button.onclick = () => {
+      const today = Store.todayStr();
+      const preset = button.dataset.rsPreset;
+      let dari = today, sampai = today;
+      if (preset === 'week') dari = Store.tambahHari(today, -6);
+      if (preset === 'month') dari = today.slice(0, 8) + '01';
+      if (preset === 'lastmonth') {
+        const awal = new Date(today.slice(0, 8) + '01T12:00:00');
+        awal.setMonth(awal.getMonth() - 1);
+        const akhir = new Date(awal.getFullYear(), awal.getMonth() + 1, 0);
+        dari = `${awal.getFullYear()}-${String(awal.getMonth() + 1).padStart(2, '0')}-01`;
+        sampai = `${akhir.getFullYear()}-${String(akhir.getMonth() + 1).padStart(2, '0')}-${String(akhir.getDate()).padStart(2, '0')}`;
+      }
+      document.getElementById('f-dari').value = dari;
+      document.getElementById('f-sampai').value = sampai;
+      apply();
+    });
+    ['f-dari', 'f-sampai', 'f-ustadz'].forEach(id => document.getElementById(id).onchange = apply);
     apply();
   }
 
@@ -2033,5 +2333,5 @@ const Admin = (() => {
     if (waLogBtn) waLogBtn.onclick = renderWaLog;
   }
 
-  return { nav, dashboard, santri, ustadz, halaqah, master, absensiUstadz, riwayat, laporan, rekapSetoran, notif, talim, settings, importSantriDialog };
+  return { nav, dashboard, santri, ustadz, halaqah, master, absensiUstadz, riwayat, laporan, rekapKehadiran, rekapSetoran, notif, talim, settings, importSantriDialog };
 })();

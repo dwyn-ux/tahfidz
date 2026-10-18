@@ -1123,32 +1123,60 @@ const Ustadz = (() => {
     const c = ctx(); _scope = c.scope;
     Shared.shell(c.role, nav('ustadz_laporan'), '');
     Shared.setHeader('Laporan Halaqah', 'Rekap setoran dan laporan santri yang Anda ampu');
+    const hariIni = Store.todayStr();
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card mb">
         <div class="row">
           <div style="flex:1">${UI.field('Bulan', `<input type="month" class="clay-input" id="f-bulan" value="${Store.todayStr().slice(0, 7)}">`)}</div>
-          <div style="flex:1">${UI.field('Pekan (mulai Senin)', `<input type="date" class="clay-input" id="f-pekan" value="${Shared.mondayOf(Store.todayStr())}">`)}</div>
+          <div style="flex:1">${UI.field('Dari Tanggal', `<input type="date" class="clay-input" id="f-dari" value="${Store.tambahHari(hariIni, -6)}">`)}</div>
+          <div style="flex:1">${UI.field('Sampai Tanggal', `<input type="date" class="clay-input" id="f-sampai" value="${hariIni}">`)}</div>
+        </div>
+        <div class="row mt">
+          <button class="clay-btn ghost" data-ul-preset="today">Hari Ini</button>
+          <button class="clay-btn ghost" data-ul-preset="week">7 Hari</button>
+          <button class="clay-btn ghost" data-ul-preset="month">Bulan Ini</button>
+          <button class="clay-btn ghost" data-ul-preset="lastmonth">Bulan Lalu</button>
         </div>
       </div>
       <div id="rekap-setoran"></div>
       <div id="lap"></div>`;
     const apply = () => {
       const bulan = document.getElementById('f-bulan').value;
-      const pekan = document.getElementById('f-pekan');
-      pekan.value = Shared.mondayOf(pekan.value);
       const ownHalaqah = myHalaqah();
       if (!ownHalaqah && _scope !== 'all') {
         document.getElementById('rekap-setoran').innerHTML = '<div class="empty">Anda belum ditugaskan ke halaqah. Hubungi admin untuk pengaturan halaqah.</div>';
         document.getElementById('lap').innerHTML = '';
         return;
       }
-      document.getElementById('rekap-setoran').innerHTML = Shared.renderRekapSetoranMingguan({ halaqah: ownHalaqah, week: pekan.value, allowMakeup: true });
+      document.getElementById('rekap-setoran').innerHTML = Shared.renderRekapSetoranMingguan({
+        halaqah: ownHalaqah,
+        dari: document.getElementById('f-dari').value,
+        sampai: document.getElementById('f-sampai').value,
+        allowMakeup: true
+      });
       Shared.bindRekapSetoranBayar(({ santriId, tanggal, programs }) => bayarSetoran(santriId, tanggal, programs));
       document.getElementById('lap').innerHTML = Shared.renderLaporan({ halaqah: ownHalaqah, bulan });
       Shared.bindLaporanExport();
     };
-    document.getElementById('f-bulan').onchange = apply;
-    document.getElementById('f-pekan').onchange = apply;
+    // Preset periode diperlakukan sama seperti di Rekap Setoran admin.
+    document.querySelectorAll('[data-ul-preset]').forEach(button => button.onclick = () => {
+      const today = Store.todayStr();
+      const preset = button.dataset.ulPreset;
+      let dari = today, sampai = today;
+      if (preset === 'week') dari = Store.tambahHari(today, -6);
+      if (preset === 'month') dari = today.slice(0, 8) + '01';
+      if (preset === 'lastmonth') {
+        const awal = new Date(today.slice(0, 8) + '01T12:00:00');
+        awal.setMonth(awal.getMonth() - 1);
+        const akhir = new Date(awal.getFullYear(), awal.getMonth() + 1, 0);
+        dari = `${awal.getFullYear()}-${String(awal.getMonth() + 1).padStart(2, '0')}-01`;
+        sampai = `${akhir.getFullYear()}-${String(akhir.getMonth() + 1).padStart(2, '0')}-${String(akhir.getDate()).padStart(2, '0')}`;
+      }
+      document.getElementById('f-dari').value = dari;
+      document.getElementById('f-sampai').value = sampai;
+      apply();
+    });
+    ['f-bulan', 'f-dari', 'f-sampai'].forEach(id => document.getElementById(id).onchange = apply);
     apply();
   }
 

@@ -692,12 +692,8 @@ const Shared = (() => {
     UI.toast('Template berhasil didownload', 'success');
   }
 
-  /* ---------- Rekap setoran mingguan ---------- */
-  const HARI_SETORAN = [
-    { label: 'Sen', offset: 0 }, { label: 'Sel', offset: 1 },
-    { label: 'Rab', offset: 2 }, { label: 'Kam', offset: 3 },
-    { label: 'Jum', offset: 4 }
-  ];
+  /* ---------- Rekap setoran per periode ---------- */
+  const HARI_SINGKAT = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
   const JENIS_SETORAN = {
     tahsin: 'Tahsin',
     ziyadahBacaan: 'Ziyadah Bacaan',
@@ -729,15 +725,37 @@ const Shared = (() => {
     return dateKey(date);
   }
 
-  function weeklyDepositGroups(filters) {
+  // Periode rekap setoran: rentang tanggal bebas. Nilai `week` (mingguan lama)
+  // masih diterima supaya tautan atau pemanggilan sebelumnya tidak rusak.
+  function depositPeriod(filters) {
+    const f = filters || {};
+    let dari = f.dari || '';
+    let sampai = f.sampai || dari;
+    if (!dari && f.week) {
+      dari = mondayOf(f.week);
+      sampai = Store.tambahHari(dari, 6);
+    }
+    if (!dari) {
+      const today = Store.todayStr();
+      dari = Store.tambahHari(today, -6);
+      sampai = today;
+    }
+    if (sampai < dari) { const temp = dari; dari = sampai; sampai = temp; }
+    // Periode dibatasi supaya tabel tidak melebar tanpa batas.
+    const batas = Store.tambahHari(dari, 60);
+    if (sampai > batas) sampai = batas;
+    return { dari, sampai, days: Store.tanggalRange(dari, sampai) };
+  }
+
+  // Periode bebas (bukan lagi Senin-Jumat). Setiap tanggal di rentang menjadi
+  // satu kolom, sehingga tabel ikut mengikuti tanggal yang dipilih.
+  function depositGroups(filters) {
     const db = Store.get();
     const f = filters || {};
-    const week = mondayOf(f.week);
-    const start = new Date(week + 'T12:00:00');
-    const days = HARI_SETORAN.map(h => {
-      const date = new Date(start);
-      date.setDate(start.getDate() + h.offset);
-      return { ...h, tanggal: dateKey(date) };
+    const period = depositPeriod(f);
+    const days = period.days.map(tanggal => {
+      const date = new Date(tanggal + 'T12:00:00');
+      return { tanggal, label: HARI_SINGKAT[date.getDay()] };
     });
     const setoran = new Map();
     Object.keys(JENIS_SETORAN).forEach(type => {
@@ -765,18 +783,27 @@ const Shared = (() => {
           if (day.tanggal > today) return { status: 'future', types: [] };
           return types.length ? { status: 'submitted', types } : { status: 'missing', types: [] };
         });
-        return { s, programs, cells, missing: cells.filter(c => c.status === 'missing').length };
+        const absensi = Store.rekapKehadiranSantri(s.id, period.dari, period.sampai);
+        return {
+          s, programs, cells,
+          missing: cells.filter(c => c.status === 'missing').length,
+          setoran: cells.filter(c => c.status === 'submitted').length,
+          hadir: absensi.total.Hadir,
+          izin: absensi.total.Izin,
+          sakit: absensi.total.Sakit,
+          alfa: absensi.total.Alfa,
+          persen: absensi.total.slot ? Math.round((absensi.total.Hadir / absensi.total.slot) * 100) : 0
+        };
       });
       return { h, rows };
     });
-    return { week, days, groups };
+    return { period, days, groups };
   }
 
   function renderRekapSetoranMingguan(filters) {
-    const recap = weeklyDepositGroups(filters);
+    const recap = depositGroups(filters);
     const allowMakeup = !!(filters && filters.allowMakeup);
     const allowJpgDownload = !!(filters && filters.allowJpgDownload);
-    const weekEnd = recap.days[recap.days.length - 1].tanggal;
     const groups = recap.groups.map(group => {
       const body = group.rows.map((row, index) => {
         const cells = row.cells.map((cell, dayIndex) => {
@@ -797,7 +824,10 @@ const Shared = (() => {
           <td><b>${UI.esc(row.s.nama)}</b><div class="muted" style="font-size:12px">${UI.esc(row.s.nis || '-')}</div></td>
           <td>${UI.esc(Store.programSummaryForSantri(row.s) || '-')}</td>
           ${cells}
+          <td class="center"><b>${row.setoran}</b></td>
           <td class="center"><b>${row.missing}</b></td>
+          <td class="center" style="font-size:12px" title="Hadir/Izin/Sakit/Alfa">${row.hadir}/${row.izin}/${row.sakit}/${row.alfa}</td>
+          <td class="center"><b>${row.persen}%</b></td>
         </tr>`;
       }).join('');
       return `<div class="clay-card mb">
@@ -809,13 +839,14 @@ const Shared = (() => {
           </div>
         </div>
         <div class="table-wrap"><table class="clay-table">
-          <thead><tr><th class="center">No</th><th>Santri</th><th>Level</th>${recap.days.map(day => `<th class="center">${day.label}<br><span style="font-weight:400;font-size:11px">${day.tanggal.slice(8)}</span></th>`).join('')}<th class="center">Belum</th></tr></thead>
+          <thead><tr><th class="center">No</th><th>Santri</th><th>Level</th>${recap.days.map(day => `<th class="center">${day.label}<br><span style="font-weight:400;font-size:11px">${day.tanggal.slice(8)}</span></th>`).join('')}<th class="center">Setor</th><th class="center">Belum</th><th class="center">Hadir/Izin/Sakit/Alfa</th><th class="center">%</th></tr></thead>
           <tbody>${body || '<tr><td colspan="9"><div class="empty">Belum ada santri aktif di halaqah ini.</div></td></tr>'}</tbody>
         </table></div>
       </div>`;
     }).join('');
+    const jumlahHari = recap.days.length;
     return `<div class="mb">
-      <div class="muted" style="font-size:13px;margin:0 0 12px">Pekan ${UI.esc(UI.fmtDate(recap.week))}–${UI.esc(UI.fmtDate(weekEnd))}. <span class="badge green">✓</span> sudah setoran; <span class="badge danger">Belum</span> belum setoran.${allowMakeup ? ' Klik <b>Bayar</b> untuk mencatat setoran pada tanggal yang terlewat.' : ''} Setoran dihitung dari Tahsin, Ziyadah Bacaan, Ziyadah Hafalan, dan Mutqin.</div>
+      <div class="muted" style="font-size:13px;margin:0 0 12px">Periode ${UI.esc(UI.fmtDate(recap.period.dari))} – ${UI.esc(UI.fmtDate(recap.period.sampai))} (${jumlahHari} hari). <span class="badge green">✓</span> sudah setoran; <span class="badge danger">Belum</span> belum setoran.${allowMakeup ? ' Klik <b>Bayar</b> untuk mencatat setoran pada tanggal yang terlewat.' : ''} Setoran dihitung dari Tahsin, Ziyadah Bacaan, Ziyadah Hafalan, dan Mutqin.</div>
       ${groups || '<div class="empty">Tidak ada halaqah yang sesuai dengan filter.</div>'}
     </div>`;
   }
@@ -861,7 +892,7 @@ const Shared = (() => {
   }
 
   function downloadRekapSetoranJpg(filters, halaqahId) {
-    const recap = weeklyDepositGroups(filters);
+    const recap = depositGroups(filters);
     const group = recap.groups.find(item => item.h.id === halaqahId);
     if (!group) {
       UI.toast('Data halaqah tidak ditemukan', 'error');
@@ -906,14 +937,14 @@ const Shared = (() => {
     ctx.fillText('TAHFIDZKU', padding, 67);
     ctx.fillStyle = '#1f2937';
     ctx.font = '700 35px Poppins, Arial, sans-serif';
-    ctx.fillText('Rekap Setoran Mingguan', padding, 116);
+    ctx.fillText('Rekap Setoran', padding, 116);
     ctx.fillStyle = '#166534';
     ctx.font = '700 25px Poppins, Arial, sans-serif';
     canvasText(ctx, group.h.nama, padding, 157, 900);
     ctx.fillStyle = '#4b5563';
     ctx.font = '500 18px Inter, Arial, sans-serif';
-    const weekEnd = recap.days[recap.days.length - 1].tanggal;
-    canvasText(ctx, `Pekan ${UI.fmtDate(recap.week)}–${UI.fmtDate(weekEnd)}`, padding, 190, 690);
+    const sampai = recap.days[recap.days.length - 1].tanggal;
+    canvasText(ctx, `Periode ${UI.fmtDate(recap.period.dari)}–${UI.fmtDate(sampai)}`, padding, 190, 690);
     canvasText(ctx, `Ustadz: ${Store.ustadzNamesForHalaqah(group.h).join(', ') || 'Belum ditetapkan'}`, padding + 720, 190, logicalWidth - padding - (padding + 720));
 
     const tableY = headerHeight;
@@ -1020,7 +1051,7 @@ const Shared = (() => {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `Rekap_Setoran_${safeFilename(group.h.nama)}_${recap.week}.jpg`;
+      anchor.download = `Rekap_Setoran_${safeFilename(group.h.nama)}_${recap.period.dari}_sd_${recap.period.sampai}.jpg`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();

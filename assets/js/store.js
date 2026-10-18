@@ -794,6 +794,99 @@ const Store = (() => {
     return Object.keys(latest).sort().map(key => latest[key]);
   }
 
+  /* ---------- Rekap kehadiran (totalan per periode) ----------
+     Alfa dihitung dari slot yang tidak punya catatan sama sekali, bukan dari
+     status "Alfa": absensi ustadz hanya punya Hadir/Izin/Sakit, dan catatan
+     absensi bisa kosong ketika ustadz belum mencatat. Dengan begitu angka alfa
+     selalu konsisten dengan "total hari x sesi - jumlah catatan". */
+  const SESI_REKAP = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta\u2019lim Malam'];
+
+  // Daftar tanggal inklusif. String YYYY-MM-DD bisa dibandingkan leksikografis
+  // sama dengan urutan kronologis.
+  function tanggalRange(dari, sampai) {
+    if (!dari || !sampai || sampai < dari) return [];
+    const list = [];
+    let cursor = dari;
+    while (cursor <= sampai && list.length <= 366) {
+      list.push(cursor);
+      const next = new Date(cursor + 'T12:00:00');
+      next.setDate(next.getDate() + 1);
+      cursor = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+    }
+    return list;
+  }
+
+  function tambahHari(iso, jumlah) {
+    const date = new Date(iso + 'T12:00:00');
+    date.setDate(date.getDate() + jumlah);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  }
+
+  function kosongkanAngka(status) {
+    return { Hadir: 0, Izin: 0, Sakit: 0, Alfa: 0, ...status };
+  }
+
+  // Rekap kehadiran satu orang. `slotPerHari` = sesi mana saja yang dihitung,
+  // supaya sesi yang tidak dipakai tidak ikut menambah slot alfa.
+  function rekapKehadiranOrang(records, days, slotPerHari, sesiList) {
+    const total = kosongkanAngka();
+    sesiList.forEach(sesi => { total[sesi] = 0; });
+    const perSesi = {};
+    sesiList.forEach(sesi => { perSesi[sesi] = kosongkanAngka(); });
+
+    const daysSet = new Set(days);
+    (records || []).forEach(r => {
+      if (!daysSet.has(r.tanggal)) return;
+      const sesi = r.sesi || 'Subuh';
+      if (!sesiList.includes(sesi)) return;
+      perSesi[sesi][r.status] = (perSesi[sesi][r.status] || 0) + 1;
+      total[r.status] = (total[r.status] || 0) + 1;
+      total[sesi] += 1;
+    });
+
+    // Sisa slot kosong dihitung sebagai Alfa supaya total selalu konsisten:
+    // alfa = slot - (Hadir + Izin + Sakit).
+    sesiList.forEach(sesi => {
+      const slot = days.length * (slotPerHari.includes(sesi) ? 1 : 0);
+      const tercatat = (perSesi[sesi].Hadir || 0) + (perSesi[sesi].Izin || 0) + (perSesi[sesi].Sakit || 0);
+      perSesi[sesi].Alfa = Math.max(0, slot - tercatat);
+      total.Alfa += perSesi[sesi].Alfa;
+    });
+    total.slot = days.length * slotPerHari.length;
+    return { total, perSesi };
+  }
+
+  // Rekap kehadiran Santri per periode. Kehadiran dihitung satu status per sesi
+  // (paling baru), supaya koreksi absensi tidak terhitung dua kali.
+  function rekapKehadiranSantri(santriId, dari, sampai, sesiList) {
+    const list = sesiList || SESI_REKAP;
+    const days = tanggalRange(dari, sampai);
+    const records = dedupeKehadiran(
+      db.kehadiran.filter(k => k.santriId === santriId && days.includes(k.tanggal)));
+    return rekapKehadiranOrang(records, days, list, list);
+  }
+
+  // Rekap kehadiran Ustadz per periode. Alfa = sesi yang tanpa catatan absensi.
+  function rekapKehadiranUstadz(ustadzId, dari, sampai, sesiList) {
+    const list = sesiList || SESI_REKAP;
+    const days = tanggalRange(dari, sampai);
+    const records = dedupeAbsensiUstadz(
+      db.absensiUstadz.filter(a => a.ustadzId === ustadzId && days.includes(a.tanggal)));
+    return rekapKehadiranOrang(records, days, list, list);
+  }
+
+  // Absensi ustadz juga bisa terekam ganda bila ada koreksi cepat; ambil yang
+  // paling baru seperti pada kehadiran santri.
+  function dedupeAbsensiUstadz(records) {
+    const latest = {};
+    (records || []).forEach(a => {
+      const key = [a.ustadzId, a.tanggal, a.sesi || 'Subuh'].join('|');
+      const prev = latest[key];
+      if (!prev || (a._created || 0) >= (prev._created || 0)) latest[key] = a;
+    });
+    return Object.keys(latest).sort().map(key => latest[key]);
+  }
+
   function addNotif(userId, tipe, pesan) {
     db.notifikasi.unshift({ id: uid('n'), userId, tipe, pesan, tanggal: nowISO(), read: false });
     save();
@@ -875,6 +968,7 @@ const Store = (() => {
     waSend, waLog, waReady, waAutoEnabled, waSendWali, waStatus, waQrDataUrl,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,
     absensiUstadzOf, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,
+    rekapKehadiranSantri, rekapKehadiranUstadz, tanggalRange, tambahHari, SESI_REKAP,
     addNotif, notifFor, clearNotifs, checkSetoranTerlewat
   };
 })();
