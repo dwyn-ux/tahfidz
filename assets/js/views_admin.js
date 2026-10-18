@@ -408,9 +408,16 @@ const Admin = (() => {
     const primaryProgram = s && activePrograms.includes(s.level) ? s.level : activePrograms[0];
     const selectedTingkat = s ? Store.tingkatForSantri(s) : (Store.tingkatOptions()[0] || '');
     const selectedKelas = s ? Store.kelasForSantri(s) : '';
-    const kelasOptions = (tingkat, selected = '') => `<option value="">Pilih kelas</option>${UI.optionsFromList(
-      Store.kelasOptions(tingkat).map(kelas => ({ v: kelas, l: 'Kelas ' + kelas })), 'v', 'l', selected
-    )}`;
+    // Santri lama bisa menyimpan kelas yang sudah tidak ada di daftar (mis. "4"
+    // setelah daftar diubah jadi 4A/4B). Nilai lama tetap ditampilkan sebagai
+    // opsi supaya data tidak hilang diam-diam saat form disimpan.
+    const kelasOptions = (tingkat, selected = '') => {
+      const list = Store.kelasOptions(tingkat);
+      if (selected && !list.includes(selected)) list.push(selected);
+      return `<option value="">Pilih kelas</option>${UI.optionsFromList(
+        list.map(kelas => ({ v: kelas, l: 'Kelas ' + kelas })), 'v', 'l', selected
+      )}`;
+    };
     const halaqahOptions = program => {
       const selected = s ? (Store.halaqahForSantriProgram(s, program) || {}).id : '';
       const choices = db.halaqah.map(h => ({ v: h.id, l: halaqahOptionLabel(h) }));
@@ -475,7 +482,7 @@ const Admin = (() => {
             kelas: m.querySelector('#f-kelas').value
           };
           if (!data.nama) { UI.toast('Nama wajib diisi', 'error'); return; }
-          if (!data.tingkat || !data.kelas || !Store.kelasOptions(data.tingkat).includes(data.kelas)) {
+          if (!data.tingkat || !data.kelas) {
             UI.toast('Pilih tingkat dan kelas yang sesuai', 'error'); return;
           }
           const programs = [...m.querySelectorAll('[data-program-active]:checked')].map(input => input.value);
@@ -1068,7 +1075,7 @@ const Admin = (() => {
           <div style="flex:1">${UI.field('Halaqah', `<select class="clay-select" id="f-halaqah"><option value="">Semua</option>${UI.optionsFromList(db.halaqah.map(h => ({ v: h.nama, l: halaqahOptionLabel(h) })), 'v', 'l')}</select>`)}</div>
           <div style="flex:1">${UI.field('Level', `<select class="clay-select" id="f-level"><option value="">Semua</option>${UI.optionsFromList(db.levelTahfidz.map(l => ({ v: l, l })), 'v', 'l')}</select>`)}</div>
           <div style="flex:1">${UI.field('Tingkat', `<select class="clay-select" id="f-tingkat"><option value="">Semua</option>${UI.optionsFromList(Store.tingkatOptions().map(t => ({ v: t, l: t })), 'v', 'l')}</select>`)}</div>
-          <div style="flex:1">${UI.field('Kelas', `<select class="clay-select" id="f-kelas"><option value="">Semua</option>${UI.optionsFromList(Store.kelasOptions(Store.tingkatOptions()[0] || '').map(k => ({ v: k, l: 'Kelas ' + k })), 'v', 'l')}</select>`)}</div>
+          <div style="flex:1">${UI.field('Kelas', `<select class="clay-select" id="f-kelas" disabled><option value="">Pilih tingkat dahulu</option></select>`)}</div>
           <div style="flex:1">${UI.field('Status', `<select class="clay-select" id="f-status"><option value="">Semua</option><option>Aktif</option><option>Nonaktif</option></select>`)}</div>
         </div>
       </div>
@@ -1078,10 +1085,18 @@ const Admin = (() => {
       document.getElementById('laporan-content').innerHTML = Shared.renderLaporan(f);
       Shared.bindLaporanExport();
     };
+    // Kelas selalu mengikuti Tingkat: daftar kelas di luar tingkat terpilih tidak
+    // relevan, jadi dropdown-nya dinonaktifkan sampai tingkat dipilih.
     document.getElementById('f-tingkat').onchange = () => {
       const tingkat = document.getElementById('f-tingkat').value;
       const kelasSelect = document.getElementById('f-kelas');
-      kelasSelect.innerHTML = `<option value="">Semua</option>${UI.optionsFromList(Store.kelasOptions(tingkat).map(k => ({ v: k, l: 'Kelas ' + k })), 'v', 'l')}`;
+      if (!tingkat) {
+        kelasSelect.innerHTML = '<option value="">Pilih tingkat dahulu</option>';
+        kelasSelect.disabled = true;
+      } else {
+        kelasSelect.innerHTML = `<option value="">Semua</option>${UI.optionsFromList(Store.kelasOptions(tingkat).map(k => ({ v: k, l: 'Kelas ' + k })), 'v', 'l')}`;
+        kelasSelect.disabled = false;
+      }
       apply();
     };
     ['f-bulan', 'f-halaqah', 'f-level', 'f-kelas', 'f-status'].forEach(id => document.getElementById(id).onchange = apply);
@@ -1582,6 +1597,7 @@ const Admin = (() => {
     document.getElementById('view-content').innerHTML = `
       <div class="pill-tabs" id="set-tab-bar">
         <button class="pill active" data-set-tab="lembaga">Lembaga</button>
+        <button class="pill" data-set-tab="kelas">Kelas &amp; Tingkat</button>
         <button class="pill" data-set-tab="notifikasi">Notifikasi</button>
         <button class="pill" data-set-tab="wa">WhatsApp</button>
         <button class="pill" data-set-tab="akun">Akun &amp; Data</button>
@@ -1617,6 +1633,35 @@ const Admin = (() => {
             <span id="s-setoran-label" style="font-size:13px">${s.setoranMulti ? 'Berkali-kali per hari' : 'Sekali sehari'}</span>
           </label>
         </div>
+      </div>
+      </div>
+      <div data-set-panel="kelas" style="display:none">
+      <div class="clay-card mb">
+        <div class="section-title">Tingkat</div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">Tingkat pendidikan yang dipakai, misalnya TPQ, SD, SMP. Setiap tingkat punya daftar kelas sendiri.</div>
+        <div class="row">
+          <input class="clay-input" id="kt-tingkat-nama" placeholder="Contoh: SMP" autocomplete="off">
+          <button class="clay-btn secondary" id="kt-add-tingkat" type="button">+ Tambah Tingkat</button>
+        </div>
+        <div class="table-wrap mt"><table class="clay-table">
+          <thead><tr><th>Tingkat</th><th>Jumlah Kelas</th><th>Aksi</th></tr></thead>
+          <tbody id="kt-tingkat-list"></tbody>
+        </table></div>
+      </div>
+      <div class="clay-card">
+        <div class="section-title">Kelas per Tingkat</div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">Nama kelas memakai format nomor + rombongan, misalnya <b>7A</b> dan <b>7B</b> untuk Kelas 7A dan 7B.</div>
+        <div class="row">
+          <div style="flex:1">${UI.field('Tingkat', `<select class="clay-select" id="kt-tingkat"></select>`)}</div>
+          <div style="flex:1">${UI.field('Kelas', `<input class="clay-input" id="kt-kelas-nama" placeholder="Contoh: 7A" autocomplete="off">`)}</div>
+          <div style="flex:0 0 auto;display:flex;align-items:flex-end;padding-bottom:2px">
+            <button class="clay-btn primary" id="kt-add-kelas" type="button">+ Tambah Kelas</button>
+          </div>
+        </div>
+        <div class="table-wrap mt"><table class="clay-table">
+          <thead><tr><th>Kelas</th><th>Santri</th><th>Ta’lim</th><th>Aksi</th></tr></thead>
+          <tbody id="kt-kelas-list"></tbody>
+        </table></div>
       </div>
       </div>
       <div data-set-panel="notifikasi">
@@ -1715,10 +1760,106 @@ const Admin = (() => {
       </div>
       <div class="clay-card" style="margin-top:16px">
         <div class="row" style="align-items:center">
-          <span class="muted" style="font-size:13px">Perubahan pada tab mana pun langsung ikut disimpan saat tombol ditekan.</span>
+          <span class="muted" style="font-size:13px">Perubahan pada tab mana pun ikut disimpan saat tombol ditekan. Tab <b>Kelas &amp; Tingkat</b> langsung tersimpan sendiri.</span>
           <button class="clay-btn primary" id="btn-save" style="margin-left:auto">Simpan Pengaturan</button>
         </div>
       </div>`;
+    /* Tab: Kelas & Tingkat ------------------------------------------------
+       Tingkat dan kelas menyimpan datanya sendiri (bukan lewat tombol Simpan
+       di bawah), karena kelas juga dipakai form Santri dan penugasan Ta'lim:
+       perubahan harus langsung berlaku tanpa menunggu tab lain disimpan. */
+    let ktTingkatAktif = Store.tingkatOptions()[0] || '';
+    function renderKelasTingkat() {
+      const tingkatList = Store.tingkatOptions();
+      if (!tingkatList.includes(ktTingkatAktif)) ktTingkatAktif = tingkatList[0] || '';
+
+      document.getElementById('kt-tingkat-list').innerHTML = tingkatList.length
+        ? tingkatList.map(t => `<tr>
+            <td><b>${UI.esc(t)}</b></td>
+            <td>${Store.kelasOptions(t).length} kelas</td>
+            <td><button class="clay-btn sm danger" type="button" data-kt-del-tingkat="${UI.esc(t)}">Hapus</button></td>
+          </tr>`).join('')
+        : '<tr><td colspan="3"><div class="empty">Belum ada tingkat.</div></td></tr>';
+
+      const select = document.getElementById('kt-tingkat');
+      select.innerHTML = UI.optionsFromList(tingkatList.map(t => ({ v: t, l: t })), 'v', 'l', ktTingkatAktif);
+
+      const kelasList = ktTingkatAktif ? Store.kelasOptions(ktTingkatAktif) : [];
+      document.getElementById('kt-kelas-list').innerHTML = kelasList.length
+        ? kelasList.map(k => {
+            const santris = Store.jumlahSantriKelas(ktTingkatAktif, k);
+            const talim = Store.kelasDipakaiDiTalim(ktTingkatAktif, k);
+            return `<tr>
+              <td><b>Kelas ${UI.esc(k)}</b></td>
+              <td>${santris} santri</td>
+              <td>${talim ? '<span class="badge green">Dipakai</span>' : '<span class="muted">-</span>'}</td>
+              <td><button class="clay-btn sm danger" type="button" data-kt-del-kelas="${UI.esc(k)}">Hapus</button></td>
+            </tr>`;
+          }).join('')
+        : `<tr><td colspan="4"><div class="empty">Belum ada kelas di tingkat ini.</div></td></tr>`;
+
+      document.getElementById('kt-add-kelas').disabled = !ktTingkatAktif;
+      document.querySelectorAll('[data-kt-del-tingkat]').forEach(button => button.onclick = () => {
+        const target = button.dataset.ktDelTingkat;
+        // Hapus tingkat ikut memeriksa dampaknya, karena kelasnya masih bisa
+        // tercatat pada penugasan Ta'lim atau jurnal lama.
+        const kelas = Store.kelasOptions(target);
+        const terpakai = kelas.filter(k => Store.kelasDipakaiDiTalim(target, k));
+        const jumlahSantri = kelas.map(k => Store.jumlahSantriKelas(target, k)).reduce((a, b) => a + b, 0);
+        const catatan = [];
+        if (terpakai.length) catatan.push(`${terpakai.length} kelas masih dipakai penugasan Ta’lim`);
+        if (jumlahSantri) catatan.push(`${jumlahSantri} santri`);
+        UI.confirmDialog('Hapus Tingkat', `Hapus tingkat ${target} beserta ${kelas.length} kelasnya?`
+          + (catatan.length ? ' Catatan: ' + catatan.join(', ') + '. Data riwayat tidak dihapus.' : ''), () => {
+            Store.hapusTingkat(target);
+            renderKelasTingkat();
+            UI.toast('Tingkat dihapus', 'success');
+          });
+      });
+      document.querySelectorAll('[data-kt-del-kelas]').forEach(button => button.onclick = () => {
+        const target = button.dataset.ktDelKelas;
+        const santris = Store.jumlahSantriKelas(ktTingkatAktif, target);
+        const talim = Store.kelasDipakaiDiTalim(ktTingkatAktif, target);
+        const catatan = [];
+        if (santris) catatan.push(`${santris} santri`);
+        if (talim) catatan.push('masih dipakai penugasan Ta’lim');
+        UI.confirmDialog('Hapus Kelas', `Hapus Kelas ${target} dari tingkat ${ktTingkatAktif}?`
+          + (catatan.length ? ' Catatan: ' + catatan.join(', ') + '. Data riwayat tidak dihapus.' : ''), () => {
+            Store.hapusKelas(ktTingkatAktif, target);
+            renderKelasTingkat();
+            UI.toast('Kelas dihapus', 'success');
+          });
+      });
+    }
+    document.getElementById('kt-add-tingkat').onclick = () => {
+      const input = document.getElementById('kt-tingkat-nama');
+      const hasil = Store.simpanTingkat(input.value);
+      if (!hasil.ok) { UI.toast(hasil.msg, 'error'); return; }
+      ktTingkatAktif = input.value.trim();
+      input.value = '';
+      renderKelasTingkat();
+      UI.toast('Tingkat ditambahkan', 'success');
+    };
+    document.getElementById('kt-add-kelas').onclick = () => {
+      const input = document.getElementById('kt-kelas-nama');
+      const hasil = Store.simpanKelas(ktTingkatAktif, input.value);
+      if (!hasil.ok) { UI.toast(hasil.msg, 'error'); return; }
+      input.value = '';
+      renderKelasTingkat();
+      UI.toast('Kelas ditambahkan', 'success');
+    };
+    document.getElementById('kt-tingkat').onchange = event => {
+      ktTingkatAktif = event.target.value;
+      renderKelasTingkat();
+    };
+    document.getElementById('kt-tingkat-nama').onkeydown = event => {
+      if (event.key === 'Enter') { event.preventDefault(); document.getElementById('kt-add-tingkat').click(); }
+    };
+    document.getElementById('kt-kelas-nama').onkeydown = event => {
+      if (event.key === 'Enter') { event.preventDefault(); document.getElementById('kt-add-kelas').click(); }
+    };
+    renderKelasTingkat();
+
     document.getElementById('s-setoran-multi').onclick = function() {
       this.classList.toggle('on');
       const on = this.classList.contains('on');

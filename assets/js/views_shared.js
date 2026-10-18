@@ -425,7 +425,13 @@ const Shared = (() => {
     if (f.halaqah) santri = santri.filter(s => Store.santriHasHalaqah(s, f.halaqah));
     if (f.level) santri = santri.filter(s => Store.santriHasProgram(s, f.level));
     if (f.tingkat) santri = santri.filter(s => Store.tingkatForSantri(s) === f.tingkat);
-    if (f.kelas) santri = santri.filter(s => Store.kelasForSantri(s) === f.kelas);
+    // Kelas hanya bermakna di dalam tingkatnya: "7A" di SMP bukan "7A" di SD.
+    // Tanpa batasan tingkat, filter ini ikut meny Santri tingkat lain yang
+    // kebetulan punya nama kelas sama.
+    if (f.kelas && f.tingkat) {
+      santri = santri.filter(s => Store.tingkatForSantri(s) === f.tingkat
+        && Store.kelasForSantri(s) === f.kelas);
+    }
     if (f.status) santri = santri.filter(s => s.status === f.status);
     const bulan = f.bulan || Store.todayStr().slice(0, 7);
     return santri.map((s, i) => {

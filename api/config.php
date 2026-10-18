@@ -410,11 +410,14 @@ function defaultSettings(): array {
         'logo' => '',
         'setoranMulti' => false,
         'tingkat' => ['TPQ', 'SD', 'SMP', 'SMA'],
+        // Setiap nomor kelas punya dua rombongan (A dan B), jadi "Kelas 7A"
+        // dan "Kelas 7B". Daftar ini hanya nilai awal; admin dapat
+        // menambah/menghapusnya lewat Settings -> Kelas & Tingkat.
         'kelasPerTingkat' => [
-            'TPQ' => ['1', '2', '3', '4', '5', '6'],
-            'SD' => ['1', '2', '3', '4', '5', '6'],
-            'SMP' => ['7', '8', '9'],
-            'SMA' => ['10', '11', '12'],
+            'TPQ' => ['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5A', '5B', '6A', '6B'],
+            'SD' => ['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5A', '5B', '6A', '6B'],
+            'SMP' => ['7A', '7B', '8A', '8B', '9A', '9B'],
+            'SMA' => ['10A', '10B', '11A', '11B', '12A', '12B'],
         ],
         'talimMapel' => [],
         'talimMalam' => ['ustadzIds' => [], 'judulKitab' => '', 'bab' => ''],

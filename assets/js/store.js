@@ -10,12 +10,34 @@ const TOKEN_KEY = 'tahfidzku_token_v1';
 
 const Store = (() => {
   const DEFAULT_TINGKAT = ['TPQ', 'SD', 'SMP', 'SMA'];
+  // Setiap nomor kelas punya dua rombongan (A dan B), jadi "Kelas 7A" dan
+  // "Kelas 7B". Nilai ini hanya dipakai sebagai daftar awal; admin dapat
+  // menambah/menghapusnya lewat Settings → Kelas & Tingkat.
   const DEFAULT_KELAS_PER_TINGKAT = {
-    TPQ: ['1', '2', '3', '4', '5', '6'],
-    SD: ['1', '2', '3', '4', '5', '6'],
-    SMP: ['7', '8', '9'],
-    SMA: ['10', '11', '12']
+    TPQ: ['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5A', '5B', '6A', '6B'],
+    SD: ['1A', '1B', '2A', '2B', '3A', '3B', '4A', '4B', '5A', '5B', '6A', '6B'],
+    SMP: ['7A', '7B', '8A', '8B', '9A', '9B'],
+    SMA: ['10A', '10B', '11A', '11B', '12A', '12B']
   };
+  // Salinan dalam: daftar kelas bisa diubah admin lewat Settings, jadi jangan
+  // sampai array bawaan ikut berubah karena berbagi referensi.
+  function defaultKelasPerTingkat() {
+    const result = {};
+    Object.keys(DEFAULT_KELAS_PER_TINGKAT).forEach(name => {
+      result[name] = DEFAULT_KELAS_PER_TINGKAT[name].slice();
+    });
+    return result;
+  }
+  // "10A" harus urut sebelum "1B", jadi pengurutan membandingkan bagian angka
+  // dulu lalu huruf. Perbandingan string biasa akan salah ("10" < "1B").
+  function naturalKelasSort(a, b) {
+    const split = v => String(v).match(/^(\d*)(.*)$/).slice(1);
+    const [numA, restA] = split(a);
+    const [numB, restB] = split(b);
+    const diff = (Number(numA) || 0) - (Number(numB) || 0);
+    if (diff) return diff;
+    return restA.localeCompare(restB, 'id');
+  }
   let db = defaultDB();
   let saveChain = Promise.resolve();
   // Salinan data terakhir yang dimuat/disimpan. Ini dipakai agar browser
@@ -32,7 +54,7 @@ const Store = (() => {
         standarPenilaian: 'A (90-100), B (80-89), C (70-79), D (<70)',
         jamBelajar: '07:00 - 09:00', tema: 'Claymorphism',
         defaultPasswordFormat: '12345678', logo: '', setoranMulti: false,
-        tingkat: DEFAULT_TINGKAT.slice(), kelasPerTingkat: Object.assign({}, DEFAULT_KELAS_PER_TINGKAT), talimMapel: [],
+        tingkat: DEFAULT_TINGKAT.slice(), kelasPerTingkat: defaultKelasPerTingkat(), talimMapel: [],
         talimMalam: { ustadzIds: [], judulKitab: '', bab: '' },
         juzOrder: [30,29,28,27,26,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
         notifActive: true, notifMaxPerDay: 3, notifWali: true, notifUstadz: true,
@@ -476,12 +498,12 @@ const Store = (() => {
       settings.tingkat = settings.tingkat.filter(Boolean);
     }
     if (!settings.kelasPerTingkat || typeof settings.kelasPerTingkat !== 'object' || Array.isArray(settings.kelasPerTingkat)) {
-      settings.kelasPerTingkat = Object.assign({}, DEFAULT_KELAS_PER_TINGKAT);
+      settings.kelasPerTingkat = defaultKelasPerTingkat();
     } else {
       settings.tingkat.forEach(name => {
         const values = settings.kelasPerTingkat[name];
         settings.kelasPerTingkat[name] = (Array.isArray(values) && values.length ? values : (DEFAULT_KELAS_PER_TINGKAT[name] || []))
-          .map(String).filter(Boolean);
+          .map(String).map(v => v.trim()).filter(Boolean);
       });
     }
     if (!Array.isArray(settings.talimMapel)) settings.talimMapel = [];
@@ -515,13 +537,84 @@ const Store = (() => {
     const kelasPerTingkat = {};
     tingkat.forEach(name => {
       const values = Array.isArray(source[name]) && source[name].length ? source[name] : (DEFAULT_KELAS_PER_TINGKAT[name] || []);
-      kelasPerTingkat[name] = values.map(String).filter(Boolean);
+      // Daftar bisa berada di luar urutan natural setelah admin menambah kelas
+      // baru lewat Settings, jadi selalu diurutkan saat dibaca.
+      kelasPerTingkat[name] = values.map(String).filter(Boolean).sort(naturalKelasSort);
     });
     return { tingkat, kelasPerTingkat };
   }
 
   function tingkatOptions() { return educationSettings().tingkat; }
   function kelasOptions(tingkat) { return educationSettings().kelasPerTingkat[tingkat] || []; }
+
+  /* ---------------- CRUD tingkat & kelas (Settings) ----------------
+     Nilai disimpan apa adanya di settings; normalisasi hanya ditegakkan di
+     educationSettings() supaya perubahan admin langsung terlihat tanpa perlu
+     memuat ulang. */
+
+  function tingkatAda(nama) {
+    const target = String(nama || '').trim();
+    return !!target && tingkatOptions().includes(target);
+  }
+
+  function simpanTingkat(nama) {
+    const value = String(nama || '').trim();
+    if (!value) return { ok: false, msg: 'Nama tingkat wajib diisi.' };
+    if (tingkatAda(value)) return { ok: false, msg: 'Tingkat "' + value + '" sudah ada.' };
+    normalizeSettings();
+    db.settings.tingkat.push(value);
+    db.settings.kelasPerTingkat[value] = [];
+    save();
+    return { ok: true };
+  }
+  function hapusTingkat(nama) {
+    normalizeSettings();
+    db.settings.tingkat = db.settings.tingkat.filter(item => item !== nama);
+    delete db.settings.kelasPerTingkat[nama];
+    save();
+    return { ok: true };
+  }
+  function simpanKelas(tingkat, kelas) {
+    const t = String(tingkat || '').trim();
+    const value = String(kelas || '').trim();
+    if (!t) return { ok: false, msg: 'Pilih tingkat lebih dulu.' };
+    if (!value) return { ok: false, msg: 'Nama kelas wajib diisi.' };
+    normalizeSettings();
+    const list = Array.isArray(db.settings.kelasPerTingkat[t]) ? db.settings.kelasPerTingkat[t] : [];
+    if (list.map(String).some(item => item.toLowerCase() === value.toLowerCase())) {
+      return { ok: false, msg: 'Kelas "' + value + '" sudah ada di ' + t + '.' };
+    }
+    list.push(value);
+    db.settings.kelasPerTingkat[t] = list;
+    save();
+    return { ok: true };
+  }
+  function hapusKelas(tingkat, kelas) {
+    normalizeSettings();
+    const list = Array.isArray(db.settings.kelasPerTingkat[tingkat]) ? db.settings.kelasPerTingkat[tingkat] : [];
+    db.settings.kelasPerTingkat[tingkat] = list.filter(item => item !== kelas);
+    save();
+    return { ok: true };
+  }
+
+  // Semua kunci kelas yang pernah dipakai penugasan Ta'lim, supaya Settings
+  // bisa memperingatkan sebelum kelas dihapus dan assignment jadi yatim.
+  function talimAssignmentsKelasKeys() {
+    const keys = [];
+    db.ustadz.forEach(ustadz => {
+      (Array.isArray(ustadz.talimMengajar) ? ustadz.talimMengajar : []).forEach(item => {
+        (Array.isArray(item.kelasKeys) ? item.kelasKeys : []).forEach(key => keys.push(key));
+      });
+    });
+    return keys;
+  }
+  function kelasDipakaiDiTalim(tingkat, kelas) {
+    return talimAssignmentsKelasKeys().includes(talimClassKey(tingkat, kelas));
+  }
+  function jumlahSantriKelas(tingkat, kelas) {
+    return db.santri.filter(s =>
+      tingkatForSantri(s) === tingkat && kelasForSantri(s) === kelas).length;
+  }
 
   function tingkatForSantri(santri) {
     if (!santri) return '';
@@ -777,6 +870,7 @@ const Store = (() => {
     recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahById, findHalaqahByName, ustadzIdsForHalaqah, ustadzNamesForHalaqah, halaqahHasUstadz, findHalaqahForUstadz,
     activeProgramsForSantri, halaqahForSantriProgram, halaqahForSantri, santriHasProgram, santriHasHalaqah, programsForSantriHalaqah, configureSantriPrograms, programSummaryForSantri, halaqahSummaryForSantri,
     tingkatOptions, kelasOptions, tingkatForSantri, kelasForSantri, normalizeSantriEducation, kelasLabel, educationLabel,
+    simpanTingkat, hapusTingkat, simpanKelas, hapusKelas, tingkatAda, kelasDipakaiDiTalim, jumlahSantriKelas, naturalKelasSort,
     talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
     waSend, waLog, waReady, waAutoEnabled, waSendWali, waStatus, waQrDataUrl,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,
