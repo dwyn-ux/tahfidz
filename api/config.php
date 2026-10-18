@@ -352,6 +352,7 @@ function defaultSettings(): array {
             'SMA' => ['10', '11', '12'],
         ],
         'talimMapel' => [],
+        'talimMalam' => ['ustadzIds' => [], 'judulKitab' => '', 'bab' => ''],
         'notifActive' => true,
         'notifMaxPerDay' => 3,
         'notifWali' => true,

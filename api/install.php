@@ -66,7 +66,6 @@ try {
         ['id' => 'mapel_akhlak', 'nama' => 'Akhlak'],
         ['id' => 'mapel_hadits', 'nama' => 'Hadits'],
     ];
-    saveSettings($seedSettings);
 
     $ins = function ($type, $obj) {
         $id = $obj['id'] ?? uid($type);
@@ -87,6 +86,13 @@ try {
         ]];
     $u1id = $ins('ustadz', $u1);
     $u2id = $ins('ustadz', $u2);
+
+    $seedSettings['talimMalam'] = [
+        'ustadzIds' => [$u1id, $u2id],
+        'judulKitab' => 'Riyadhus Shalihin',
+        'bab' => 'Bab Keikhlasan',
+    ];
+    saveSettings($seedSettings);
 
     $ins('halaqah', ['nama' => 'Halaqah 1', 'ustadz' => $u1['nama'], 'level' => 'Ziyadah', 'jumlahSantri' => 0, 'hari' => 'Senin-Rabu-Jumat', 'jam' => '07:00-08:30', 'ruangan' => 'Ruang A']);
     $ins('halaqah', ['nama' => 'Halaqah 2', 'ustadz' => $u2['nama'], 'level' => 'Tahsin', 'jumlahSantri' => 0, 'hari' => 'Selasa-Kamis-Sabtu', 'jam' => '07:00-08:30', 'ruangan' => 'Ruang B']);

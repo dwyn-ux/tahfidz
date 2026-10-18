@@ -33,6 +33,7 @@ const Store = (() => {
         jamBelajar: '07:00 - 09:00', tema: 'Claymorphism',
         defaultPasswordFormat: '12345678', logo: '', setoranMulti: false,
         tingkat: DEFAULT_TINGKAT.slice(), kelasPerTingkat: Object.assign({}, DEFAULT_KELAS_PER_TINGKAT), talimMapel: [],
+        talimMalam: { ustadzIds: [], judulKitab: '', bab: '' },
         juzOrder: [30,29,28,27,26,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
         notifActive: true, notifMaxPerDay: 3, notifWali: true, notifUstadz: true,
         notifAbsensiWali: true, notifAbsensiPeriode: 'harian',
@@ -474,7 +475,22 @@ const Store = (() => {
     if (!Array.isArray(settings.talimMapel)) settings.talimMapel = [];
     settings.talimMapel = settings.talimMapel.filter(item => item && item.id && item.nama)
       .map(item => ({ id: item.id, nama: String(item.nama) }));
+    if (!settings.talimMalam || typeof settings.talimMalam !== 'object' || Array.isArray(settings.talimMalam)) settings.talimMalam = {};
+    settings.talimMalam.ustadzIds = Array.isArray(settings.talimMalam.ustadzIds) ? settings.talimMalam.ustadzIds.filter(Boolean) : [];
+    settings.talimMalam.judulKitab = String(settings.talimMalam.judulKitab || '');
+    settings.talimMalam.bab = String(settings.talimMalam.bab || '');
     return settings;
+  }
+
+  // Pengaturan Ta'lim Malam: ustadz pengampu + materi default untuk jurnal.
+  function talimMalamSettings() {
+    normalizeSettings();
+    const value = db.settings.talimMalam;
+    return {
+      ustadzIds: value.ustadzIds.filter(id => db.ustadz.some(u => u.id === id)),
+      judulKitab: value.judulKitab,
+      bab: value.bab
+    };
   }
 
   function educationSettings() {
@@ -749,7 +765,7 @@ const Store = (() => {
     recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahById, findHalaqahByName, ustadzIdsForHalaqah, ustadzNamesForHalaqah, halaqahHasUstadz, findHalaqahForUstadz,
     activeProgramsForSantri, halaqahForSantriProgram, halaqahForSantri, santriHasProgram, santriHasHalaqah, programsForSantriHalaqah, configureSantriPrograms, programSummaryForSantri, halaqahSummaryForSantri,
     tingkatOptions, kelasOptions, tingkatForSantri, kelasForSantri, normalizeSantriEducation, kelasLabel, educationLabel,
-    talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, search,
+    talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
     waSend, waLog, waReady, waAutoEnabled, waSendWali,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,
     absensiUstadzOf, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,

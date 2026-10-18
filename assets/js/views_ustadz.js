@@ -463,6 +463,7 @@ const Ustadz = (() => {
       .sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
     const rows = journals.map(j => `<tr>
       <td>${UI.fmtDate(j.tanggal)}</td><td>${UI.esc(j.ustadz || '-')}</td>
+      <td>${UI.esc(j.mapel || '-')}</td><td>${UI.esc(j.kelas ? Store.kelasLabel(j.tingkat, j.kelas) : '-')}</td>
       <td><b>${UI.esc(j.judulKitab)}</b></td><td>${UI.esc(j.bab)}</td>
       <td>${UI.esc(j.pembahasan)}</td><td>${UI.esc(j.halaman)}</td>
       <td><button class="clay-btn sm ghost" type="button" data-continue-talim="${UI.esc(j.id)}">Lanjutkan</button></td>
@@ -473,8 +474,8 @@ const Ustadz = (() => {
           <div><div class="section-title" style="margin:0">Jurnal Kemajuan Ta’lim Malam</div><div class="muted" style="font-size:13px">Gunakan tombol Lanjutkan pada histori untuk memakai data jurnal sebelumnya.</div></div>
           <div class="row"><button class="clay-btn ghost" id="btn-talim-absen">Absensi Ta’lim Malam</button><button class="clay-btn primary" id="btn-talim-add">+ Isi Jurnal</button></div>
         </div>
-        <div class="table-wrap mt"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Ustadz</th><th>Judul Kitab</th><th>Bab</th><th>Pembahasan</th><th>Halaman</th><th>Aksi</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="7"><div class="empty">Belum ada jurnal ta’lim malam.</div></td></tr>'}</tbody></table></div>
+        <div class="table-wrap mt"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Ustadz</th><th>Mapel</th><th>Tingkat & Kelas</th><th>Judul Kitab</th><th>Bab</th><th>Pembahasan</th><th>Halaman</th><th>Aksi</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="9"><div class="empty">Belum ada jurnal ta’lim malam.</div></td></tr>'}</tbody></table></div>
       </div>`;
     document.getElementById('btn-talim-absen').onclick = () => App.navigate('ustadz_talim_absensi');
     document.getElementById('btn-talim-add').onclick = () => talimForm();
@@ -499,32 +500,44 @@ const Ustadz = (() => {
     const copiedFrom = sourceJournal
       ? `<div class="badge blue" style="margin-bottom:12px">Data dilanjutkan dari jurnal ${UI.esc(UI.fmtDate(source.tanggal))}. Silakan sesuaikan materi atau halaman terbaru.</div>`
       : '';
+    const malamDefaults = Store.talimMalamSettings();
+    const defaultUstadzId = source.ustadzId || malamDefaults.ustadzIds[0] || '';
     const body = `
       ${copiedFrom}
       ${UI.field('Tanggal', `<input class="clay-input" id="f-talim-tgl" type="date" value="${Store.todayStr()}">`)}
       ${UI.field('Ustadz', isAdmin
-        ? `<select class="clay-select" id="f-talim-ustadz"><option value="">- Pilih Ustadz -</option>${UI.optionsFromList(db.ustadz.map(u => ({ v: u.id, l: u.nama })), 'v', 'l', source.ustadzId || '')}</select>`
+        ? `<select class="clay-select" id="f-talim-ustadz"><option value="">- Pilih Ustadz -</option>${UI.optionsFromList(db.ustadz.map(u => ({ v: u.id, l: u.nama })), 'v', 'l', defaultUstadzId)}</select>`
         : `<input class="clay-input" value="${UI.esc(currentUstadz?.nama || 'Ustadz')}" disabled>`)}
-      ${UI.field('Judul Kitab', `<input class="clay-input" id="f-talim-kitab" placeholder="Contoh: Riyadhus Shalihin" value="${UI.esc(source.judulKitab || '')}">`)}
-      ${UI.field('Bab', `<input class="clay-input" id="f-talim-bab" placeholder="Contoh: Bab Keikhlasan" value="${UI.esc(source.bab || '')}">`)}
+      ${UI.field('Mapel', `<select class="clay-select" id="f-talim-mapel"></select>`)}
+      ${UI.field('Tingkat & Kelas', `<select class="clay-select" id="f-talim-kelas"></select><div class="muted" id="f-talim-assignment-info" style="font-size:12px;margin-top:4px"></div>`)}
+      ${UI.field('Judul Kitab', `<input class="clay-input" id="f-talim-kitab" placeholder="Contoh: Riyadhus Shalihin" value="${UI.esc(source.judulKitab || malamDefaults.judulKitab)}">`)}
+      ${UI.field('Bab', `<input class="clay-input" id="f-talim-bab" placeholder="Contoh: Bab Keikhlasan" value="${UI.esc(source.bab || malamDefaults.bab)}">`)}
       ${UI.field('Pembahasan', `<textarea class="clay-textarea" id="f-talim-bahas" placeholder="Ringkasan materi yang dibahas">${UI.esc(source.pembahasan || '')}</textarea>`)}
       ${UI.field('Halaman', `<input class="clay-input" id="f-talim-halaman" placeholder="Contoh: 12–15" value="${UI.esc(source.halaman || '')}">`)}`;
-    UI.openModal({
+    const modal = UI.openModal({
       title: sourceJournal ? 'Lanjutkan Jurnal Ta’lim Malam' : 'Isi Jurnal Ta’lim Malam', bodyHTML: body,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, close) => close() },
         { label: 'Simpan', cls: 'primary', onClick: async (m, close) => {
           const ustadzId = isAdmin ? m.querySelector('#f-talim-ustadz').value : currentUstadz?.id;
           const ustadz = db.ustadz.find(u => u.id === ustadzId);
+          const mapelId = m.querySelector('#f-talim-mapel').value;
+          const kelasKey = m.querySelector('#f-talim-kelas').value;
           const judulKitab = m.querySelector('#f-talim-kitab').value.trim();
           const bab = m.querySelector('#f-talim-bab').value.trim();
           const pembahasan = m.querySelector('#f-talim-bahas').value.trim();
           const halaman = m.querySelector('#f-talim-halaman').value.trim();
           if (!ustadz) { UI.toast('Pilih ustadz', 'error'); return; }
+          const assignment = Store.talimAssignmentsForUstadz(ustadz).find(item => item.mapel.id === mapelId);
+          if (!assignment || !kelasKey || !assignment.kelasKeys.includes(kelasKey)) {
+            UI.toast('Pilih mapel dan kelas sesuai penugasan Ta’lim', 'error'); return;
+          }
           if (!judulKitab || !bab || !pembahasan || !halaman) { UI.toast('Lengkapi judul kitab, bab, pembahasan, dan halaman', 'error'); return; }
           if (!db.jurnalTalim) db.jurnalTalim = [];
           const halaqah = Store.findHalaqahForUstadz(ustadz);
-          const journal = { id: journalId, tanggal: m.querySelector('#f-talim-tgl').value, ustadzId, ustadz: ustadz.nama, halaqah: halaqah?.nama || ustadz.halaqah || '', judulKitab, bab, pembahasan, halaman };
+          const mapel = Store.findTalimMapel(mapelId);
+          const pendidikan = Store.talimClassFromKey(kelasKey);
+          const journal = { id: journalId, tanggal: m.querySelector('#f-talim-tgl').value, ustadzId, ustadz: ustadz.nama, halaqah: halaqah?.nama || ustadz.halaqah || '', mapelId, mapel: mapel?.nama || '', tingkat: pendidikan.tingkat, kelas: pendidikan.kelas, judulKitab, bab, pembahasan, halaman };
           const existingIndex = db.jurnalTalim.findIndex(j => j.id === journalId);
           if (existingIndex === -1) {
             db.jurnalTalim.push(journal);
@@ -539,6 +552,30 @@ const Ustadz = (() => {
         } }
       ]
     });
+    const renderTalimChoices = () => {
+      const teacherId = isAdmin ? modal.modal.querySelector('#f-talim-ustadz').value : currentUstadz?.id;
+      const teacher = db.ustadz.find(u => u.id === teacherId);
+      const assignments = Store.talimAssignmentsForUstadz(teacher);
+      const mapelSelect = modal.modal.querySelector('#f-talim-mapel');
+      const kelasSelect = modal.modal.querySelector('#f-talim-kelas');
+      const info = modal.modal.querySelector('#f-talim-assignment-info');
+      const priorMapel = mapelSelect.value || source.mapelId;
+      const selectedMapel = assignments.some(item => item.mapel.id === priorMapel) ? priorMapel : assignments[0]?.mapel.id || '';
+      mapelSelect.innerHTML = `<option value="">Pilih mapel</option>${UI.optionsFromList(assignments.map(item => ({ v: item.mapel.id, l: item.mapel.nama })), 'v', 'l', selectedMapel)}`;
+      const selectedAssignment = assignments.find(item => item.mapel.id === mapelSelect.value);
+      const priorKelas = kelasSelect.value || (source.tingkat && source.kelas ? Store.talimClassKey(source.tingkat, source.kelas) : '');
+      const selectedKelas = selectedAssignment?.kelasKeys.includes(priorKelas) ? priorKelas : selectedAssignment?.kelasKeys[0] || '';
+      kelasSelect.innerHTML = `<option value="">Pilih tingkat & kelas</option>${UI.optionsFromList((selectedAssignment?.kelasKeys || []).map(key => ({ v: key, l: Store.talimClassLabel(key) })), 'v', 'l', selectedKelas)}`;
+      const disabled = !assignments.length;
+      mapelSelect.disabled = disabled;
+      kelasSelect.disabled = disabled;
+      info.textContent = disabled
+        ? 'Belum ada penugasan Ta’lim untuk ustadz ini. Minta admin mengatur mapel dan kelas di Settings → Ta’lim.'
+        : 'Pilihan hanya menampilkan mapel dan kelas yang ditugaskan admin.';
+    };
+    if (isAdmin) modal.modal.querySelector('#f-talim-ustadz').onchange = renderTalimChoices;
+    modal.modal.querySelector('#f-talim-mapel').onchange = renderTalimChoices;
+    renderTalimChoices();
   }
 
   /* ---------------- Pembelajaran ---------------- */
@@ -1126,7 +1163,7 @@ const Ustadz = (() => {
           <input class="clay-input" id="cari-santri" type="search" placeholder="Cari nama santri..." style="max-width:260px" autocomplete="off" />
         </div>
         <div class="table-wrap mt"><table class="clay-table">
-          <thead><tr><th>Santri</th><th>Kelas</th><th>Level</th><th>Total Hafalan</th><th>Nilai</th><th>Aksi</th></tr></thead>
+          <thead><tr><th>Santri</th><th>Tingkat & Kelas</th><th>Level</th><th>Total Hafalan</th><th>Nilai</th><th>Aksi</th></tr></thead>
           <tbody id="setoran-umum-body"></tbody>
         </table></div>
       </div>`;

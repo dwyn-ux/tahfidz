@@ -1370,6 +1370,17 @@ const Admin = (() => {
           <tbody id="talim-assignment-list"></tbody>
         </table></div>
       </div>
+      <div class="clay-card mb">
+        <div class="section-title">Ta’lim Malam</div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">Pilih ustadz pengampu dan isi materi default. Pilihan ini dipakai sebagai awal saat ustadz mengisi jurnal Ta’lim Malam.</div>
+        <div class="field-label">Ustadz Pengampu</div>
+        <div class="clay-card pad-sm" id="talim-malam-ustadz" style="margin-top:6px"></div>
+        <div class="row mt">
+          <div style="flex:1">${UI.field('Judul Kitab Default', `<input class="clay-input" id="talim-malam-kitab" placeholder="Contoh: Riyadhus Shalihin">`)}</div>
+          <div style="flex:1">${UI.field('Bab Default', `<input class="clay-input" id="talim-malam-bab" placeholder="Contoh: Bab Keikhlasan">`)}</div>
+        </div>
+        <div class="row mt"><button class="clay-btn primary" id="btn-talim-malam-save" type="button">Simpan Ta’lim Malam</button></div>
+      </div>
       </div>
       <div data-set-panel="notifikasi">
       <div class="clay-card mb">
@@ -1611,6 +1622,28 @@ const Admin = (() => {
       renderTalimSettings({ ustadzId, mapelId });
       UI.toast('Penugasan Ta’lim tersimpan', 'success');
     };
+    const renderTalimMalamSettings = (selectedIds) => {
+      const malam = Store.talimMalamSettings();
+      const ids = new Set(selectedIds || malam.ustadzIds);
+      const teachers = Store.get().ustadz.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+      document.getElementById('talim-malam-ustadz').innerHTML = teachers.length
+        ? teachers.map(u => `<label style="display:inline-flex;align-items:center;gap:6px;margin:4px 14px 4px 0;cursor:pointer"><input type="checkbox" data-talim-malam-ustadz value="${UI.esc(u.id)}" ${ids.has(u.id) ? 'checked' : ''}> ${UI.esc(u.nama)}</label>`).join('')
+        : '<span class="muted">Belum ada ustadz.</span>';
+      document.getElementById('talim-malam-kitab').value = malam.judulKitab;
+      document.getElementById('talim-malam-bab').value = malam.bab;
+    };
+    document.getElementById('btn-talim-malam-save').onclick = () => {
+      const data = Store.get();
+      const ustadzIds = [...document.querySelectorAll('[data-talim-malam-ustadz]:checked')].map(input => input.value);
+      const judulKitab = document.getElementById('talim-malam-kitab').value.trim();
+      const bab = document.getElementById('talim-malam-bab').value.trim();
+      if (!ustadzIds.length) { UI.toast('Pilih minimal satu ustadz pengampu', 'error'); return; }
+      data.settings.talimMalam = { ustadzIds, judulKitab, bab };
+      Store.save();
+      renderTalimMalamSettings(ustadzIds);
+      UI.toast('Pengaturan Ta’lim Malam tersimpan', 'success');
+    };
+    renderTalimMalamSettings();
     renderTalimSettings();
     document.getElementById('talim-mapel-nama').onkeydown = (e) => {
       if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-talim-add-mapel').click(); }

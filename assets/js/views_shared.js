@@ -451,6 +451,7 @@ const Shared = (() => {
       <td class="center">${r.no}</td>
       <td><b>${UI.esc(r.s.nama)}</b></td>
       <td>${UI.esc(r.s.nis)}</td>
+      <td>${UI.esc(Store.educationLabel(r.s))}</td>
       <td>${UI.esc(Store.halaqahSummaryForSantri(r.s))}</td>
       <td>${UI.esc(Store.programSummaryForSantri(r.s))}</td>
       <td class="center">${UI.esc(r.s.jk || '-')}</td>
@@ -465,8 +466,8 @@ const Shared = (() => {
       <div class="section-title"> Laporan Santri — ${UI.esc(bulanLabel(bulan))}</div>
       <div class="table-wrap">
         <table class="clay-table" id="laporan-table">
-          <thead><tr><th class="center">No</th><th>Santri</th><th>NIS</th><th>Halaqah</th><th>Level</th><th class="center">JK</th><th class="center">Total Hafalan</th><th class="center">Juz</th><th class="center">Rata² Nilai</th><th class="center">Subuh / Ashar / Maghrib / Isya / Ta'lim</th><th class="center">Kehadiran (${UI.esc(bulanLabel(bulan))})</th><th>Status</th></tr></thead>
-          <tbody>${body || `<tr><td colspan="12"><div class="empty">Tidak ada data.</div></td></tr>`}</tbody>
+          <thead><tr><th class="center">No</th><th>Santri</th><th>NIS</th><th>Tingkat & Kelas</th><th>Halaqah</th><th>Level</th><th class="center">JK</th><th class="center">Total Hafalan</th><th class="center">Juz</th><th class="center">Rata² Nilai</th><th class="center">Subuh / Ashar / Maghrib / Isya / Ta'lim</th><th class="center">Kehadiran (${UI.esc(bulanLabel(bulan))})</th><th>Status</th></tr></thead>
+          <tbody>${body || `<tr><td colspan="13"><div class="empty">Tidak ada data.</div></td></tr>`}</tbody>
         </table>
       </div>
       <div class="row mt">
@@ -624,6 +625,7 @@ const Shared = (() => {
       <td class="center">${r.no}</td>
       <td>${UI.esc(r.s.nama)}</td>
       <td>${UI.esc(r.s.nis)}</td>
+      <td>${UI.esc(Store.educationLabel(r.s))}</td>
       <td>${UI.esc(Store.halaqahSummaryForSantri(r.s))}</td>
       <td>${UI.esc(Store.programSummaryForSantri(r.s))}</td>
       <td class="center">${UI.esc(r.s.jk || '-')}</td>
@@ -655,7 +657,7 @@ const Shared = (() => {
   <div class="sub">Periode: ${UI.esc(bulanLabel(bulan))}</div>
   <table>
     <thead><tr>
-      <th class="center">No</th><th>Nama Santri</th><th>NIS</th><th>Halaqah</th><th>Level</th><th class="center">JK</th>
+      <th class="center">No</th><th>Nama Santri</th><th>NIS</th><th>Tingkat &amp; Kelas</th><th>Halaqah</th><th>Level</th><th class="center">JK</th>
       <th class="center">Total Hafalan (hlm)</th><th class="center">Juz</th><th class="center">Rata² Nilai</th>
       <th class="center">Subuh</th><th class="center">Ashar</th><th class="center">Maghrib</th><th class="center">Isya</th><th class="center">Ta’lim Malam</th>
       <th class="center">Total Hadir</th><th class="center">Total Kehadiran</th><th class="center">%</th><th>Status</th>
