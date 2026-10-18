@@ -1123,13 +1123,13 @@ const Ustadz = (() => {
     const c = ctx(); _scope = c.scope;
     Shared.shell(c.role, nav('ustadz_laporan'), '');
     Shared.setHeader('Laporan Halaqah', 'Rekap setoran dan laporan santri yang Anda ampu');
-    const hariIni = Store.todayStr();
+    const range = Shared.rekapSetoranRange();
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card mb">
         <div class="row">
           <div style="flex:1">${UI.field('Bulan', `<input type="month" class="clay-input" id="f-bulan" value="${Store.todayStr().slice(0, 7)}">`)}</div>
-          <div style="flex:1">${UI.field('Dari Tanggal', `<input type="date" class="clay-input" id="f-dari" value="${Store.tambahHari(hariIni, -6)}">`)}</div>
-          <div style="flex:1">${UI.field('Sampai Tanggal', `<input type="date" class="clay-input" id="f-sampai" value="${hariIni}">`)}</div>
+          <div style="flex:1">${UI.field('Dari Tanggal', `<input type="date" class="clay-input" id="f-dari" value="${range.dari}">`)}</div>
+          <div style="flex:1">${UI.field('Sampai Tanggal', `<input type="date" class="clay-input" id="f-sampai" value="${range.sampai}">`)}</div>
         </div>
         <div class="row mt">
           <button class="clay-btn ghost" data-ul-preset="today">Hari Ini</button>
@@ -1142,6 +1142,9 @@ const Ustadz = (() => {
       <div id="lap"></div>`;
     const apply = () => {
       const bulan = document.getElementById('f-bulan').value;
+      const dari = document.getElementById('f-dari').value;
+      const sampai = document.getElementById('f-sampai').value;
+      Shared.setRekapSetoranRange(dari, sampai);
       const ownHalaqah = myHalaqah();
       if (!ownHalaqah && _scope !== 'all') {
         document.getElementById('rekap-setoran').innerHTML = '<div class="empty">Anda belum ditugaskan ke halaqah. Hubungi admin untuk pengaturan halaqah.</div>';
@@ -1150,8 +1153,8 @@ const Ustadz = (() => {
       }
       document.getElementById('rekap-setoran').innerHTML = Shared.renderRekapSetoranMingguan({
         halaqah: ownHalaqah,
-        dari: document.getElementById('f-dari').value,
-        sampai: document.getElementById('f-sampai').value,
+        dari,
+        sampai,
         allowMakeup: true
       });
       Shared.bindRekapSetoranBayar(({ santriId, tanggal, programs }) => bayarSetoran(santriId, tanggal, programs));

@@ -1650,12 +1650,12 @@ const Admin = (() => {
     Shared.shell('admin', nav('admin_rekap_setoran'), '');
     Shared.setHeader('Rekap Setoran', 'Setoran dan kehadiran per santri dalam satu periode');
     const db = Store.get();
-    const hariIni = Store.todayStr();
+    const range = Shared.rekapSetoranRange();
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card mb">
         <div class="row">
-          <div style="flex:1;min-width:140px">${UI.field('Dari Tanggal', `<input type="date" class="clay-input" id="f-dari" value="${Store.tambahHari(hariIni, -6)}">`)}</div>
-          <div style="flex:1;min-width:140px">${UI.field('Sampai Tanggal', `<input type="date" class="clay-input" id="f-sampai" value="${hariIni}">`)}</div>
+          <div style="flex:1;min-width:140px">${UI.field('Dari Tanggal', `<input type="date" class="clay-input" id="f-dari" value="${range.dari}">`)}</div>
+          <div style="flex:1;min-width:140px">${UI.field('Sampai Tanggal', `<input type="date" class="clay-input" id="f-sampai" value="${range.sampai}">`)}</div>
           <div style="flex:1">${UI.field('Ustadz', `<select class="clay-select" id="f-ustadz"><option value="">Semua Ustadz</option>${UI.optionsFromList(db.ustadz.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id')).map(u => ({ v: u.id, l: u.nama })), 'v', 'l')}</select>`)}</div>
         </div>
         <div class="row mt">
@@ -1673,6 +1673,7 @@ const Admin = (() => {
         ustadzId: document.getElementById('f-ustadz').value,
         allowJpgDownload: true
       };
+      Shared.setRekapSetoranRange(filters.dari, filters.sampai);
       document.getElementById('rekap-setoran-content').innerHTML = Shared.renderRekapSetoranMingguan(filters);
       Shared.bindRekapSetoranJpgDownload(filters);
     };

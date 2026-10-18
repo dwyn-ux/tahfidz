@@ -725,6 +725,21 @@ const Shared = (() => {
     return dateKey(date);
   }
 
+  // Rentang tanggal rekap setoran disimpan di modul supaya tidak kembali ke
+  // default (7 hari terakhir) setiap kali pindah menu lalu kembali ke halaman ini.
+  let _rekapSetoranRange = null;
+  function rekapSetoranRange() {
+    if (!_rekapSetoranRange) {
+      const today = Store.todayStr();
+      _rekapSetoranRange = { dari: Store.tambahHari(today, -6), sampai: today };
+    }
+    return _rekapSetoranRange;
+  }
+  function setRekapSetoranRange(dari, sampai) {
+    if (dari && sampai) _rekapSetoranRange = { dari, sampai };
+    return rekapSetoranRange();
+  }
+
   // Periode rekap setoran: rentang tanggal bebas. Nilai `week` (mingguan lama)
   // masih diterima supaya tautan atau pemanggilan sebelumnya tidak rusak.
   function depositPeriod(filters) {
@@ -1085,5 +1100,5 @@ const Shared = (() => {
     </div>`;
   }
 
-  return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadExcel, downloadXlsx, downloadTemplateExcel, bulanLabel, mondayOf, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, ICONS, hafalanMapHTML };
+  return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadExcel, downloadXlsx, downloadTemplateExcel, bulanLabel, mondayOf, rekapSetoranRange, setRekapSetoranRange, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, ICONS, hafalanMapHTML };
 })();
