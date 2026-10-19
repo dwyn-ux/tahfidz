@@ -735,6 +735,65 @@ const Store = (() => {
     return dedupeKehadiran(db.kehadiran.filter(k => k.santriId === santriId && k.tanggal.startsWith(bulan)));
   }
 
+  // Laporan memakai rentang tanggal (bukan bulan tetap), jadi tiga helper
+  // berikut menyaring catatan apa pun yang jatuh di antara dari–sampai.
+  function padaRentang(tanggal, dari, sampai) {
+    return !!tanggal && tanggal >= dari && tanggal <= sampai;
+  }
+
+  // Setoran hafalan pertama & terakhir dalam periode (urut waktu, bukan urutan
+  // input), supaya "Setoran Awal/Akhir" di laporan sesuai bacaan sang santri.
+  function setoranRentang(santriId, dari, sampai) {
+    const records = [
+      ...db.ziyadahHafalan.filter(z => z.santriId === santriId && padaRentang(z.tanggal, dari, sampai)),
+      ...db.mutqin.filter(m => m.santriId === santriId && padaRentang(m.tanggal, dari, sampai))
+    ].sort(lastSetoran);
+    if (!records.length) return null;
+    return { awal: records[records.length - 1], akhir: records[0], jumlah: records.length };
+  }
+
+  // Tampilan juz hafalan yang mengantisipasi urutan 30→29→…→26→1→2→…→25.
+  // Jika rentang melintasi batas 30→1 (mis. juz 26-30 dan 1-4), tampilkan
+  // sebagai "Juz 26–30 dan 1–4", bukan "Juz 1–30".
+  function juzHafalanDisplay(santriId) {
+    const records = [
+      ...db.ziyadahHafalan.filter(z => z.santriId === santriId),
+      ...db.mutqin.filter(m => m.santriId === santriId)
+    ];
+    if (!records.length) return null;
+    const ranges = records.map(r => {
+      const h = computeHafalan(r.sAwal, r.aAwal, r.sAkhir, r.aAkhir);
+      return h ? [h.juzStart, h.juzEnd] : null;
+    }).filter(Boolean);
+    if (!ranges.length) return null;
+    const juzOrder = [30, 29, 28, 27, 26, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25];
+    ranges.sort((a, b) => juzOrder.indexOf(a[0]) - juzOrder.indexOf(b[0]));
+    const merged = [];
+    ranges.forEach(r => {
+      const last = merged[merged.length - 1];
+      const crossesBoundary = last && last[1] === 30 && r[0] === 1;
+      if (last && !crossesBoundary && r[0] <= last[1] + 1) {
+        last[1] = Math.max(last[1], r[1]);
+      } else {
+        merged.push([r[0], r[1]]);
+      }
+    });
+    return merged.map(([s, e]) => {
+      if (s === e) return 'Juz ' + s;
+      if (s >= 26 && e <= 25) return 'Juz ' + s + '–30 dan 1–' + e;
+      return 'Juz ' + s + '–' + e;
+    }).join(', ');
+  }
+
+  function avgNilaiRentang(santriId, dari, sampai) {
+    const vals = [];
+    db.tahsin.filter(t => t.santriId === santriId && padaRentang(t.tanggal, dari, sampai)).forEach(t => vals.push(t.nilai));
+    db.ziyadahHafalan.filter(z => z.santriId === santriId && padaRentang(z.tanggal, dari, sampai)).forEach(z => vals.push(z.nilai));
+    db.mutqin.filter(m => m.santriId === santriId && padaRentang(m.tanggal, dari, sampai)).forEach(m => vals.push(m.nilai));
+    if (!vals.length) return 0;
+    return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+  }
+
   /* ---------- Absensi ustadz ----------
      Satu halaqah boleh diampu lebih dari satu ustadz, sehingga absensi ustadz
      dan absensi santrinya disimpan terpisah dan tidak saling menimpa. */
@@ -967,6 +1026,7 @@ const Store = (() => {
     talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
     waSend, waLog, waReady, waAutoEnabled, waSendWali, waStatus, waQrDataUrl,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,
+    setoranRentang, avgNilaiRentang, padaRentang, juzHafalanDisplay,
     absensiUstadzOf, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,
     rekapKehadiranSantri, rekapKehadiranUstadz, tanggalRange, tambahHari, SESI_REKAP,
     addNotif, notifFor, clearNotifs, checkSetoranTerlewat

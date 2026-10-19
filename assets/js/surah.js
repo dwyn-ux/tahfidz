@@ -257,3 +257,24 @@ function formatHafalan(h) {
   if (!parts.length) parts.push(h.ayahs + ' ayat');
   return parts.join(' • ');
 }
+
+/* Format rentang juz untuk tampilan laporan, mengantisipasi urutan
+   hafalan 30→29→…→26→1→2→…→25. Jika start di 26-30 dan end di 1-25,
+   tampilkan sebagai "26–30 dan 1–4", bukan "1–30". */
+function formatJuzRangeLabel(start, end) {
+  if (start === end) return 'Juz ' + start;
+  if (start >= 26 && end <= 25) return 'Juz ' + start + '–30 dan 1–' + end;
+  return 'Juz ' + start + '–' + end;
+}
+
+/* Format label setoran: "Al-Mujadila 1-3" atau "Al-Mujadila 1-3 → Al-Baqarah 4-6" */
+function formatSetoranLabel(rec) {
+  if (!rec) return '-';
+  const sAwal = getSurah(rec.sAwal);
+  const sAkhir = getSurah(rec.sAkhir);
+  if (!sAwal || !sAkhir) return '-';
+  if (rec.sAwal === rec.sAkhir) {
+    return sAwal.latin + ' ' + rec.aAwal + (rec.aAwal !== rec.aAkhir ? '-' + rec.aAkhir : '');
+  }
+  return sAwal.latin + ':' + rec.aAwal + ' → ' + sAkhir.latin + ':' + rec.aAkhir;
+}

@@ -222,23 +222,38 @@ const Shared = (() => {
     return [lo, hi];
   }
 
+  // Gabungkan rentang yang bersinggungan/bersebelahan. Satu halaman sering
+  // disetor bertahap (Al-Mujadila 1-3 hari ini, 4-6 besok), jadi penentu warna
+  // harus melihat gabungan semua setoran, bukan tiap setoran sendiri-sendiri.
+  function mergeRankRanges(ranges) {
+    const sorted = ranges.slice().sort((a, b) => a[0] - b[0]);
+    const merged = [];
+    sorted.forEach(r => {
+      const last = merged[merged.length - 1];
+      if (last && r[0] <= last[1] + 1) last[1] = Math.max(last[1], r[1]);
+      else merged.push([r[0], r[1]]);
+    });
+    return merged;
+  }
+
   // Status tiap halaman (1..600): 'full' hijau, 'part' kuning, sisanya abu-abu.
-  // Hijau = ada setoran yang menutupi SELURUH rentang ayat halaman itu (sesuai peta asli).
+  // Hijau = rentang setoran (setelah digabung) menutupi SELURUH ayat halaman itu
+  // (sesuai peta asli), kuning = hanya menyentuh sebagian.
   function hafalanStates(santriId) {
     const db = Store.get();
     const full = new Set(), part = new Set();
-    const ranges = [...db.ziyadahHafalan, ...db.mutqin]
+    const merged = mergeRankRanges([...db.ziyadahHafalan, ...db.mutqin]
       .filter(r => r.santriId === santriId)
       .map(r => {
         const lo = _rankOf(r.sAwal, r.aAwal), hi = _rankOf(r.sAkhir, r.aAkhir);
         return lo <= hi ? [lo, hi] : [hi, lo];
       })
-      .filter(Boolean);
+      .filter(Boolean));
     for (let g = 1; g <= 600; g++) {
       const pr = pageRankRange(g);
       if (!pr) continue;
-      if (ranges.some(r => r[0] <= pr[0] && r[1] >= pr[1])) full.add(g);
-      else if (ranges.some(r => r[1] >= pr[0] && r[0] <= pr[1])) part.add(g);
+      if (merged.some(r => r[0] <= pr[0] && r[1] >= pr[1])) full.add(g);
+      else if (merged.some(r => r[1] >= pr[0] && r[0] <= pr[1])) part.add(g);
     }
     return { full, part };
   }
@@ -425,14 +440,13 @@ const Shared = (() => {
     if (f.halaqah) santri = santri.filter(s => Store.santriHasHalaqah(s, f.halaqah));
     if (f.level) santri = santri.filter(s => Store.santriHasProgram(s, f.level));
     if (f.tingkat) santri = santri.filter(s => Store.tingkatForSantri(s) === f.tingkat);
-    // Kelas hanya bermakna di dalam tingkatnya: "7A" di SMP bukan "7A" di SD.
-    // Tanpa batasan tingkat, filter ini ikut meny Santri tingkat lain yang
-    // kebetulan punya nama kelas sama.
     if (f.kelas && f.tingkat) {
       santri = santri.filter(s => Store.tingkatForSantri(s) === f.tingkat
         && Store.kelasForSantri(s) === f.kelas);
     }
     if (f.status) santri = santri.filter(s => s.status === f.status);
+    const dari = f.dari || '';
+    const sampai = f.sampai || '';
     const bulan = f.bulan || Store.todayStr().slice(0, 7);
     return santri.map((s, i) => {
       const h = Store.totalHafalanSantri(s.id);
@@ -445,14 +459,25 @@ const Shared = (() => {
       const totalHadir = hadirSubuh + hadirAshar + hadirMaghrib + hadirIsya + hadirTalim;
       const totalK = kehadiran.length;
       const pct = totalK ? Math.round((totalHadir / totalK) * 100) : 0;
-      return { no: i + 1, s, hafalan: h, nilai: Store.avgNilai(s.id), hadirSubuh, hadirAshar, hadirMaghrib, hadirIsya, hadirTalim, hadir: totalHadir, totalK, pct };
+      const setoran = dari && sampai ? Store.setoranRentang(s.id, dari, sampai) : null;
+      return {
+        no: i + 1, s, hafalan: h, nilai: Store.avgNilai(s.id),
+        hadirSubuh, hadirAshar, hadirMaghrib, hadirIsya, hadirTalim,
+        hadir: totalHadir, totalK, pct,
+        setoranAwal: setoran ? setoran.awal : null,
+        setoranAkhir: setoran ? setoran.akhir : null,
+        juzLabel: Store.juzHafalanDisplay(s.id)
+      };
     });
   }
 
-  function renderLaporan(filters) {
+function renderLaporan(filters) {
     _laporanFilters = filters || {};
     const rows = buildLaporanRows(_laporanFilters);
     const bulan = _laporanFilters.bulan || Store.todayStr().slice(0, 7);
+    const periode = (_laporanFilters.dari && _laporanFilters.sampai)
+      ? UI.fmtDate(_laporanFilters.dari) + ' – ' + UI.fmtDate(_laporanFilters.sampai)
+      : bulanLabel(bulan);
     const body = rows.map(r => `<tr>
       <td class="center">${r.no}</td>
       <td><b>${UI.esc(r.s.nama)}</b></td>
@@ -461,19 +486,25 @@ const Shared = (() => {
       <td>${UI.esc(Store.halaqahSummaryForSantri(r.s))}</td>
       <td>${UI.esc(Store.programSummaryForSantri(r.s))}</td>
       <td class="center">${UI.esc(r.s.jk || '-')}</td>
-      <td class="center">${r.hafalan ? r.hafalan.pages + ' hlm' : '-'}</td>
-      <td class="center">${r.hafalan ? (r.hafalan.juzRange === 1 ? 'Juz ' + r.hafalan.juzStart : r.hafalan.juzStart + '–' + r.hafalan.juzEnd) : '-'}</td>
+      <td class="center">${r.setoranAwal ? UI.esc(formatSetoranLabel(r.setoranAwal)) : '-'}</td>
+      <td class="center">${r.setoranAkhir ? UI.esc(formatSetoranLabel(r.setoranAkhir)) : '-'}</td>
+      <td class="center">${r.hafalan ? r.hafalan.pages + ' hlm' + (r.juzLabel ? '<br><span style="font-size:11px">' + UI.esc(r.juzLabel) + '</span>' : '') : '-'}</td>
       <td class="center">${r.nilai ? r.nilai : '-'}</td>
       <td class="center" style="font-size:12px">${r.hadirSubuh} ${r.hadirAshar} ${r.hadirMaghrib} ${r.hadirIsya} ${r.hadirTalim}</td>
       <td class="center">${r.hadir}/${r.totalK} (${r.pct}%)</td>
-      <td><span class="badge ${r.s.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(r.s.status)}</span></td>
     </tr>`).join('');
     return `<div class="clay-card">
-      <div class="section-title"> Laporan Santri — ${UI.esc(bulanLabel(bulan))}</div>
+      <div class="section-title"> Laporan Santri — ${UI.esc(periode)}</div>
       <div class="table-wrap">
         <table class="clay-table" id="laporan-table">
-          <thead><tr><th class="center">No</th><th>Santri</th><th>NIS</th><th>Tingkat & Kelas</th><th>Halaqah</th><th>Level</th><th class="center">JK</th><th class="center">Total Hafalan</th><th class="center">Juz</th><th class="center">Rata² Nilai</th><th class="center">Subuh / Ashar / Maghrib / Isya / Ta'lim</th><th class="center">Kehadiran (${UI.esc(bulanLabel(bulan))})</th><th>Status</th></tr></thead>
-          <tbody>${body || `<tr><td colspan="13"><div class="empty">Tidak ada data.</div></td></tr>`}</tbody>
+          <thead><tr>
+            <th class="center">No</th><th>Santri</th><th>NIS</th><th>Tingkat & Kelas</th><th>Halaqah</th><th>Level</th>
+            <th class="center">JK</th><th class="center">Setoran Awal</th><th class="center">Setoran Akhir</th>
+            <th class="center">Total Hafalan</th><th class="center">Rata Nilai</th>
+            <th class="center">Absensi</th>
+            <th class="center">Kehadiran (${UI.esc(bulanLabel(bulan))})</th>
+          </tr></thead>
+          <tbody>${body || `<tr><td colspan="13"><div class="empty">Tidak ada data.</div></tr></tbody>`}</tbody>
         </table>
       </div>
       <div class="row mt">
@@ -621,10 +652,13 @@ const Shared = (() => {
   }
 
   /* Export laporan sebagai file Excel (.xls) — 1 baris per santri, siap jadi laporan bulanan */
-  function exportLaporanExcel(filters) {
+function exportLaporanExcel(filters) {
     const db = Store.get();
     const f = filters || {};
     const bulan = f.bulan || Store.todayStr().slice(0, 7);
+    const periode = (f.dari && f.sampai)
+      ? UI.fmtDate(f.dari) + ' – ' + UI.fmtDate(f.sampai)
+      : bulanLabel(bulan);
     const rows = buildLaporanRows(f);
     if (!rows.length) { UI.toast('Tidak ada data untuk diekspor', 'error'); return; }
     const rowsHtml = rows.map(r => `<tr>
@@ -635,8 +669,9 @@ const Shared = (() => {
       <td>${UI.esc(Store.halaqahSummaryForSantri(r.s))}</td>
       <td>${UI.esc(Store.programSummaryForSantri(r.s))}</td>
       <td class="center">${UI.esc(r.s.jk || '-')}</td>
-      <td class="center">${r.hafalan ? r.hafalan.pages : 0}</td>
-      <td class="center">${r.hafalan ? (r.hafalan.juzRange === 1 ? r.hafalan.juzStart : r.hafalan.juzStart + '-' + r.hafalan.juzEnd) : '-'}</td>
+      <td class="center">${r.setoranAwal ? UI.esc(formatSetoranLabel(r.setoranAwal)) : '-'}</td>
+      <td class="center">${r.setoranAkhir ? UI.esc(formatSetoranLabel(r.setoranAkhir)) : '-'}</td>
+      <td class="center">${r.hafalan ? r.hafalan.pages + (r.juzLabel ? '<br><span style="font-size:10px">' + UI.esc(r.juzLabel) + '</span>' : '') : '-'}</td>
       <td class="center">${r.nilai || 0}</td>
       <td class="center">${r.hadirSubuh}</td>
       <td class="center">${r.hadirAshar}</td>
@@ -658,20 +693,22 @@ const Shared = (() => {
   .title{font-size:16pt;font-weight:bold;text-align:center}
   .sub{font-size:11pt;color:#555;text-align:center;margin-bottom:2px}
 </style></head><body>
-  <div class="title">LAPORAN BULANAN TAHFIDZ</div>
+  <div class="title">LAPORAN TAHFIDZ</div>
   <div class="sub">${UI.esc(db.settings.namaLembaga)}</div>
-  <div class="sub">Periode: ${UI.esc(bulanLabel(bulan))}</div>
+  <div class="sub">Periode: ${UI.esc(periode)}</div>
   <table>
     <thead><tr>
-      <th class="center">No</th><th>Nama Santri</th><th>NIS</th><th>Tingkat &amp; Kelas</th><th>Halaqah</th><th>Level</th><th class="center">JK</th>
-      <th class="center">Total Hafalan (hlm)</th><th class="center">Juz</th><th class="center">Rata² Nilai</th>
-      <th class="center">Subuh</th><th class="center">Ashar</th><th class="center">Maghrib</th><th class="center">Isya</th><th class="center">Ta’lim Malam</th>
+      <th class="center">No</th><th>Santri</th><th>NIS</th><th>Tingkat &amp; Kelas</th><th>Halaqah</th><th>Level</th><th class="center">JK</th>
+      <th class="center">Setoran Awal</th><th class="center">Setoran Akhir</th>
+      <th class="center">Total Hafalan</th><th class="center">Rata Nilai</th>
+      <th class="center">Subuh</th><th class="center">Ashar</th><th class="center">Maghrib</th><th class="center">Isya</th><th class="center">Ta’lim</th>
       <th class="center">Total Hadir</th><th class="center">Total Kehadiran</th><th class="center">%</th><th>Status</th>
     </tr></thead>
     <tbody>${rowsHtml}</tbody>
   </table>
 </body></html>`;
-    downloadExcel('Laporan_Tahfidz_' + bulan, html);
+    const filename = (f.dari && f.sampai) ? 'Laporan_Tahfidz_' + f.dari + '_sd_' + f.sampai : 'Laporan_Tahfidz_' + bulan;
+    downloadExcel(filename, html);
     UI.toast('Berhasil export Excel', 'success');
   }
 

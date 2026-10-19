@@ -1127,12 +1127,10 @@ const Ustadz = (() => {
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card mb">
         <div class="row">
-          <div style="flex:1">${UI.field('Bulan', `<input type="month" class="clay-input" id="f-bulan" value="${Store.todayStr().slice(0, 7)}">`)}</div>
           <div style="flex:1">${UI.field('Dari Tanggal', `<input type="date" class="clay-input" id="f-dari" value="${range.dari}">`)}</div>
           <div style="flex:1">${UI.field('Sampai Tanggal', `<input type="date" class="clay-input" id="f-sampai" value="${range.sampai}">`)}</div>
         </div>
         <div class="row mt">
-          <button class="clay-btn ghost" data-ul-preset="today">Hari Ini</button>
           <button class="clay-btn ghost" data-ul-preset="week">7 Hari</button>
           <button class="clay-btn ghost" data-ul-preset="month">Bulan Ini</button>
           <button class="clay-btn ghost" data-ul-preset="lastmonth">Bulan Lalu</button>
@@ -1141,7 +1139,6 @@ const Ustadz = (() => {
       <div id="rekap-setoran"></div>
       <div id="lap"></div>`;
     const apply = () => {
-      const bulan = document.getElementById('f-bulan').value;
       const dari = document.getElementById('f-dari').value;
       const sampai = document.getElementById('f-sampai').value;
       Shared.setRekapSetoranRange(dari, sampai);
@@ -1158,10 +1155,9 @@ const Ustadz = (() => {
         allowMakeup: true
       });
       Shared.bindRekapSetoranBayar(({ santriId, tanggal, programs }) => bayarSetoran(santriId, tanggal, programs));
-      document.getElementById('lap').innerHTML = Shared.renderLaporan({ halaqah: ownHalaqah, bulan });
+      document.getElementById('lap').innerHTML = Shared.renderLaporan({ halaqah: ownHalaqah, dari, sampai, bulan: (dari || '').slice(0, 7) });
       Shared.bindLaporanExport();
     };
-    // Preset periode diperlakukan sama seperti di Rekap Setoran admin.
     document.querySelectorAll('[data-ul-preset]').forEach(button => button.onclick = () => {
       const today = Store.todayStr();
       const preset = button.dataset.ulPreset;
@@ -1179,7 +1175,7 @@ const Ustadz = (() => {
       document.getElementById('f-sampai').value = sampai;
       apply();
     });
-    ['f-bulan', 'f-dari', 'f-sampai'].forEach(id => document.getElementById(id).onchange = apply);
+    ['f-dari', 'f-sampai'].forEach(id => document.getElementById(id).onchange = apply);
     apply();
   }
 

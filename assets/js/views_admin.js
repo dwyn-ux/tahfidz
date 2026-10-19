@@ -1068,24 +1068,58 @@ const Admin = (() => {
     Shared.shell('admin', nav('admin_laporan'), '');
     Shared.setHeader('Laporan', 'Filter & export');
     const db = Store.get();
+    const range = Shared.rekapSetoranRange();
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card mb">
         <div class="section-title"> Filter Laporan</div>
         <div class="row">
-          <div style="flex:1">${UI.field('Bulan', `<input type="month" class="clay-input" id="f-bulan" value="${Store.todayStr().slice(0, 7)}">`)}</div>
+          <div style="flex:1">${UI.field('Dari Tanggal', `<input type="date" class="clay-input" id="f-dari" value="${range.dari}">`)}</div>
+          <div style="flex:1">${UI.field('Sampai Tanggal', `<input type="date" class="clay-input" id="f-sampai" value="${range.sampai}">`)}</div>
           <div style="flex:1">${UI.field('Halaqah', `<select class="clay-select" id="f-halaqah"><option value="">Semua</option>${UI.optionsFromList(db.halaqah.map(h => ({ v: h.nama, l: halaqahOptionLabel(h) })), 'v', 'l')}</select>`)}</div>
           <div style="flex:1">${UI.field('Level', `<select class="clay-select" id="f-level"><option value="">Semua</option>${UI.optionsFromList(db.levelTahfidz.map(l => ({ v: l, l })), 'v', 'l')}</select>`)}</div>
           <div style="flex:1">${UI.field('Tingkat', `<select class="clay-select" id="f-tingkat"><option value="">Semua</option>${UI.optionsFromList(Store.tingkatOptions().map(t => ({ v: t, l: t })), 'v', 'l')}</select>`)}</div>
           <div style="flex:1">${UI.field('Kelas', `<select class="clay-select" id="f-kelas" disabled><option value="">Pilih tingkat dahulu</option></select>`)}</div>
           <div style="flex:1">${UI.field('Status', `<select class="clay-select" id="f-status"><option value="">Semua</option><option>Aktif</option><option>Nonaktif</option></select>`)}</div>
         </div>
+        <div class="row mt">
+          <button class="clay-btn ghost" data-lap-preset="week">7 Hari</button>
+          <button class="clay-btn ghost" data-lap-preset="month">Bulan Ini</button>
+          <button class="clay-btn ghost" data-lap-preset="lastmonth">Bulan Lalu</button>
+        </div>
       </div>
       <div id="laporan-content"></div>`;
     const apply = () => {
-      const f = { bulan: document.getElementById('f-bulan').value, halaqah: document.getElementById('f-halaqah').value, level: document.getElementById('f-level').value, tingkat: document.getElementById('f-tingkat').value, kelas: document.getElementById('f-kelas').value, status: document.getElementById('f-status').value };
+      const f = {
+        dari: document.getElementById('f-dari').value,
+        sampai: document.getElementById('f-sampai').value,
+        halaqah: document.getElementById('f-halaqah').value,
+        level: document.getElementById('f-level').value,
+        tingkat: document.getElementById('f-tingkat').value,
+        kelas: document.getElementById('f-kelas').value,
+        status: document.getElementById('f-status').value,
+        bulan: (document.getElementById('f-dari').value || '').slice(0, 7)
+      };
+      Shared.setRekapSetoranRange(f.dari, f.sampai);
       document.getElementById('laporan-content').innerHTML = Shared.renderLaporan(f);
       Shared.bindLaporanExport();
     };
+    document.querySelectorAll('[data-lap-preset]').forEach(button => button.onclick = () => {
+      const today = Store.todayStr();
+      const preset = button.dataset.lapPreset;
+      let dari = today, sampai = today;
+      if (preset === 'week') dari = Store.tambahHari(today, -6);
+      if (preset === 'month') dari = today.slice(0, 8) + '01';
+      if (preset === 'lastmonth') {
+        const awal = new Date(today.slice(0, 8) + '01T12:00:00');
+        awal.setMonth(awal.getMonth() - 1);
+        const akhir = new Date(awal.getFullYear(), awal.getMonth() + 1, 0);
+        dari = `${awal.getFullYear()}-${String(awal.getMonth() + 1).padStart(2, '0')}-01`;
+        sampai = `${akhir.getFullYear()}-${String(akhir.getMonth() + 1).padStart(2, '0')}-${String(akhir.getDate()).padStart(2, '0')}`;
+      }
+      document.getElementById('f-dari').value = dari;
+      document.getElementById('f-sampai').value = sampai;
+      apply();
+    });
     // Kelas selalu mengikuti Tingkat: daftar kelas di luar tingkat terpilih tidak
     // relevan, jadi dropdown-nya dinonaktifkan sampai tingkat dipilih.
     document.getElementById('f-tingkat').onchange = () => {
@@ -1100,7 +1134,7 @@ const Admin = (() => {
       }
       apply();
     };
-    ['f-bulan', 'f-halaqah', 'f-level', 'f-kelas', 'f-status'].forEach(id => document.getElementById(id).onchange = apply);
+    ['f-dari', 'f-sampai', 'f-halaqah', 'f-level', 'f-kelas', 'f-status'].forEach(id => document.getElementById(id).onchange = apply);
     apply();
   }
 
