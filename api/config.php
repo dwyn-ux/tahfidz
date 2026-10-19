@@ -482,12 +482,13 @@ function attendancePeriodInfo(string $mode, string $date, string $halaqah = ''):
 }
 
 function attendanceSummaryMessage(array $santri, array $records, string $mode, string $periodLabel, string $halaqah): string {
-    $count = ['Hadir' => 0, 'Izin' => 0, 'Sakit' => 0, 'Alfa' => 0];
+    $count = ['Hadir' => 0, 'Izin' => 0, 'Sakit' => 0, 'Alfa' => 0, 'Libur' => 0];
     foreach ($records as $record) {
         $status = $record['status'] ?? 'Hadir';
         if (isset($count[$status])) $count[$status]++;
     }
     $ringkas = 'Hadir ' . $count['Hadir'] . ', Izin ' . $count['Izin'] . ', Sakit ' . $count['Sakit'] . ', Alfa ' . $count['Alfa'];
+    if ($count['Libur'] > 0) $ringkas .= ', Libur ' . $count['Libur'];
     $judul = $mode === 'halaqah'
         ? 'Rekap absensi Halaqah ' . ($halaqah ?: '-')
         : 'Rekap absensi ' . $mode;

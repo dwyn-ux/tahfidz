@@ -219,12 +219,14 @@ label.field-label { display: block; font-size: 13px; font-weight: 600; margin: 1
 .badge.gray { background: #e5e7eb; color: #374151; }
 .badge.warn { background: #fef9c3; color: #854d0e; }
 .badge.danger { background: #fee2e2; color: #b91c1c; }
+.badge.purple { background: #f3e8ff; color: #7e22ce; }
 
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .dot.green { background: var(--success); }
 .dot.yellow { background: var(--warning); }
 .dot.blue { background: var(--secondary); }
 .dot.red { background: var(--danger); }
+.dot.purple { background: #a855f7; }
 
 /* ---------- Progress circle ---------- */
 .progress-circle {

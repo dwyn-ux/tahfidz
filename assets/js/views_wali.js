@@ -49,7 +49,9 @@ const Wali = (() => {
     const hadirIsya = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Isya').length;
     const hadirTalim = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Ta’lim Malam').length;
     const totalHadir = hadirSubuh + hadirAshar + hadirMaghrib + hadirIsya + hadirTalim;
-    const pct = kehadiran.length ? Math.round((totalHadir / kehadiran.length) * 100) : 0;
+    const totalLibur = kehadiran.filter(k => k.status === 'Libur').length;
+    const totalEfektif = Math.max(0, kehadiran.length - totalLibur);
+    const pct = totalEfektif ? Math.round((totalHadir / totalEfektif) * 100) : 0;
     const lastCat = db.catatan.filter(c => c.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
     const ustadzNames = ustadzNamesForSantri(s);
 
@@ -67,7 +69,7 @@ const Wali = (() => {
         <div class="clay-card">
           <div class="section-title"> Ringkasan</div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span>Total Hafalan</span><b>${h ? formatHafalan(h) : '-'}</b></div>
-          <div class="row" style="justify-content:space-between;padding:6px 0"><span>Kehadiran Bulan Ini</span><b>${totalHadir}/${kehadiran.length || 0} (${pct}%)</b></div>
+          <div class="row" style="justify-content:space-between;padding:6px 0"><span>Kehadiran Bulan Ini</span><b>${totalHadir}/${totalEfektif} (${pct}%)${totalLibur ? ` <span class="muted" style="font-weight:normal;font-size:12px">(Libur: ${totalLibur})</span>` : ''}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Subuh</span><b>${hadirSubuh}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Ashar</span><b>${hadirAshar}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Maghrib</span><b>${hadirMaghrib}</b></div>
@@ -160,14 +162,19 @@ const Wali = (() => {
     Shared.setHeader('Absensi', s.nama);
     const db = Store.get();
     const kehadiran = Store.dedupeKehadiran(db.kehadiran.filter(k => k.santriId === s.id)).sort((a, b) => b.tanggal.localeCompare(a.tanggal) || String(b.sesi).localeCompare(String(a.sesi)));
-    const counts = { Hadir: 0, Izin: 0, Sakit: 0, Alfa: 0 };
-    kehadiran.forEach(k => counts[k.status]++);
-    const rows = kehadiran.slice(0, 30).map(k => `<tr><td>${UI.fmtDate(k.tanggal)}</td><td>${k.sesi ? '<span class="pill sm" style="font-size:11px;padding:2px 8px">' + UI.esc(k.sesi) + '</span>' : ''}</td><td><span class="badge ${k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : 'danger'}">${UI.esc(k.status)}</span></td></tr>`).join('');
+    const counts = { Hadir: 0, Izin: 0, Sakit: 0, Alfa: 0, Libur: 0 };
+    kehadiran.forEach(k => { if (counts[k.status] !== undefined) counts[k.status]++; });
+    const rows = kehadiran.slice(0, 30).map(k => {
+      const cls = k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : k.status === 'Libur' ? 'purple' : 'danger';
+      const catatanText = k.catatan ? `<div class="muted" style="font-size:11px">${UI.esc(k.catatan)}</div>` : '';
+      return `<tr><td>${UI.fmtDate(k.tanggal)}</td><td>${k.sesi ? '<span class="pill sm" style="font-size:11px;padding:2px 8px">' + UI.esc(k.sesi) + '</span>' : ''}</td><td><span class="badge ${cls}">${UI.esc(k.status)}</span>${catatanText}</td></tr>`;
+    }).join('');
     document.getElementById('view-content').innerHTML = `
       <div class="grid kpi">
         ${Shared.statCard('', counts.Hadir, 'Hadir', '#22C55E')}
         ${Shared.statCard('', counts.Izin, 'Izin', '#FACC15')}
         ${Shared.statCard('', counts.Sakit, 'Sakit', '#3B82F6')}
+        ${counts.Libur ? Shared.statCard('', counts.Libur, 'Libur', '#A855F7') : ''}
         ${Shared.statCard('', counts.Alfa, 'Alfa', '#EF4444')}
       </div>
       <div class="clay-card mt">

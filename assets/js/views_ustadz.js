@@ -129,6 +129,7 @@ const Ustadz = (() => {
           <div class="row">
             <button class="clay-btn primary" data-go="ustadz_absensi">Absensi</button>
             <button class="clay-btn secondary" data-go="ustadz_pembelajaran"> Pembelajaran</button>
+            ${selfUstadz ? '<button class="clay-btn ghost" id="btn-dashboard-liburkan" style="color:#7e22ce;border:1px solid #d8b4fe">🏖️ Liburkan Halaqah</button>' : ''}
           </div>
           ${absenUstadzCard}
         </div>
@@ -143,11 +144,13 @@ const Ustadz = (() => {
     document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => App.navigate(b.dataset.go));
     const btnAbsen = document.getElementById('btn-dashboard-absen-ustadz');
     if (btnAbsen) btnAbsen.onclick = () => dialogAbsenUstadz(selfUstadz, sesiSaatIni(), t, () => dashboard());
+    const btnDashLibur = document.getElementById('btn-dashboard-liburkan');
+    if (btnDashLibur) btnDashLibur.onclick = () => dialogLiburkanHalaqah(selfUstadz, myHalaqah(), sesiSaatIni(), t, () => dashboard());
   }
 
   /* ---------------- Absensi (multi-sesi) ---------------- */
   const SESI = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
-  const STATUS_USTADZ = ['Hadir', 'Izin', 'Sakit'];
+  const STATUS_USTADZ = ['Hadir', 'Izin', 'Sakit', 'Libur'];
 
   // Sesi yang paling mendekati waktu sekarang, dipakai sebagai pilihan awal
   // pada dialog absensi ustadz.
@@ -161,7 +164,7 @@ const Ustadz = (() => {
   }
 
   function statusBadgeClass(status) {
-    return status === 'Hadir' ? 'green' : status === 'Izin' ? 'warn' : status === 'Sakit' ? 'blue' : 'danger';
+    return status === 'Hadir' ? 'green' : status === 'Izin' ? 'warn' : status === 'Sakit' ? 'blue' : status === 'Libur' ? 'purple' : 'danger';
   }
 
   function paintStatusButton(btn, status) {
@@ -171,6 +174,7 @@ const Ustadz = (() => {
     if (status === 'Izin') { btn.className = 'clay-btn sm'; btn.style = 'background:#FACC15;color:#000'; }
     if (status === 'Sakit') btn.className = 'clay-btn sm secondary';
     if (status === 'Alfa') btn.className = 'clay-btn sm danger';
+    if (status === 'Libur') { btn.className = 'clay-btn sm'; btn.style = 'background:#a855f7;color:#fff'; }
   }
 
   /* Dialog absen ustadz sendiri. Dipakai dari dashboard dan dari halaman
@@ -180,17 +184,25 @@ const Ustadz = (() => {
     if (!ustadz) return;
     const existing = Store.absensiUstadzOf(ustadz.id, tanggal, sesi);
     const picked = { status: (existing && existing.status) || 'Hadir' };
+    const halaqah = Store.findHalaqahForUstadz(ustadz);
+    const hNama = halaqah ? halaqah.nama : (ustadz.halaqah || 'Halaqah');
+
     const { modal } = UI.openModal({
       title: 'Absensi Ustadz',
       sub: ustadz.nama + ' - ' + UI.fmtDate(tanggal) + ' - Sesi ' + sesi,
       dismissable: false,
       bodyHTML: `
-        <div class="muted" style="font-size:13px;margin-bottom:10px">Absen diri dulu sebelum mengabsen Santri.</div>
+        <div class="muted" style="font-size:13px;margin-bottom:10px">Absen diri dulu sebelum mengabsen Santri. Pilih <b>Libur</b> bila ada kegiatan dan halaqah ditiadakan.</div>
         <div class="row" style="gap:6px;flex-wrap:wrap" id="au-status">
-          ${STATUS_USTADZ.map(s => `<button type="button" class="clay-btn sm ghost" data-au-st="${UI.esc(s)}">${UI.esc(s)}</button>`).join('')}
+          ${STATUS_USTADZ.map(s => `<button type="button" class="clay-btn sm ghost" data-au-st="${UI.esc(s)}">${s === 'Libur' ? '🏖️ ' : ''}${UI.esc(s)}</button>`).join('')}
+        </div>
+        <div id="au-libur-info" style="display:${picked.status === 'Libur' ? 'block' : 'none'};margin-top:10px;padding:8px 12px;background:#faf5ff;border-radius:var(--radius-md);border:1px solid #e9d5ff">
+          <div style="font-size:12px;color:#7e22ce">
+            <b>🏖️ Mode Libur Halaqah:</b> Seluruh santri di <b>${UI.esc(hNama)}</b> akan otomatis dicatat sebagai <b>Libur</b> pada sesi ${UI.esc(sesi)} dan tidak terhitung Alfa.
+          </div>
         </div>
         <div class="mt">
-          ${UI.field('Catatan (opsional)', `<input class="clay-input" id="au-catatan" placeholder="Contoh: diasuh ustadz pengganti">`)}
+          ${UI.field('Catatan / Keterangan (opsional)', `<input class="clay-input" id="au-catatan" placeholder="${picked.status === 'Libur' ? 'Contoh: Ada kegiatan pesantren / Rihlah santri' : 'Contoh: diasuh ustadz pengganti'}" value="${UI.esc((existing && existing.catatan) || '')}">`)}
         </div>
         ${existing ? `<div class="muted" style="font-size:12px;margin-top:8px">Sudah absen (${UI.esc(existing.status)}) pukul ${UI.fmtDateTime(existing.waktu)}. Simpan lagi untuk mengoreksi.</div>` : ''}`,
       actions: [
@@ -200,10 +212,18 @@ const Ustadz = (() => {
           onClick: async (m, c) => {
             const input = m.querySelector('#au-catatan');
             const catatan = input ? input.value.trim() : '';
-            const ok = await Store.simpanAbsensiUstadz(ustadz.id, sesi, picked.status, catatan, tanggal);
+            let ok = false;
+            if (picked.status === 'Libur') {
+              ok = await Store.liburkanHalaqah(ustadz.id, [sesi], hNama, catatan || 'Ada kegiatan / Libur', tanggal);
+              if (ok) UI.toast('Halaqah ' + hNama + ' diliburkan untuk sesi ' + sesi + ' ✓', 'success');
+            } else {
+              ok = await Store.simpanAbsensiUstadz(ustadz.id, sesi, picked.status, catatan, tanggal);
+              if (ok) {
+                Store.log('Absensi ustadz ' + picked.status + ' ' + sesi);
+                UI.toast('Absensi ustadz ' + picked.status + ' tersimpan', 'success');
+              }
+            }
             if (!ok) return;
-            Store.log('Absensi ustadz ' + picked.status + ' ' + sesi);
-            UI.toast('Absensi ustadz ' + picked.status + ' tersimpan', 'success');
             c();
             if (onDone) onDone(picked.status);
           }
@@ -215,8 +235,136 @@ const Ustadz = (() => {
       btn.onclick = () => {
         picked.status = btn.dataset.auSt;
         modal.querySelectorAll('[data-au-st]').forEach(b => paintStatusButton(b, b.dataset.auSt === picked.status ? picked.status : ''));
+        const liburInfo = modal.querySelector('#au-libur-info');
+        if (liburInfo) liburInfo.style.display = picked.status === 'Libur' ? 'block' : 'none';
+        const input = modal.querySelector('#au-catatan');
+        if (input && !input.value) {
+          input.placeholder = picked.status === 'Libur' ? 'Contoh: Ada kegiatan pesantren / Rihlah santri' : 'Contoh: diasuh ustadz pengganti';
+        }
       };
     });
+  }
+
+  /* Dialog khusus meliburkan halaqah. Ustadz bisa memilih hanya sesi ini atau semua sesi hari ini,
+     lengkap dengan alasan kegiatan yang dicatat ke absensi ustadz dan seluruh santri di halaqah. */
+  function dialogLiburkanHalaqah(ustadz, halaqahNama, initialSesi, tanggal, onDone) {
+    if (!ustadz) return;
+    const t = tanggal || Store.todayStr();
+    const halaqah = halaqahNama ? Store.findHalaqahByName(halaqahNama) : Store.findHalaqahForUstadz(ustadz);
+    const hNama = halaqah ? halaqah.nama : (ustadz.halaqah || halaqahNama || 'Halaqah');
+    const existingAU = Store.absensiUstadzOf(ustadz.id, t, initialSesi);
+    const existingCatatan = (existingAU && existingAU.catatan) || '';
+
+    const { modal } = UI.openModal({
+      title: '🏖️ Liburkan Halaqah',
+      sub: `${hNama} — ${UI.fmtDate(t)}`,
+      dismissable: false,
+      bodyHTML: `
+        <div style="font-size:13px;color:var(--text-soft);margin-bottom:12px">
+          Gunakan menu ini jika ada kegiatan/acara dan halaqah ditiadakan. Absensi ustadz dan seluruh santri di halaqah ini akan otomatis dicatat <b>Libur</b> sehingga tidak terhitung sebagai Alfa.
+        </div>
+        <div class="field-label">Pilih Sesi yang Diliburkan</div>
+        <div class="row" style="gap:8px;margin-bottom:12px;flex-wrap:wrap">
+          <label class="clay-card pad-sm" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;margin:0">
+            <input type="radio" name="libur-scope" value="sesi" checked>
+            <span>Hanya Sesi <b>${UI.esc(initialSesi)}</b></span>
+          </label>
+          <label class="clay-card pad-sm" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;margin:0">
+            <input type="radio" name="libur-scope" value="hari">
+            <span>Semua Sesi Hari Ini (${SESI.length} Sesi)</span>
+          </label>
+          <label class="clay-card pad-sm" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;margin:0">
+            <input type="radio" name="libur-scope" value="custom">
+            <span>Pilih Sesi Tertentu</span>
+          </label>
+        </div>
+        <div id="libur-sesi-custom" style="display:none;margin-bottom:12px;padding:8px 12px;background:var(--bg);border-radius:var(--radius-md)">
+          <div class="muted" style="font-size:12px;margin-bottom:6px">Centang sesi yang diliburkan:</div>
+          <div class="row" style="gap:10px;flex-wrap:wrap">
+            ${SESI.map(s => `<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" data-libur-sesi-check value="${UI.esc(s)}" ${s === initialSesi ? 'checked' : ''}> ${UI.esc(s)}</label>`).join('')}
+          </div>
+        </div>
+        <div class="mt">
+          <label class="field-label">Keterangan / Alasan Kegiatan</label>
+          <input class="clay-input" id="libur-alasan" placeholder="Contoh: Ada kegiatan gotong royong / Rihlah santri / Libur bersama" value="${UI.esc(existingCatatan)}">
+          <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
+            <span class="muted" style="font-size:11px;align-self:center">Contoh cepat:</span>
+            ${['Kegiatan Lembaga', 'Kerja Bakti', 'Rihlah / Outing', 'Kajian Akbar', 'Ujian Sekolah', 'Libur Nasional'].map(tag =>
+              `<button type="button" class="clay-btn sm ghost" data-tag-alasan="${UI.esc(tag)}" style="font-size:11px;padding:2px 8px">${UI.esc(tag)}</button>`
+            ).join('')}
+          </div>
+        </div>
+        <div class="clay-card pad-sm mt" style="background:#faf5ff;border:1px solid #e9d5ff">
+          <div class="row center" style="gap:8px">
+            <span style="font-size:20px">ℹ️</span>
+            <div style="font-size:12px;color:#6b21a8">
+              Santri yang terdaftar di <b>${UI.esc(hNama)}</b> akan otomatis mendapatkan status <b>Libur</b> pada sesi tersebut.
+            </div>
+          </div>
+        </div>`,
+      actions: [
+        { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
+        {
+          label: '🏖️ Liburkan Halaqah', cls: 'primary',
+          onClick: async (m, c) => {
+            const alasan = (m.querySelector('#libur-alasan')?.value || '').trim() || 'Ada kegiatan / Libur';
+            const scope = m.querySelector('input[name="libur-scope"]:checked')?.value || 'sesi';
+            let sesiList = [initialSesi];
+            if (scope === 'hari') {
+              sesiList = SESI.slice();
+            } else if (scope === 'custom') {
+              sesiList = [...m.querySelectorAll('[data-libur-sesi-check]:checked')].map(cb => cb.value);
+              if (!sesiList.length) {
+                UI.toast('Pilih minimal satu sesi', 'error');
+                return;
+              }
+            }
+
+            const ok = await Store.liburkanHalaqah(ustadz.id, sesiList, hNama, alasan, t);
+            if (ok) {
+              UI.toast(`Halaqah ${hNama} berhasil diliburkan (${sesiList.join(', ')}) ✓`, 'success');
+              c();
+              if (onDone) onDone(sesiList);
+            }
+          }
+        }
+      ]
+    });
+
+    modal.querySelectorAll('input[name="libur-scope"]').forEach(radio => {
+      radio.onchange = () => {
+        const customDiv = modal.querySelector('#libur-sesi-custom');
+        if (customDiv) customDiv.style.display = radio.value === 'custom' ? 'block' : 'none';
+      };
+    });
+
+    modal.querySelectorAll('[data-tag-alasan]').forEach(btn => {
+      btn.onclick = () => {
+        const input = modal.querySelector('#libur-alasan');
+        if (input) {
+          input.value = btn.dataset.tagAlasan;
+          input.focus();
+        }
+      };
+    });
+  }
+
+  /* Konfirmasi membatalkan status libur untuk membuka kembali sesi */
+  function batalLiburConfirm(ustadz, halaqahNama, sesi, tanggal, onDone) {
+    if (!ustadz) return;
+    const t = tanggal || Store.todayStr();
+    const hNama = halaqahNama || (ustadz.halaqah || 'Halaqah');
+    UI.confirmDialog(
+      'Batalkan Status Libur',
+      `Status libur pada sesi <b>${UI.esc(sesi)}</b> (${UI.fmtDate(t)}) untuk halaqah <b>${UI.esc(hNama)}</b> akan dibatalkan sehingga sesi dapat diabsen secara normal kembali. Lanjutkan?`,
+      async () => {
+        const ok = await Store.batalkanLiburHalaqah(ustadz.id, [sesi], hNama, t);
+        if (ok) {
+          UI.toast(`Status libur sesi ${sesi} dibatalkan`, 'info');
+          if (onDone) onDone();
+        }
+      }
+    );
   }
 
   function absensi(initialSesi = 'Subuh') {
@@ -267,6 +415,7 @@ const Ustadz = (() => {
       const existing = {};
       sessionRecords.forEach(k => existing[k.santriId] = k.status);
       const self = selfRecord();
+      const isLibur = self && self.status === 'Libur';
 
       const rows = santri.map(s => {
         const cur = pendingStatus[s.id] || existing[s.id] || '';
@@ -278,6 +427,7 @@ const Ustadz = (() => {
               <button class="clay-btn sm ${cur === 'Izin' ? '' : 'ghost'}" data-st="Izin" style="${cur === 'Izin' ? 'background:#FACC15;color:#000' : ''}" ${isEditing ? '' : 'disabled'}> Izin</button>
               <button class="clay-btn sm ${cur === 'Sakit' ? 'secondary' : 'ghost'}" data-st="Sakit" ${isEditing ? '' : 'disabled'}> Sakit</button>
               <button class="clay-btn sm ${cur === 'Alfa' ? 'danger' : 'ghost'}" data-st="Alfa" ${isEditing ? '' : 'disabled'}> Alfa</button>
+              <button class="clay-btn sm ${cur === 'Libur' ? '' : 'ghost'}" data-st="Libur" style="${cur === 'Libur' ? 'background:#a855f7;color:#fff' : ''}" ${isEditing ? '' : 'disabled'}> Libur</button>
             </div>
           </td>
           <td>${cur
@@ -292,9 +442,29 @@ const Ustadz = (() => {
           <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
             <div>
               <b>Anda belum absen pada sesi ${UI.esc(sesiAktif)}</b>
-              <div class="muted" style="font-size:12px">Catat kehadiran ustadz lebih dulu, baru pilih status Santri.</div>
+              <div class="muted" style="font-size:12px">Catat kehadiran ustadz lebih dulu, baru pilih status Santri. Bila ada kegiatan, Anda bisa meliburkan halaqah.</div>
             </div>
-            <button class="clay-btn primary sm" id="btn-absen-ustadz">Absen Ustadz</button>
+            <div class="row" style="gap:8px">
+              <button class="clay-btn sm secondary" id="btn-banner-liburkan" style="background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe">🏖️ Liburkan Halaqah</button>
+              <button class="clay-btn primary sm" id="btn-absen-ustadz">Absen Ustadz</button>
+            </div>
+          </div>
+        </div>` : (isLibur ? `
+        <div class="clay-card" style="margin-bottom:14px;border-left:4px solid #a855f7;background:#faf5ff">
+          <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
+            <div>
+              <div class="row center" style="gap:8px">
+                <span class="badge purple" style="font-size:13px">🏖️ Halaqah Diliburkan</span>
+                <b>Sesi ${UI.esc(sesiAktif)} — ${UI.fmtDate(t)}</b>
+              </div>
+              <div class="muted" style="font-size:12px;margin-top:4px">
+                Keterangan: <b>${UI.esc(self.catatan || 'Ada kegiatan / libur')}</b> · Dicatat oleh ${UI.esc(self.ustadz || selfUstadz.nama)} pukul ${UI.fmtDateTime(self.waktu)}
+              </div>
+            </div>
+            <div class="row" style="gap:8px">
+              <button class="clay-btn ghost sm" id="btn-ubah-libur">Ubah Keterangan</button>
+              <button class="clay-btn danger sm ghost" id="btn-batal-libur">Batal Libur (Buka Sesi)</button>
+            </div>
           </div>
         </div>` : `
         <div class="clay-card" style="margin-bottom:14px;border-left:4px solid #22C55E">
@@ -306,9 +476,12 @@ const Ustadz = (() => {
                 oleh ${UI.esc(self.ustadz || selfUstadz.nama)} pukul ${UI.fmtDateTime(self.waktu)}${self.catatan ? ' - ' + UI.esc(self.catatan) : ''}
               </div>
             </div>
-            <button class="clay-btn ghost sm" id="btn-absen-ustadz">Ubah Absensi Ustadz</button>
+            <div class="row" style="gap:8px">
+              <button class="clay-btn sm ghost" id="btn-banner-liburkan" style="color:#7e22ce;border:1px solid #d8b4fe">🏖️ Liburkan Sesi Ini</button>
+              <button class="clay-btn ghost sm" id="btn-absen-ustadz">Ubah Absensi Ustadz</button>
+            </div>
           </div>
-        </div>`) : `
+        </div>`)) : `
         <div class="clay-card" style="margin-bottom:14px;border-left:4px solid #EF4444">
           <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
             <div>
@@ -318,11 +491,19 @@ const Ustadz = (() => {
           </div>
         </div>`}
         <div class="clay-card">
-          <div class="row" style="justify-content:space-between">
+          <div class="row" style="justify-content:space-between;align-items:center">
             <div class="section-title" style="margin:0">Absensi ${UI.fmtDate(t)}</div>
-            ${hasSaved && !isEditing
-              ? '<div class="row" style="gap:8px"><span class="badge green">Sudah tersimpan</span><button class="clay-btn ghost" id="btn-edit"> Edit Absensi</button></div>'
-              : (isLocked ? '<span class="badge warn">Menunggu absensi ustadz</span>' : '<button class="clay-btn primary" id="btn-save"> Simpan Absensi</button>')}
+            <div class="row center" style="gap:8px">
+              ${isLibur ? `
+                <span class="badge purple">🏖️ Status: Libur</span>
+                <button class="clay-btn sm danger ghost" id="btn-card-batal-libur">Batal Libur</button>
+              ` : `
+                ${selfUstadz ? '<button class="clay-btn sm ghost" id="btn-card-liburkan" style="color:#7e22ce;border:1px solid #d8b4fe">🏖️ Liburkan Halaqah</button>' : ''}
+                ${hasSaved && !isEditing
+                  ? '<span class="badge green">Sudah tersimpan</span><button class="clay-btn ghost" id="btn-edit"> Edit Absensi</button>'
+                  : (isLocked ? '<span class="badge warn">Menunggu absensi ustadz</span>' : '<button class="clay-btn primary" id="btn-save"> Simpan Absensi</button>')}
+              `}
+            </div>
           </div>
           <div class="row mb" style="margin-top:12px">
             <span class="muted" style="font-size:13px">Sesi:</span>
@@ -397,6 +578,34 @@ const Ustadz = (() => {
 
       const absenUstadzButton = document.getElementById('btn-absen-ustadz');
       if (absenUstadzButton) absenUstadzButton.onclick = openDialog;
+
+      const openLiburDialog = () => {
+        if (!selfUstadz) return;
+        dialogLiburkanHalaqah(selfUstadz, halaqahFilter || ownHalaqah, sesiAktif, t, () => {
+          editing = null;
+          pendingStatus = {};
+          renderAbsensi();
+        });
+      };
+      const bannerLibur = document.getElementById('btn-banner-liburkan');
+      if (bannerLibur) bannerLibur.onclick = openLiburDialog;
+      const cardLibur = document.getElementById('btn-card-liburkan');
+      if (cardLibur) cardLibur.onclick = openLiburDialog;
+      const ubahLibur = document.getElementById('btn-ubah-libur');
+      if (ubahLibur) ubahLibur.onclick = openLiburDialog;
+
+      const doBatalLibur = () => {
+        if (!selfUstadz) return;
+        batalLiburConfirm(selfUstadz, halaqahFilter || ownHalaqah, sesiAktif, t, () => {
+          editing = null;
+          pendingStatus = {};
+          renderAbsensi();
+        });
+      };
+      const batalLibur = document.getElementById('btn-batal-libur');
+      if (batalLibur) batalLibur.onclick = doBatalLibur;
+      const cardBatalLibur = document.getElementById('btn-card-batal-libur');
+      if (cardBatalLibur) cardBatalLibur.onclick = doBatalLibur;
 
       const saveButton = document.getElementById('btn-save');
       if (saveButton) saveButton.onclick = async () => {

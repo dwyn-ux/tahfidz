@@ -854,6 +854,112 @@ const Store = (() => {
     return save();
   }
 
+  // Meliburkan halaqah untuk satu atau beberapa sesi karena ada kegiatan / acara.
+  // Ustadz dicatat Libur di absensiUstadz, dan semua santri aktif di halaqah ini
+  // dicatat Libur di kehadiran santri agar tidak dihitung Alfa.
+  async function liburkanHalaqah(ustadzId, sesiList, halaqahNama, catatan, tanggal) {
+    const t = tanggal || todayStr();
+    const ustadz = findUstadz(ustadzId);
+    if (!ustadz) return false;
+    const sesiArr = (Array.isArray(sesiList) ? sesiList : [sesiList]).filter(Boolean);
+    if (!sesiArr.length) return false;
+
+    const halaqah = halaqahNama ? findHalaqahByName(halaqahNama) : findHalaqahForUstadz(ustadz);
+    const halaqahId = halaqah ? halaqah.id : '';
+    const hNama = halaqah ? halaqah.nama : (ustadz.halaqah || halaqahNama || '');
+    const alasan = catatan || 'Ada kegiatan / Libur';
+
+    // Santri di halaqah ini
+    const santriList = db.santri.filter(s =>
+      s.status !== 'Nonaktif' && (halaqah ? santriHasHalaqah(s, halaqah) : (!hNama || santriHasHalaqah(s, hNama)))
+    );
+
+    sesiArr.forEach(sesi => {
+      // 1. Catat absensi ustadz status Libur
+      const existingAU = absensiUstadzRow(ustadzId, t, sesi);
+      const auRecord = {
+        id: existingAU ? existingAU.id : uid('au'),
+        ustadzId,
+        ustadz: ustadz.nama || '',
+        halaqahId,
+        halaqah: hNama,
+        tanggal: t,
+        sesi,
+        status: 'Libur',
+        waktu: nowISO(),
+        catatan: alasan
+      };
+      db.absensiUstadz = db.absensiUstadz.filter(a => a.id !== auRecord.id);
+      db.absensiUstadz.push(auRecord);
+
+      // 2. Catat kehadiran seluruh santri di halaqah ini sebagai 'Libur'
+      santriList.forEach(s => {
+        const existingK = db.kehadiran.find(k =>
+          k.santriId === s.id && k.tanggal === t && k.sesi === sesi && (k.ustadzId || '') === ustadzId
+        );
+        const kRecord = {
+          id: existingK ? existingK.id : uid('k'),
+          santriId: s.id,
+          halaqahId: halaqahId || (existingK ? existingK.halaqahId : ''),
+          ustadzId,
+          tanggal: t,
+          sesi,
+          status: 'Libur',
+          _created: existingK ? (existingK._created || Date.now()) : Date.now()
+        };
+        db.kehadiran = db.kehadiran.filter(k => k.id !== kRecord.id);
+        db.kehadiran.push(kRecord);
+      });
+    });
+
+    log('Meliburkan halaqah ' + (hNama || ustadz.nama) + ' (' + sesiArr.join(', ') + '): ' + alasan);
+    return save();
+  }
+
+  // Batalkan status libur untuk satu atau beberapa sesi agar halaqah dapat diabsen kembali.
+  async function batalkanLiburHalaqah(ustadzId, sesiList, halaqahNama, tanggal) {
+    const t = tanggal || todayStr();
+    const ustadz = findUstadz(ustadzId);
+    if (!ustadz) return false;
+    const sesiArr = (Array.isArray(sesiList) ? sesiList : [sesiList]).filter(Boolean);
+    if (!sesiArr.length) return false;
+
+    const halaqah = halaqahNama ? findHalaqahByName(halaqahNama) : findHalaqahForUstadz(ustadz);
+    const hNama = halaqah ? halaqah.nama : (ustadz.halaqah || halaqahNama || '');
+    const santriList = db.santri.filter(s =>
+      halaqah ? santriHasHalaqah(s, halaqah) : (!hNama || santriHasHalaqah(s, hNama))
+    );
+
+    sesiArr.forEach(sesi => {
+      // Hapus absensi ustadz status Libur
+      db.absensiUstadz = db.absensiUstadz.filter(a =>
+        !(a.ustadzId === ustadzId && a.tanggal === t && a.sesi === sesi && a.status === 'Libur')
+      );
+
+      // Hapus absensi santri status Libur untuk ustadz ini
+      db.kehadiran = db.kehadiran.filter(k =>
+        !(k.tanggal === t && k.sesi === sesi && (k.ustadzId || '') === ustadzId && santriList.some(s => s.id === k.santriId) && k.status === 'Libur')
+      );
+    });
+
+    log('Membatalkan libur halaqah ' + (hNama || ustadz.nama) + ' (' + sesiArr.join(', ') + ')');
+    return save();
+  }
+
+  function halaqahLiburInfo(halaqahRef, tanggal, sesi, ustadzId) {
+    const t = tanggal || todayStr();
+    const h = resolveHalaqah(halaqahRef);
+    const hName = h ? h.nama : String(halaqahRef || '');
+    const uIds = h ? ustadzIdsForHalaqah(h) : (ustadzId ? [ustadzId] : []);
+
+    const au = db.absensiUstadz.find(a =>
+      a.tanggal === t && a.sesi === sesi && a.status === 'Libur' &&
+      ((uIds.length && uIds.includes(a.ustadzId)) || (hName && a.halaqah === hName) || (ustadzId && a.ustadzId === ustadzId))
+    );
+    if (au) return { isLibur: true, catatan: au.catatan || 'Ada kegiatan / Libur', ustadz: au.ustadz || '', record: au };
+    return null;
+  }
+
   /* ---------- Rekap absensi ---------- */
   // Satu halaqah boleh diampu lebih dari satu ustadz sehingga satu sesi dapat
   // memuat lebih dari satu catatan untuk Santri yang sama. Rekap tetap memakai
@@ -898,7 +1004,7 @@ const Store = (() => {
   }
 
   function kosongkanAngka(status) {
-    return { Hadir: 0, Izin: 0, Sakit: 0, Alfa: 0, ...status };
+    return { Hadir: 0, Izin: 0, Sakit: 0, Libur: 0, Alfa: 0, ...status };
   }
 
   // Rekap kehadiran satu orang. `slotPerHari` = sesi mana saja yang dihitung,
@@ -920,14 +1026,16 @@ const Store = (() => {
     });
 
     // Sisa slot kosong dihitung sebagai Alfa supaya total selalu konsisten:
-    // alfa = slot - (Hadir + Izin + Sakit).
+    // Libur dihitung sebagai tercatat sehingga tidak menjadi Alfa.
     sesiList.forEach(sesi => {
       const slot = days.length * (slotPerHari.includes(sesi) ? 1 : 0);
-      const tercatat = (perSesi[sesi].Hadir || 0) + (perSesi[sesi].Izin || 0) + (perSesi[sesi].Sakit || 0);
+      const tercatat = (perSesi[sesi].Hadir || 0) + (perSesi[sesi].Izin || 0) + (perSesi[sesi].Sakit || 0) + (perSesi[sesi].Libur || 0);
       perSesi[sesi].Alfa = Math.max(0, slot - tercatat);
       total.Alfa += perSesi[sesi].Alfa;
     });
     total.slot = days.length * slotPerHari.length;
+    total.slotEfektif = Math.max(0, total.slot - (total.Libur || 0));
+    total.persen = total.slotEfektif > 0 ? Math.round((total.Hadir / total.slotEfektif) * 100) : (total.Hadir ? 100 : 0);
     return { total, perSesi };
   }
 
@@ -1044,6 +1152,7 @@ const Store = (() => {
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,
     setoranRentang, avgNilaiRentang, padaRentang, juzHafalanDisplay,
     absensiUstadzOf, absensiUstadzRow, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,
+    liburkanHalaqah, batalkanLiburHalaqah, halaqahLiburInfo,
     rekapKehadiranSantri, rekapKehadiranUstadz, tanggalRange, tambahHari, SESI_REKAP,
     addNotif, notifFor, clearNotifs, checkSetoranTerlewat
   };

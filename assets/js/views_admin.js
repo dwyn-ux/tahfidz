@@ -1186,11 +1186,12 @@ const Admin = (() => {
       };
     }
 
-    // Persentase kehadiran dihitung dari Alfa, bukan dari total slot. Alfa
-    // selalu "slot - tercatat", jadi persentase cukup membagi dua angka itu.
+    // Persentase kehadiran dihitung dari slot efektif (total slot dikurangi sesi libur).
     function persen(total) {
-      if (!total.slot) return 0;
-      return Math.round(((total.Hadir || 0) / total.slot) * 100);
+      if (typeof total.persen === 'number') return total.persen;
+      const eff = (total.slot || 0) - (total.Libur || 0);
+      if (!eff) return (total.Hadir ? 100 : 0);
+      return Math.round(((total.Hadir || 0) / eff) * 100);
     }
 
     function badgeAngka(value, cls) {
@@ -1211,14 +1212,14 @@ const Admin = (() => {
       });
       const jumlah = rows.reduce((acc, r) => ({
         Hadir: acc.Hadir + r.Hadir, Izin: acc.Izin + r.Izin,
-        Sakit: acc.Sakit + r.Sakit, Alfa: acc.Alfa + r.Alfa
-      }), { Hadir: 0, Izin: 0, Sakit: 0, Alfa: 0 });
+        Sakit: acc.Sakit + r.Sakit, Libur: acc.Libur + (r.Libur || 0), Alfa: acc.Alfa + r.Alfa
+      }), { Hadir: 0, Izin: 0, Sakit: 0, Libur: 0, Alfa: 0 });
 
       const sesiHeads = f.sesiList.map(sesi => `<th class="center">${UI.esc(sesi)}</th>`).join('');
       const body = rows.map((r, i) => {
         const sesiCells = f.sesiList.map(sesi => {
           const p = r.perSesi[sesi];
-          return `<td class="center" style="font-size:12px">${UI.esc(p.Hadir || 0)}/${UI.esc(p.Izin || 0)}/${UI.esc(p.Sakit || 0)}/${UI.esc(p.Alfa || 0)}</td>`;
+          return `<td class="center" style="font-size:12px">${UI.esc(p.Hadir || 0)}/${UI.esc(p.Izin || 0)}/${UI.esc(p.Sakit || 0)}/${UI.esc(p.Libur ? p.Libur + '/' : '')}${UI.esc(p.Alfa || 0)}</td>`;
         }).join('');
         return `<tr>
           <td class="center">${i + 1}</td>
@@ -1229,6 +1230,7 @@ const Admin = (() => {
           <td class="center">${badgeAngka(r.Hadir, 'green')}</td>
           <td class="center">${badgeAngka(r.Izin, 'warn')}</td>
           <td class="center">${badgeAngka(r.Sakit, 'blue')}</td>
+          <td class="center">${badgeAngka(r.Libur, 'purple')}</td>
           <td class="center">${badgeAngka(r.Alfa, 'danger')}</td>
           <td class="center"><b>${persen(r)}%</b></td>
         </tr>`;
@@ -1244,12 +1246,13 @@ const Admin = (() => {
             ${Shared.statCard(Shared.ICONS.moon, jumlah.Hadir, 'Total Hadir', '#22C55E')}
             ${Shared.statCard(Shared.ICONS.users, jumlah.Izin, 'Total Izin', '#FACC15')}
             ${Shared.statCard(Shared.ICONS.teacher, jumlah.Sakit, 'Total Sakit', '#3B82F6')}
+            ${Shared.statCard(Shared.ICONS.sun, jumlah.Libur, 'Total Libur', '#A855F7')}
             ${Shared.statCard(Shared.ICONS.book, jumlah.Alfa, 'Total Alfa', '#EF4444')}
           </div>
-          <div class="muted" style="font-size:12px;margin-bottom:8px">Kolom sesi berisi <b>Hadir/Izin/Sakit/Alfa</b>.</div>
+          <div class="muted" style="font-size:12px;margin-bottom:8px">Kolom sesi berisi <b>Hadir/Izin/Sakit/Libur/Alfa</b>. Libur ditiadakan dari perhitungan Alfa.</div>
           <div class="table-wrap"><table class="clay-table">
-            <thead><tr><th class="center">No</th><th>Santri</th><th>Tingkat & Kelas</th><th>Halaqah</th>${sesiHeads}<th class="center">Hadir</th><th class="center">Izin</th><th class="center">Sakit</th><th class="center">Alfa</th><th class="center">%</th></tr></thead>
-            <tbody>${body || '<tr><td colspan="10"><div class="empty">Tidak ada santri.</div></td></tr>'}</tbody>
+            <thead><tr><th class="center">No</th><th>Santri</th><th>Tingkat & Kelas</th><th>Halaqah</th>${sesiHeads}<th class="center">Hadir</th><th class="center">Izin</th><th class="center">Sakit</th><th class="center">Libur</th><th class="center">Alfa</th><th class="center">%</th></tr></thead>
+            <tbody>${body || '<tr><td colspan="11"><div class="empty">Tidak ada santri.</div></td></tr>'}</tbody>
           </table></div>
         </div>`;
     }
@@ -1266,13 +1269,13 @@ const Admin = (() => {
       });
       const jumlah = rows.reduce((acc, r) => ({
         Hadir: acc.Hadir + r.Hadir, Izin: acc.Izin + r.Izin,
-        Sakit: acc.Sakit + r.Sakit, Alfa: acc.Alfa + r.Alfa
-      }), { Hadir: 0, Izin: 0, Sakit: 0, Alfa: 0 });
+        Sakit: acc.Sakit + r.Sakit, Libur: acc.Libur + (r.Libur || 0), Alfa: acc.Alfa + r.Alfa
+      }), { Hadir: 0, Izin: 0, Sakit: 0, Libur: 0, Alfa: 0 });
 
       const body = rows.map((r, i) => {
         const sesiCells = f.sesiList.map(sesi => {
           const p = r.perSesi[sesi];
-          return `<td class="center" style="font-size:12px">${UI.esc(p.Hadir || 0)}/${UI.esc(p.Izin || 0)}/${UI.esc(p.Sakit || 0)}/${UI.esc(p.Alfa || 0)}</td>`;
+          return `<td class="center" style="font-size:12px">${UI.esc(p.Hadir || 0)}/${UI.esc(p.Izin || 0)}/${UI.esc(p.Sakit || 0)}/${UI.esc(p.Libur ? p.Libur + '/' : '')}${UI.esc(p.Alfa || 0)}</td>`;
         }).join('');
         return `<tr>
           <td class="center">${i + 1}</td>
@@ -1282,6 +1285,7 @@ const Admin = (() => {
           <td class="center">${badgeAngka(r.Hadir, 'green')}</td>
           <td class="center">${badgeAngka(r.Izin, 'warn')}</td>
           <td class="center">${badgeAngka(r.Sakit, 'blue')}</td>
+          <td class="center">${badgeAngka(r.Libur, 'purple')}</td>
           <td class="center">${badgeAngka(r.Alfa, 'danger')}</td>
           <td class="center"><b>${persen(r)}%</b></td>
         </tr>`;
@@ -1297,12 +1301,13 @@ const Admin = (() => {
             ${Shared.statCard(Shared.ICONS.moon, jumlah.Hadir, 'Total Hadir', '#22C55E')}
             ${Shared.statCard(Shared.ICONS.users, jumlah.Izin, 'Total Izin', '#FACC15')}
             ${Shared.statCard(Shared.ICONS.teacher, jumlah.Sakit, 'Total Sakit', '#3B82F6')}
+            ${Shared.statCard(Shared.ICONS.sun, jumlah.Libur, 'Total Libur', '#A855F7')}
             ${Shared.statCard(Shared.ICONS.book, jumlah.Alfa, 'Total Alfa', '#EF4444')}
           </div>
-          <div class="muted" style="font-size:12px;margin-bottom:8px">Kolom sesi berisi <b>Hadir/Izin/Sakit/Alfa</b>. Alfa = sesi tanpa catatan absensi.</div>
+          <div class="muted" style="font-size:12px;margin-bottom:8px">Kolom sesi berisi <b>Hadir/Izin/Sakit/Libur/Alfa</b>. Alfa = sesi tanpa catatan absensi di luar libur.</div>
           <div class="table-wrap"><table class="clay-table">
-            <thead><tr><th class="center">No</th><th>Ustadz</th><th>Halaqah</th>${f.sesiList.map(sesi => `<th class="center">${UI.esc(sesi)}</th>`).join('')}<th class="center">Hadir</th><th class="center">Izin</th><th class="center">Sakit</th><th class="center">Alfa</th><th class="center">%</th></tr></thead>
-            <tbody>${body || '<tr><td colspan="10"><div class="empty">Tidak ada ustadz.</div></td></tr>'}</tbody>
+            <thead><tr><th class="center">No</th><th>Ustadz</th><th>Halaqah</th>${f.sesiList.map(sesi => `<th class="center">${UI.esc(sesi)}</th>`).join('')}<th class="center">Hadir</th><th class="center">Izin</th><th class="center">Sakit</th><th class="center">Libur</th><th class="center">Alfa</th><th class="center">%</th></tr></thead>
+            <tbody>${body || '<tr><td colspan="11"><div class="empty">Tidak ada ustadz.</div></td></tr>'}</tbody>
           </table></div>
         </div>`;
     }
@@ -1354,7 +1359,7 @@ const Admin = (() => {
           const r = ambil(item);
           const sesiCells = f.sesiList.map(sesi => {
             const p = r.perSesi[sesi];
-            return `<td class="center">${UI.esc(p.Hadir || 0)}/${UI.esc(p.Izin || 0)}/${UI.esc(p.Sakit || 0)}/${UI.esc(p.Alfa || 0)}</td>`;
+            return `<td class="center">${UI.esc(p.Hadir || 0)}/${UI.esc(p.Izin || 0)}/${UI.esc(p.Sakit || 0)}/${UI.esc(p.Libur ? p.Libur + '/' : '')}${UI.esc(p.Alfa || 0)}</td>`;
           }).join('');
           return `<tr>
             <td class="center">${i + 1}</td>
@@ -1363,6 +1368,7 @@ const Admin = (() => {
             <td class="center">${UI.esc(r.Hadir || 0)}</td>
             <td class="center">${UI.esc(r.Izin || 0)}</td>
             <td class="center">${UI.esc(r.Sakit || 0)}</td>
+            <td class="center">${UI.esc(r.Libur || 0)}</td>
             <td class="center">${UI.esc(r.Alfa || 0)}</td>
             <td class="center">${persen(r)}%</td>
           </tr>`;
@@ -1370,7 +1376,7 @@ const Admin = (() => {
         return `<div class="title">${UI.esc(judul)}</div>
           <div class="sub">Periode: ${UI.esc(periode)}</div>
           <table>
-            <thead><tr><th class="center">No</th><th>Nama</th>${sesiHeads}<th class="center">Hadir</th><th class="center">Izin</th><th class="center">Sakit</th><th class="center">Alfa</th><th class="center">%</th></tr></thead>
+            <thead><tr><th class="center">No</th><th>Nama</th>${sesiHeads}<th class="center">Hadir</th><th class="center">Izin</th><th class="center">Sakit</th><th class="center">Libur</th><th class="center">Alfa</th><th class="center">%</th></tr></thead>
             <tbody>${body}</tbody>
           </table>`;
       };
@@ -1416,10 +1422,10 @@ const Admin = (() => {
 
 /* ---------------- Absensi Ustadz ---------------- */
   const SESI_ABSENSI = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
-  const STATUS_ABSENSI = ['Hadir', 'Izin', 'Sakit'];
+  const STATUS_ABSENSI = ['Hadir', 'Izin', 'Sakit', 'Libur'];
 
   function absensiBadgeClass(status) {
-    return status === 'Hadir' ? 'green' : status === 'Izin' ? 'warn' : status === 'Sakit' ? 'blue' : 'danger';
+    return status === 'Hadir' ? 'green' : status === 'Izin' ? 'warn' : status === 'Sakit' ? 'blue' : status === 'Libur' ? 'purple' : 'danger';
   }
 
   // Batasi rekap agar tabel tidak pernah memuat ribuan baris dari satu klik.
@@ -1576,6 +1582,7 @@ const Admin = (() => {
           ${Shared.statCard(Shared.ICONS.moon, count('Hadir') + suffix, sesi + ' - Hadir', '#22C55E')}
           ${Shared.statCard(Shared.ICONS.users, count('Izin') + suffix, sesi + ' - Izin', '#FACC15')}
           ${Shared.statCard(Shared.ICONS.teacher, count('Sakit') + suffix, sesi + ' - Sakit', '#3B82F6')}
+          ${Shared.statCard(Shared.ICONS.calendar, count('Libur') + suffix, sesi + ' - Libur', '#A855F7')}
           ${Shared.statCard(Shared.ICONS.book, kosong + suffix, sesi + ' - Belum Absen', '#EF4444')}
         </div>`;
       }).join('');

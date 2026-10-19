@@ -179,6 +179,7 @@ const Shared = (() => {
     star: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
     building: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="9" y1="6" x2="9" y2="6.01"/><line x1="15" y1="6" x2="15" y2="6.01"/><line x1="9" y1="10" x2="9" y2="10.01"/><line x1="15" y1="10" x2="15" y2="10.01"/><line x1="9" y1="14" x2="9" y2="14.01"/><line x1="15" y1="14" x2="15" y2="14.01"/></svg>',
     teacher: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+    calendar: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
   };
 
   /* KPI stat card */
@@ -307,7 +308,7 @@ const Shared = (() => {
         hapus: (session && (session.role === 'ustadz' || session.role === 'admin')) ? `<button class="clay-btn sm ghost" data-hapus="mutqin" data-id="${m.id}" style="padding:2px 8px;font-size:11px;color:var(--danger)">Hapus</button>` : ''
       });
     });
-    db.kehadiran.filter(k => k.santriId === santriId).forEach(k => items.push({ t: k.tanggal, html: `Kehadiran ${UI.esc(k.sesi || '')}: <span class="badge ${k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : 'danger'}">${UI.esc(k.status)}</span>`, hapus: '' }));
+    db.kehadiran.filter(k => k.santriId === santriId).forEach(k => items.push({ t: k.tanggal, html: `Kehadiran ${UI.esc(k.sesi || '')}: <span class="badge ${k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : k.status === 'Libur' ? 'purple' : 'danger'}">${UI.esc(k.status)}</span>`, hapus: '' }));
     db.catatan.filter(c => c.santriId === santriId).forEach(c => items.push({ t: c.tanggal, html: `<b>Catatan Ustadz:</b> ${UI.esc(c.isi)}`, hapus: '' }));
 
     items.sort((a, b) => b.t.localeCompare(a.t));
@@ -833,7 +834,10 @@ function exportLaporanExcel(filters) {
         const cells = days.map(day => {
           const types = (setoran.get(s.id + '|' + day.tanggal) || []).filter(type => relevantTypes.includes(type));
           if (day.tanggal > today) return { status: 'future', types: [] };
-          return types.length ? { status: 'submitted', types } : { status: 'missing', types: [] };
+          if (types.length) return { status: 'submitted', types };
+          const isDayLibur = db.kehadiran.some(k => k.santriId === s.id && k.tanggal === day.tanggal && k.status === 'Libur');
+          if (isDayLibur) return { status: 'libur', types: [] };
+          return { status: 'missing', types: [] };
         });
         const absensi = Store.rekapKehadiranSantri(s.id, period.dari, period.sampai);
         return {
@@ -844,7 +848,8 @@ function exportLaporanExcel(filters) {
           izin: absensi.total.Izin,
           sakit: absensi.total.Sakit,
           alfa: absensi.total.Alfa,
-          persen: absensi.total.slot ? Math.round((absensi.total.Hadir / absensi.total.slot) * 100) : 0
+          libur: absensi.total.Libur,
+          persen: absensi.total.persen ?? (absensi.total.slot ? Math.round((absensi.total.Hadir / absensi.total.slot) * 100) : 0)
         };
       });
       return { h, rows };
@@ -864,6 +869,9 @@ function exportLaporanExcel(filters) {
             const title = cell.types.map(type => JENIS_SETORAN[type]).join(', ');
             return `<td class="center" title="${UI.esc(title)}"><span class="badge green">✓</span></td>`;
           }
+          if (cell.status === 'libur') {
+            return '<td class="center" title="Halaqah Libur"><span class="badge purple" style="font-size:10px;padding:2px 6px">Libur</span></td>';
+          }
           if (allowMakeup) {
             const tanggal = recap.days[dayIndex].tanggal;
             const label = tanggal < Store.todayStr() ? 'Bayar' : 'Setor';
@@ -878,7 +886,7 @@ function exportLaporanExcel(filters) {
           ${cells}
           <td class="center"><b>${row.setoran}</b></td>
           <td class="center"><b>${row.missing}</b></td>
-          <td class="center" style="font-size:12px" title="Hadir/Izin/Sakit/Alfa">${row.hadir}/${row.izin}/${row.sakit}/${row.alfa}</td>
+          <td class="center" style="font-size:12px" title="Hadir/Izin/Sakit/Libur/Alfa">${row.hadir}/${row.izin}/${row.sakit}/${row.libur ? row.libur + '/' : ''}${row.alfa}</td>
           <td class="center"><b>${row.persen}%</b></td>
         </tr>`;
       }).join('');
@@ -1073,6 +1081,13 @@ function exportLaporanExcel(filters) {
             ctx.fillStyle = '#15803d';
             ctx.font = '700 22px Arial, sans-serif';
             ctx.fillText('✓', centerX, y + 37);
+          } else if (cell.status === 'libur') {
+            ctx.fillStyle = '#f3e8ff';
+            canvasRoundedRect(ctx, centerX - 24, y + 16, 48, 24, 6);
+            ctx.fill();
+            ctx.fillStyle = '#7e22ce';
+            ctx.font = '600 13px Inter, Arial, sans-serif';
+            ctx.fillText('Libur', centerX, y + 33);
           } else if (cell.status === 'future') {
             ctx.fillStyle = '#6b7280';
             ctx.font = '600 20px Inter, Arial, sans-serif';
@@ -1091,7 +1106,7 @@ function exportLaporanExcel(filters) {
     ctx.font = '500 16px Inter, Arial, sans-serif';
     ctx.textAlign = 'left';
     const footerY = tableY + tableHeaderHeight + rows.length * rowHeight + 43;
-    ctx.fillText('✓ Sudah setoran    •    Belum: belum setoran    •    — Tanggal mendatang', padding, footerY);
+    ctx.fillText('✓ Sudah setoran    •    Belum: belum setoran    •    Libur: diliburkan    •    — Tanggal mendatang', padding, footerY);
     ctx.textAlign = 'right';
     ctx.fillText(`Diunduh ${UI.fmtDate(Store.todayStr())}`, logicalWidth - padding, footerY);
 
