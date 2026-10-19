@@ -798,6 +798,20 @@ const Store = (() => {
      Satu halaqah boleh diampu lebih dari satu ustadz, sehingga absensi ustadz
      dan absensi santrinya disimpan terpisah dan tidak saling menimpa. */
   function absensiUstadzOf(ustadzId, tanggal, sesi) {
+    const rec = absensiUstadzRow(ustadzId, tanggal, sesi);
+    if (!rec) return null;
+    // Buang record yang tidak konsisten: id cocok tapi nama tidak (data
+    // tertukar/tertinggal dari versi lama). Tanpa ini banner "tersimpan"
+    // milik ustadz lain bisa muncul saat ustadz ini belum absen.
+    const u = findUstadz(ustadzId);
+    if (u && rec.ustadz && rec.ustadz !== u.nama) return null;
+    return rec;
+  }
+
+  // Baris mentah per (ustadz, tanggal, sesi) tanpa cek nama. Dipakai saat
+  // menyimpan supaya baris rusak yang sama persis ditimpa (memperbaiki
+  // unique index) alih-alih membuat baris kedua yang ditolak database.
+  function absensiUstadzRow(ustadzId, tanggal, sesi) {
     if (!ustadzId) return null;
     return db.absensiUstadz.find(a => a.ustadzId === ustadzId && a.tanggal === tanggal && a.sesi === sesi) || null;
   }
@@ -819,7 +833,9 @@ const Store = (() => {
     const ustadz = findUstadz(ustadzId);
     if (!ustadz || !status) return false;
     const t = tanggal || todayStr();
-    const existing = absensiUstadzOf(ustadzId, t, sesi);
+    // Pakai baris mentah: record lama yang tidak konsisten akan dikoreksi di
+    // tempat, bukan menggandakan baris (unique index akan menolaknya).
+    const existing = absensiUstadzRow(ustadzId, t, sesi);
     const halaqah = findHalaqahForUstadz(ustadz);
     const record = {
       id: existing ? existing.id : uid('au'),
@@ -1027,7 +1043,7 @@ const Store = (() => {
     waSend, waLog, waReady, waAutoEnabled, waSendWali, waStatus, waQrDataUrl,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,
     setoranRentang, avgNilaiRentang, padaRentang, juzHafalanDisplay,
-    absensiUstadzOf, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,
+    absensiUstadzOf, absensiUstadzRow, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,
     rekapKehadiranSantri, rekapKehadiranUstadz, tanggalRange, tambahHari, SESI_REKAP,
     addNotif, notifFor, clearNotifs, checkSetoranTerlewat
   };

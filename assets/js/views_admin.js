@@ -653,7 +653,7 @@ const Admin = (() => {
       const penugasanTalim = talimAssignmentSummary(u);
       return `<tr>
         <td><b>${UI.esc(u.nama)}</b></td>
-        <td><code>${UI.esc(uname)}</code></td>
+        <td><code>${UI.esc(uname)}</code>${acc ? '' : ' <span class="badge danger">Belum ada akun</span>'}</td>
         <td>${UI.esc(u.noHp)}</td>
         <td>${UI.esc(u.email)}</td>
         <td>${UI.esc(halaqahNames.join(', ') || u.halaqah || '-')}</td>

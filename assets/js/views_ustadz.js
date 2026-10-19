@@ -303,12 +303,20 @@ const Ustadz = (() => {
               <b>Absensi ustadz tersimpan</b>
               <div class="muted" style="font-size:12px">
                 <span class="badge ${statusBadgeClass(self.status)}">${UI.esc(self.status)}</span>
-                pukul ${UI.fmtDateTime(self.waktu)}${self.catatan ? ' - ' + UI.esc(self.catatan) : ''}
+                oleh ${UI.esc(self.ustadz || selfUstadz.nama)} pukul ${UI.fmtDateTime(self.waktu)}${self.catatan ? ' - ' + UI.esc(self.catatan) : ''}
               </div>
             </div>
             <button class="clay-btn ghost sm" id="btn-absen-ustadz">Ubah Absensi Ustadz</button>
           </div>
-        </div>`) : ''}
+        </div>`) : `
+        <div class="clay-card" style="margin-bottom:14px;border-left:4px solid #EF4444">
+          <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
+            <div>
+              <b>Akun ustadz tidak terhubung ke data ustadz</b>
+              <div class="muted" style="font-size:12px">Hubungi admin untuk memperbaiki relasi akun (refId) ke data ustadz.</div>
+            </div>
+          </div>
+        </div>`}
         <div class="clay-card">
           <div class="row" style="justify-content:space-between">
             <div class="section-title" style="margin:0">Absensi ${UI.fmtDate(t)}</div>

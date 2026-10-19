@@ -185,11 +185,28 @@ switch ($action) {
                         if (!is_array($rec)) continue;
                         $id = $rec['id'] ?? uid($type);
                         $rec['id'] = $id;
+                        // Otoritas server: ustadz tidak boleh menuliskan absensi
+                        // atas nama akun lain. Paksa ustId dan nama dari token
+                        // sehingga dua ustadz yang ngajar 1 halaqah tidak saling
+                        // menimpa dan tidak ada yang "terkunci" oleh data orang
+                        // (record yang tertukar akan otomatis diperbaiki).
+                        if ($u['role'] === 'ustadz' && $u['refId'] && ($type === 'absensiUstadz' || $type === 'kehadiran')) {
+                            $rec['ustadzId'] = $u['refId'];
+                            $ust = getRecord('ustadz', $u['refId']);
+                            if (is_array($ust) && isset($ust['nama'])) {
+                                $rec['ustadz'] = $ust['nama'];
+                            }
+                        }
                         putRecord($type, $id, $rec);
                         if ($type === 'kehadiran') $attendanceChanged = true;
                     }
                     foreach (($change['remove'] ?? []) as $id) {
                         if (!is_string($id) || $id === '') continue;
+                        // ustadz hanya boleh hapus absensi miliknya sendiri.
+                        if ($u['role'] === 'ustadz' && $u['refId'] && ($type === 'absensiUstadz' || $type === 'kehadiran')) {
+                            $existing = getRecord($type, $id);
+                            if ($existing && (($existing['ustadzId'] ?? '') !== $u['refId'])) continue;
+                        }
                         delRecord($type, $id);
                         if ($type === 'kehadiran') $attendanceChanged = true;
                     }
