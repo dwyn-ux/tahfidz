@@ -129,7 +129,7 @@ const Ustadz = (() => {
           <div class="row">
             <button class="clay-btn primary" data-go="ustadz_absensi">Absensi</button>
             <button class="clay-btn secondary" data-go="ustadz_pembelajaran"> Pembelajaran</button>
-            ${selfUstadz ? '<button class="clay-btn ghost" id="btn-dashboard-liburkan" style="color:#7e22ce;border:1px solid #d8b4fe">🏖️ Liburkan Halaqah</button>' : ''}
+            ${selfUstadz ? '<button class="clay-btn ghost" id="btn-dashboard-liburkan" style="color:#7e22ce;border:1px solid #d8b4fe">Liburkan Halaqah</button>' : ''}
           </div>
           ${absenUstadzCard}
         </div>
@@ -194,11 +194,11 @@ const Ustadz = (() => {
       bodyHTML: `
         <div class="muted" style="font-size:13px;margin-bottom:10px">Absen diri dulu sebelum mengabsen Santri. Pilih <b>Libur</b> bila ada kegiatan dan halaqah ditiadakan.</div>
         <div class="row" style="gap:6px;flex-wrap:wrap" id="au-status">
-          ${STATUS_USTADZ.map(s => `<button type="button" class="clay-btn sm ghost" data-au-st="${UI.esc(s)}">${s === 'Libur' ? '🏖️ ' : ''}${UI.esc(s)}</button>`).join('')}
+          ${STATUS_USTADZ.map(s => `<button type="button" class="clay-btn sm ghost" data-au-st="${UI.esc(s)}">${UI.esc(s)}</button>`).join('')}
         </div>
         <div id="au-libur-info" style="display:${picked.status === 'Libur' ? 'block' : 'none'};margin-top:10px;padding:8px 12px;background:#faf5ff;border-radius:var(--radius-md);border:1px solid #e9d5ff">
           <div style="font-size:12px;color:#7e22ce">
-            <b>🏖️ Mode Libur Halaqah:</b> Seluruh santri di <b>${UI.esc(hNama)}</b> akan otomatis dicatat sebagai <b>Libur</b> pada sesi ${UI.esc(sesi)} dan tidak terhitung Alfa.
+            <b>Mode Libur Halaqah:</b> Seluruh santri di <b>${UI.esc(hNama)}</b> akan otomatis dicatat sebagai <b>Libur</b> pada sesi ${UI.esc(sesi)} dan tidak terhitung Alfa.
           </div>
         </div>
         <div class="mt">
@@ -256,7 +256,7 @@ const Ustadz = (() => {
     const existingCatatan = (existingAU && existingAU.catatan) || '';
 
     const { modal } = UI.openModal({
-      title: '🏖️ Liburkan Halaqah',
+      title: 'Liburkan Halaqah',
       sub: `${hNama} — ${UI.fmtDate(t)}`,
       dismissable: false,
       bodyHTML: `
@@ -295,17 +295,14 @@ const Ustadz = (() => {
           </div>
         </div>
         <div class="clay-card pad-sm mt" style="background:#faf5ff;border:1px solid #e9d5ff">
-          <div class="row center" style="gap:8px">
-            <span style="font-size:20px">ℹ️</span>
-            <div style="font-size:12px;color:#6b21a8">
-              Santri yang terdaftar di <b>${UI.esc(hNama)}</b> akan otomatis mendapatkan status <b>Libur</b> pada sesi tersebut.
-            </div>
+          <div style="font-size:12px;color:#6b21a8">
+            Santri yang terdaftar di <b>${UI.esc(hNama)}</b> akan otomatis mendapatkan status <b>Libur</b> pada sesi tersebut.
           </div>
         </div>`,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
         {
-          label: '🏖️ Liburkan Halaqah', cls: 'primary',
+          label: 'Liburkan Halaqah', cls: 'primary',
           onClick: async (m, c) => {
             const alasan = (m.querySelector('#libur-alasan')?.value || '').trim() || 'Ada kegiatan / Libur';
             const scope = m.querySelector('input[name="libur-scope"]:checked')?.value || 'sesi';
@@ -445,7 +442,7 @@ const Ustadz = (() => {
               <div class="muted" style="font-size:12px">Catat kehadiran ustadz lebih dulu, baru pilih status Santri. Bila ada kegiatan, Anda bisa meliburkan halaqah.</div>
             </div>
             <div class="row" style="gap:8px">
-              <button class="clay-btn sm secondary" id="btn-banner-liburkan" style="background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe">🏖️ Liburkan Halaqah</button>
+              <button class="clay-btn sm secondary" id="btn-banner-liburkan" style="background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe">Liburkan Halaqah</button>
               <button class="clay-btn primary sm" id="btn-absen-ustadz">Absen Ustadz</button>
             </div>
           </div>
@@ -454,7 +451,7 @@ const Ustadz = (() => {
           <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
             <div>
               <div class="row center" style="gap:8px">
-                <span class="badge purple" style="font-size:13px">🏖️ Halaqah Diliburkan</span>
+                <span class="badge purple" style="font-size:13px">Halaqah Diliburkan</span>
                 <b>Sesi ${UI.esc(sesiAktif)} — ${UI.fmtDate(t)}</b>
               </div>
               <div class="muted" style="font-size:12px;margin-top:4px">
@@ -477,7 +474,7 @@ const Ustadz = (() => {
               </div>
             </div>
             <div class="row" style="gap:8px">
-              <button class="clay-btn sm ghost" id="btn-banner-liburkan" style="color:#7e22ce;border:1px solid #d8b4fe">🏖️ Liburkan Sesi Ini</button>
+              <button class="clay-btn sm ghost" id="btn-banner-liburkan" style="color:#7e22ce;border:1px solid #d8b4fe">Liburkan Sesi Ini</button>
               <button class="clay-btn ghost sm" id="btn-absen-ustadz">Ubah Absensi Ustadz</button>
             </div>
           </div>
@@ -495,10 +492,10 @@ const Ustadz = (() => {
             <div class="section-title" style="margin:0">Absensi ${UI.fmtDate(t)}</div>
             <div class="row center" style="gap:8px">
               ${isLibur ? `
-                <span class="badge purple">🏖️ Status: Libur</span>
+                <span class="badge purple">Status: Libur</span>
                 <button class="clay-btn sm danger ghost" id="btn-card-batal-libur">Batal Libur</button>
               ` : `
-                ${selfUstadz ? '<button class="clay-btn sm ghost" id="btn-card-liburkan" style="color:#7e22ce;border:1px solid #d8b4fe">🏖️ Liburkan Halaqah</button>' : ''}
+                ${selfUstadz ? '<button class="clay-btn sm ghost" id="btn-card-liburkan" style="color:#7e22ce;border:1px solid #d8b4fe">Liburkan Halaqah</button>' : ''}
                 ${hasSaved && !isEditing
                   ? '<span class="badge green">Sudah tersimpan</span><button class="clay-btn ghost" id="btn-edit"> Edit Absensi</button>'
                   : (isLocked ? '<span class="badge warn">Menunggu absensi ustadz</span>' : '<button class="clay-btn primary" id="btn-save"> Simpan Absensi</button>')}
