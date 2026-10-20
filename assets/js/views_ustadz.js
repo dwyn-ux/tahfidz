@@ -127,10 +127,11 @@ const Ustadz = (() => {
         <div class="clay-card">
           <div class="section-title">Shortcut</div>
           <div class="row">
-            <button class="clay-btn primary" data-go="ustadz_absensi">Absensi</button>
+            <button class="clay-btn primary" data-go="ustadz_absensi">Absensi${selfUstadz ? ` · ${UI.esc(sesiSaatIni())}` : ''}</button>
             <button class="clay-btn secondary" data-go="ustadz_pembelajaran"> Pembelajaran</button>
             ${selfUstadz ? '<button class="clay-btn ghost" id="btn-dashboard-liburkan" style="color:#7e22ce;border:1px solid #d8b4fe">Liburkan Halaqah</button>' : ''}
           </div>
+          ${selfUstadz ? `<div class="muted" style="font-size:12px;margin-top:6px">Tombol Absensi membuka sesi <b>${UI.esc(sesiSaatIni())}</b> sesuai jam sekarang. Sesi lain tetap bisa dipilih manual di halaman absensi.</div>` : ''}
           ${absenUstadzCard}
         </div>
         <div class="clay-card">
@@ -152,15 +153,40 @@ const Ustadz = (() => {
   const SESI = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
   const STATUS_USTADZ = ['Hadir', 'Izin', 'Sakit', 'Libur'];
 
-  // Sesi yang paling mendekati waktu sekarang, dipakai sebagai pilihan awal
-  // pada dialog absensi ustadz.
-  function sesiSaatIni() {
-    const h = new Date().getHours();
-    if (h < 10) return 'Subuh';
-    if (h < 15) return 'Ashar';
-    if (h < 18) return 'Maghrib';
-    if (h < 20) return 'Isya';
-    return 'Ta’lim Malam';
+  // Batas ATAS tiap sesi: sesi tetap berlaku sampai menit ini (eksklusif).
+  // Subuh berlaku sampai pukul 12.00, Ashar sampai 18.00, Maghrib sampai
+  // 19.30, Isya sampai 20.00, dan setelah itu Ta'lim Malam. Dengan begitu
+  // membuka absensi pukul 15.15 masuk sesi Ashar dan pukul 18.10 masuk sesi
+  // Maghrib.
+  const BATAS_SESI_OTOMATIS = [
+    { batasMenit: 12 * 60, sesi: 'Subuh' },
+    { batasMenit: 18 * 60, sesi: 'Ashar' },
+    { batasMenit: 19 * 60 + 30, sesi: 'Maghrib' },
+    { batasMenit: 20 * 60, sesi: 'Isya' }
+  ];
+  const SESI_SETELAH_BATAS = 'Ta’lim Malam';
+
+  // Sesi yang aktif menurut jam sekarang; halaman absensi tetap membuka sesi
+  // ini walaupun catatannya sudah tersimpan, supaya koreksi siang hari mudah.
+  // Sesi ini hanya pilihan awal — ustadz bebas memilih sesi lain.
+  // Objek waktu diterima sebagai parameter agar batas jam bisa diuji langsung.
+  function sesiSaatIni(now = new Date()) {
+    // Objek waktu dari realm lain (mis. iframe) tidak selalu lolos
+    // `instanceof Date`, jadi dicek dari metodenya.
+    if (!now || typeof now.getHours !== 'function' || typeof now.getMinutes !== 'function') {
+      now = new Date();
+    }
+    const menit = Number(now.getHours()) * 60 + Number(now.getMinutes());
+    for (let i = 0; i < BATAS_SESI_OTOMATIS.length; i++) {
+      if (menit < BATAS_SESI_OTOMATIS[i].batasMenit) return BATAS_SESI_OTOMATIS[i].sesi;
+    }
+    return SESI_SETELAH_BATAS;
+  }
+
+  // Dipakai layar lain (mis. penanda sesi otomatis di halaman absensi) tanpa
+  // perlu ikut menyalin tabel batas jam di atas.
+  function sesiUntukWaktu(now) {
+    return sesiSaatIni(now);
   }
 
   function statusBadgeClass(status) {
@@ -382,9 +408,15 @@ const Ustadz = (() => {
     );
   }
 
-  function absensi(initialSesi = 'Subuh') {
+  function absensi(initialSesi = '') {
     const c = ctx(); _scope = c.scope;
     const isTalim = initialSesi === 'Ta’lim Malam';
+    // Tanpa sesi dari pemanggil: pilih sesi dari jam sekarang, sehingga tombol
+    // Absensi di dashboard langsung membuka sesi yang sedang berjalan.
+    // Sesi yang dipilih sistem ini hanya nilai awal — ustadz tetap bebas
+    // mengklik sesi lain kapan saja.
+    const sesiOtomatis = !SESI.includes(initialSesi);
+    if (sesiOtomatis) initialSesi = sesiSaatIni();
     const navItems = (c.role === 'admin') ? Admin.nav(isTalim ? 'ustadz_talim' : 'ustadz_absensi') : nav(isTalim ? 'ustadz_talim' : 'ustadz_absensi');
     Shared.shell(c.role, navItems, '');
     Shared.setHeader(isTalim ? 'Absensi Ta’lim Malam' : 'Absensi', 'Absen ustadz sendiri, lalu pilih status untuk Santri yang diabsen');
@@ -394,6 +426,9 @@ const Ustadz = (() => {
     const allSantri = db.santri;
     const t = Store.todayStr();
     let sesiAktif = initialSesi;
+    // Penanda "Otomatis" hanya berlaku pada sesi yang dipilih sistem dan
+    // hilang begitu ustadz memilih sesi sendiri.
+    let sesiOtomatisAktif = sesiOtomatis;
     const ownHalaqah = myHalaqah();
     // Prioritaskan roster halaqah ustadz; seluruh santri tetap bisa dipilih
     // secara sadar bila memang perlu mencatat absensi lintas halaqah.
@@ -554,9 +589,10 @@ const Ustadz = (() => {
               `}
             </div>
           </div>
-          <div class="row mb" style="margin-top:12px">
+          <div class="row mb" style="margin-top:12px;align-items:center">
             <span class="muted" style="font-size:13px">Sesi:</span>
-            ${SESI.map(s => `<button class="pill ${s === sesiAktif ? 'active' : ''}" data-sesi="${s}">${s === 'Subuh' ? '' : s === 'Maghrib' ? '' : ''} ${s}</button>`).join('')}
+            ${SESI.map(s => `<button class="pill ${s === sesiAktif ? 'active' : ''}" data-sesi="${s}">${s === 'Subuh' ? '' : s === 'Maghrib' ? '' : ''} ${s}${s === sesiAktif && sesiOtomatisAktif ? ' · Otomatis' : ''}</button>`).join('')}
+            ${sesiOtomatisAktif ? `<span class="badge blue" title="Dipilih dari jam perangkat">Otomatis · ${UI.esc(sesiUntukWaktu())}</span>` : ''}
           </div>
           <div class="row mb" style="align-items:flex-end">
             ${isTalim ? `
@@ -625,6 +661,9 @@ const Ustadz = (() => {
 
       document.querySelectorAll('[data-sesi]').forEach(b => b.onclick = () => {
         sesiAktif = b.dataset.sesi;
+        // Klik manual berarti ustadz memilih sendiri, jadi penanda
+        // "Otomatis" dilepas.
+        sesiOtomatisAktif = false;
         editing = null;
         pendingStatus = {};
         renderAbsensi();
@@ -1879,5 +1918,5 @@ const Ustadz = (() => {
     };
   }
 
-  return { nav, dashboard, absensi, talim, pembelajaran, riwayat, laporan, notif };
+  return { nav, dashboard, absensi, talim, pembelajaran, riwayat, laporan, notif, sesiSaatIni };
 })();
