@@ -91,6 +91,63 @@ const Shared = (() => {
     if (a) a.innerHTML = html;
   }
 
+  /* ---------------- Pemicu WA otomatis berjadwal ----------------
+     Rekap harian/mingguan/bulanan tidak bisa dikirim dari browser saat jamnya
+     tiba (aplikasi ini tidak punya background worker). Karena itu laporan
+     dikirim saat ada yang membuka aplikasi setelah jam yang disetel, memakai
+     periode yang SUDAH SELESAI sehingga tidak ada absensi yang masih bisa
+     dikoreksi ikut terkirim. Untuk lembaga yang ingin tepat waktu tanpa harus
+     ada yang membuka aplikasi, panggil dari cron:
+       curl -H "Authorization: Bearer <TOKEN_ADMIN>" \
+            "https://domain/api/index.php?action=wa_auto_reminder"
+     Satu pemicu hanya terkirim sekali per hari (ditandai di waAutoLog). */
+  function kirimRekapOtomatis() {
+    const pemicu = Store.waAutoTriggerSettings();
+    const butuhJadwal = pemicu.harian || pemicu.mingguan || pemicu.bulanan;
+    if (!butuhJadwal) return 0;
+    if (!Store.waAutoEnabled() || !Store.waReady()) return 0;
+
+    const now = new Date();
+    const jamSetelan = Store.waAutoHour();
+    const sudahWaktunya = now.getHours() > jamSetelan.jam
+      || (now.getHours() === jamSetelan.jam && now.getMinutes() >= jamSetelan.menit);
+    if (!sudahWaktunya) return 0;
+
+    const hariIni = Store.todayStr();
+    const kemarin = Store.tambahHari(hariIni, -1);
+    const awalBulanLalu = formatTanggal(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+    const akhirBulanLalu = formatTanggal(new Date(now.getFullYear(), now.getMonth(), 0));
+    let terkirim = 0;
+
+    // Urutan menaik: satu santri bisa menerima rekap harian dan mingguan pada
+    // hari yang sama bila keduanya diaktifkan admin.
+    const daftar = [
+      ['harian', 'harian', kemarin, kemarin, 'Rekap absensi harian'],
+      ['mingguan', 'mingguan', Store.tambahHari(hariIni, -7), kemarin, 'Rekap absensi mingguan'],
+      ['bulanan', 'bulanan', awalBulanLalu, akhirBulanLalu, 'Rekap absensi bulanan']
+    ];
+
+    daftar.forEach(([kunci, trigger, dari, sampai, judul]) => {
+      if (!pemicu[kunci]) return;
+      if (!Store.waAutoDue(trigger, now)) return;
+      if (Store.waAutoSudahKirim(trigger, hariIni)) return;
+      const daftarSantri = Store.get().santri.filter(s => s.status !== 'Nonaktif' && s.noHpWali);
+      daftarSantri.forEach(s => {
+        const msg = Store.waAbsensiMessage(s, dari, sampai, judul);
+        Store.waSendWali(s.id, msg).then(ok => { if (ok) terkirim++; });
+      });
+      Store.waAutoTandai(trigger, hariIni, daftarSantri.length);
+    });
+
+    return terkirim;
+  }
+
+  // Dipakai untuk rentang bulanan; disimpan terpisah agar mudah diuji.
+  function formatTanggal(d) {
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + m + '-' + day;
+  }
   // Beberapa keyboard/fitur autofill ponsel tidak konsisten mengirim `input`.
   // Dengarkan event standar serta periksa perubahan nilai ketika kolom fokus,
   // sebab Chrome/WebView dapat mengisi autofill tanpa mengirim event apa pun.
@@ -1201,5 +1258,5 @@ function exportLaporanExcel(filters) {
     </div>`;
   }
 
-  return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, htmlTableToSheet, downloadExcel, downloadXlsx, downloadTemplateExcel, bulanLabel, mondayOf, rekapSetoranRange, setRekapSetoranRange, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, ICONS, hafalanMapHTML };
+  return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, htmlTableToSheet, downloadExcel, downloadXlsx, downloadTemplateExcel, bulanLabel, mondayOf, rekapSetoranRange, setRekapSetoranRange, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, kirimRekapOtomatis, ICONS, hafalanMapHTML };
 })();

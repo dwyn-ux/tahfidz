@@ -2052,6 +2052,13 @@ const Admin = (() => {
     const db = Store.get(); const s = db.settings;
     const _sesi = Store.getSession() || {};
     const _akun = db.users.find(u => u.id === _sesi.userId) || { username: '-' };
+    const waTrigger = (key) => {
+      const raw = (s.waAutoTrigger && s.waAutoTrigger[key]);
+      if (!s.waAutoTrigger || typeof s.waAutoTrigger !== 'object' || !Object.keys(s.waAutoTrigger).length) {
+        return key === 'setoran';
+      }
+      return raw === true || raw === 1 || raw === '1' || raw === 'true';
+    };
     document.getElementById('view-content').innerHTML = `
       <div class="pill-tabs" id="set-tab-bar">
         <button class="pill active" data-set-tab="lembaga">Lembaga</button>
@@ -2161,20 +2168,47 @@ const Admin = (() => {
       </div>
       <div data-set-panel="wa">
       <div class="clay-card mb">
-        <div class="section-title"> WhatsApp Otomatis (ke Wali)</div>
+        <div class="section-title"> Pemicu WA Otomatis</div>
         <div class="muted" style="font-size:12px;margin-bottom:10px">
-          Hubungkan ke WA Bridge (Node) agar laporan capaian terkirim otomatis ke WhatsApp wali.
-          <br>Bridge: <code>npm install &amp;&amp; npm start</code> di folder <code>wa-bridge</code> (isi <code>WA_KEY</code> di <code>wa-bridge/.env</code>), lalu tekan <b>Cek Status</b> dan scan QR yang muncul.
+          Pemicu "Setoran" dikirim langsung saat ustadz menyimpan setoran (jika aktif).
+          Pemicu jadwal (Harian/Mingguan/Bulanan) dikirim saat ada yang membuka aplikasi setelah jam yang disetel, memakai periode yang sudah selesai.
+          Untuk pengiriman tepat waktu tanpa interaksi pengguna, jalankan cron dari server: <code>curl -H "Authorization: Bearer &lt;TOKEN_ADMIN&gt;" "https://domain/api/index.php?action=wa_auto_reminder"</code>.
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:8px">
+            <button class="clay-toggle ${waTrigger('setoran') ? 'on' : ''}" id="s-wa-setoran"></button>
+            <span id="s-wa-setoran-label" style="font-size:13px">${waTrigger('setoran') ? 'Saat Setoran: Aktif' : 'Saat Setoran: Nonaktif'}</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px">
+            <button class="clay-toggle ${waTrigger('harian') ? 'on' : ''}" id="s-wa-harian"></button>
+            <span id="s-wa-harian-label" style="font-size:13px">${waTrigger('harian') ? 'Rekap Harian: Aktif' : 'Rekap Harian: Nonaktif'}</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px">
+            <button class="clay-toggle ${waTrigger('mingguan') ? 'on' : ''}" id="s-wa-mingguan"></button>
+            <span id="s-wa-mingguan-label" style="font-size:13px">${waTrigger('mingguan') ? 'Rekap Mingguan (Senin): Aktif' : 'Rekap Mingguan (Senin): Nonaktif'}</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px">
+            <button class="clay-toggle ${waTrigger('bulanan') ? 'on' : ''}" id="s-wa-bulanan"></button>
+            <span id="s-wa-bulanan-label" style="font-size:13px">${waTrigger('bulanan') ? 'Rekap Bulanan (Tgl 1): Aktif' : 'Rekap Bulanan (Tgl 1): Nonaktif'}</span>
+          </label>
+        </div>
+        <div style="max-width:160px;margin-top:10px">${UI.field('Jam Kirim (HH:MM)', `<input class="clay-input" id="s-wa-jam" type="time" value="${UI.esc(s.waAutoJam || '07:00')}">`)}</div>
+      </div>
+      <div class="clay-card mb">
+        <div class="section-title"> Koneksi WA Bridge</div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">
+          Hubungkan ke WA Bridge (Node) agar laporan terkirim ke WhatsApp wali.
+          <br>Bridge: <code>npm install &amp;&amp; npm start</code> di folder <code>wa-bridge</code> (isi <code>WA_KEY</code> di <code>wa-bridge/.env</code>), lalu tekan <b>Cek Status</b> dan scan QR.
           <br>Panggilan ke bridge diteruskan server, jadi <code>X-WA-Key</code> tidak pernah dibuka ke browser.
         </div>
         <div class="row">
-          <div style="flex:1">${UI.field('URL Bridge (contoh: https://wa.example.com:3210)', `<input class="clay-input" id="s-wa-url" value="${UI.esc(s.waBridgeUrl)}" placeholder="https://...:3210">`)}</div>
+          <div style="flex:1">${UI.field('URL Bridge (contoh: http://127.0.0.1:3210 atau https://wa.example.com)', `<input class="clay-input" id="s-wa-url" value="${UI.esc(s.waBridgeUrl)}" placeholder="http://127.0.0.1:3210">`)}</div>
           <div style="flex:1">${UI.field('Key Bridge (X-WA-Key)', `<input class="clay-input" id="s-wa-key" value="${UI.esc(s.waBridgeKey)}" placeholder="nilai acak dari WA_KEY di server bridge">`)}</div>
         </div>
         <div class="row" style="margin-top:10px">
           <label style="flex:1;display:flex;align-items:center;gap:8px;margin-top:12px">
             <button class="clay-toggle ${s.waAuto ? 'on' : ''}" id="s-wa-auto"></button>
-            <span id="s-wa-auto-label" style="font-size:13px">${s.waAuto ? 'WhatsApp Otomatis: Aktif' : 'WhatsApp Otomatis: Nonaktif'}</span>
+            <span id="s-wa-auto-label" style="font-size:13px">${s.waAuto ? 'WhatsApp Aktif: Aktif' : 'WhatsApp Aktif: Nonaktif'}</span>
           </label>
         </div>
         <div class="row mt">
@@ -2318,23 +2352,26 @@ const Admin = (() => {
     };
     renderKelasTingkat();
 
-    document.getElementById('s-setoran-multi').onclick = function() {
+    document.getElementById('s-wa-auto').onclick = function() {
       this.classList.toggle('on');
       const on = this.classList.contains('on');
-      document.getElementById('s-setoran-label').textContent = on ? 'Berkali-kali per hari' : 'Sekali sehari';
+      const label = document.getElementById('s-wa-auto-label');
+      if (label) label.textContent = on ? 'WhatsApp Aktif: Aktif' : 'WhatsApp Aktif: Nonaktif';
     };
 
-    ['s-notif-active', 's-notif-wali', 's-notif-ustadz', 's-notif-absensi-wali', 's-wa-auto'].forEach(id => {
+    ['s-wa-setoran', 's-wa-harian', 's-wa-mingguan', 's-wa-bulanan'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.onclick = function() {
         this.classList.toggle('on');
         const on = this.classList.contains('on');
         const label = document.getElementById(id + '-label');
-        if (id === 's-notif-active') label.textContent = on ? 'Notifikasi Aktif' : 'Notifikasi Nonaktif';
-        else if (id === 's-notif-wali') label.textContent = on ? 'Kirim ke Wali: Ya' : 'Kirim ke Wali: Tidak';
-        else if (id === 's-notif-ustadz') label.textContent = on ? 'Kirim ke Ustadz: Ya' : 'Kirim ke Ustadz: Tidak';
-        else if (id === 's-notif-absensi-wali') label.textContent = on ? 'Rekap absensi ke Wali: Aktif' : 'Rekap absensi ke Wali: Nonaktif';
-        else if (id === 's-wa-auto') label.textContent = on ? 'WhatsApp Otomatis: Aktif' : 'WhatsApp Otomatis: Nonaktif';
+        const key = id.replace('s-wa-', '');
+        if (label) {
+          if (key === 'setoran') label.textContent = on ? 'Saat Setoran: Aktif' : 'Saat Setoran: Nonaktif';
+          else if (key === 'harian') label.textContent = on ? 'Rekap Harian: Aktif' : 'Rekap Harian: Nonaktif';
+          else if (key === 'mingguan') label.textContent = on ? 'Rekap Mingguan (Senin): Aktif' : 'Rekap Mingguan (Senin): Nonaktif';
+          else if (key === 'bulanan') label.textContent = on ? 'Rekap Bulanan (Tgl 1): Aktif' : 'Rekap Bulanan (Tgl 1): Nonaktif';
+        }
       };
     });
 
@@ -2395,9 +2432,15 @@ const Admin = (() => {
       db.settings.notifMaxPerDay = parseInt(document.getElementById('s-notif-max').value) || 3;
       db.settings.notifAbsensiWali = document.getElementById('s-notif-absensi-wali').classList.contains('on');
       db.settings.notifAbsensiPeriode = document.getElementById('s-notif-absensi-periode').value;
-      db.settings.waBridgeUrl = document.getElementById('s-wa-url').value.trim();
-      db.settings.waBridgeKey = document.getElementById('s-wa-key').value.trim();
       db.settings.waAuto = document.getElementById('s-wa-auto').classList.contains('on');
+      // Pemicu WA baru (bisa lebih dari satu)
+      if (!db.settings.waAutoTrigger || typeof db.settings.waAutoTrigger !== 'object') db.settings.waAutoTrigger = {};
+      ['setoran', 'harian', 'mingguan', 'bulanan'].forEach(key => {
+        const el = document.getElementById('s-wa-' + key);
+        if (el) db.settings.waAutoTrigger[key] = el.classList.contains('on');
+      });
+      const jamWa = document.getElementById('s-wa-jam');
+      if (jamWa) db.settings.waAutoJam = jamWa.value || '07:00';
       db.settings.logo = _logoData || '';
       Store.save(); Store.log('Update settings'); UI.toast('Settings tersimpan', 'success');
     };

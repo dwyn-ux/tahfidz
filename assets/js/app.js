@@ -97,6 +97,10 @@ const App = (() => {
     try {
       routes[view]();
       enhanceTables(document.getElementById('app'));
+      // Pemicu WA otomatis berjadwal (rekap harian/mingguan/bulanan). Hanya
+      // berjalan saat ada yang membuka aplikasi; untuk pengiriman tepat waktu
+      // tanpa interaksi, gunakan api/index.php?action=wa_auto_reminder.
+      try { if (typeof Shared.kirimRekapOtomatis === 'function') Shared.kirimRekapOtomatis(); } catch (e) {}
     } catch (e) {
       console.error('Render error:', e);
       UI.toast('Terjadi kesalahan pada halaman', 'error');
@@ -115,6 +119,7 @@ const App = (() => {
     if (!defaultRoute[role]) { Auth.renderLogin(); return; }
     try {
       await Store.load();
+      try { if (typeof Shared && typeof Shared.kirimRekapOtomatis === 'function') Shared.kirimRekapOtomatis(); } catch (e) {}
     } catch (e) {
       // token invalid or server unreachable -> back to login
       Auth.renderLogin();

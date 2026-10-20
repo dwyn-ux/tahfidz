@@ -28,6 +28,8 @@ const Ustadz = (() => {
   // Saat WA otomatis dimatikan, penyimpanan tidak perlu memunculkan toast
   // pengiriman apa pun. Ustadz cukup menerima konfirmasi "Tersimpan".
   function waReport(santriId, message) {
+    const tr = Store.waAutoTriggerSettings();
+    if (!tr.setoran) return Promise.resolve(false);
     if (!Store.waAutoEnabled()) return Promise.resolve(false);
     return Store.waSendWali(santriId, message).then(ok => {
       UI.toast(ok ? 'WA terkirim ke wali ✓' : 'WA gagal dikirim ke wali (cek Log WhatsApp di Admin)', ok ? 'success' : 'error');

@@ -59,7 +59,9 @@ const Store = (() => {
         juzOrder: [30,29,28,27,26,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
         notifActive: true, notifMaxPerDay: 3, notifWali: true, notifUstadz: true,
         notifAbsensiWali: true, notifAbsensiPeriode: 'harian',
-        waBridgeUrl: '', waBridgeKey: '', waAuto: false, liburLembaga: []
+        waBridgeUrl: '', waBridgeKey: '', waAuto: false, liburLembaga: [],
+        waAutoTrigger: { setoran: true, harian: false, mingguan: false, bulanan: false },
+        waAutoJam: '07:00'
       },
       users: [], santri: [], wali: [], ustadz: [], halaqah: [],
       tingkat: DEFAULT_TINGKAT.slice(), kelas: [],
@@ -276,6 +278,76 @@ const Store = (() => {
     if (!s.noHpWali) { waLog({ to: null, status: 'skipped', detail: 'Santri tanpa no. HP wali', message }); return Promise.resolve(false); }
     return waSend(s.noHpWali, message);
   }
+  /* ---------- Pemicu WA otomatis (setoran / harian / mingguan / bulanan) ---------- */
+
+  // Setelan bisa berisi nilai teks dari backup lama ("false" bersifat truthy),
+  // jadi setiap pemicu dinormalkan ke boolean.
+  function waAutoTriggerSettings() {
+    const raw = (db.settings && db.settings.waAutoTrigger) || {};
+    const aktif = key => raw[key] === true || raw[key] === 1 || raw[key] === '1' || raw[key] === 'true';
+    // Tanpa setelan tersimpan, perilaku lama (hanya setoran) tetap dipakai agar
+    // instalasi yang belum membuka Settings tidak berubah diam-diam.
+    const kosong = !raw || typeof raw !== 'object' || !Object.keys(raw).length;
+    return {
+      setoran: kosong ? true : aktif('setoran'),
+      harian: aktif('harian'),
+      mingguan: aktif('mingguan'),
+      bulanan: aktif('bulanan')
+    };
+  }
+
+  // "HH:MM" dari Settings; dianggap 07:00 bila tidak valid.
+  function waAutoHour() {
+    const value = String((db.settings && db.settings.waAutoJam) || '07:00');
+    const m = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+    if (!m) return { jam: 7, menit: 0 };
+    const jam = Math.min(23, Math.max(0, parseInt(m[1], 10)));
+    const menit = Math.min(59, Math.max(0, parseInt(m[2], 10)));
+    return { jam, menit };
+  }
+
+  // Pemicu berjadwal hanya dikirim pada hari yang cocok. Rekap yang dikirim
+  // adalah periode yang sudah selesai (kemarin / pekan lalu / bulan lalu)
+  // supaya tidak ada absensi yang masih bisa dikoreksi ikut terkirim.
+  function waAutoDue(trigger, now = new Date()) {
+    if (trigger === 'harian') return true;
+    if (trigger === 'mingguan') return now.getDay() === 1; // Senin
+    if (trigger === 'bulanan') return now.getDate() === 1;
+    return true;
+  }
+
+  // Tandai bahwa pemicu sudah dikirim hari ini, agar membuka aplikasi
+  // berkali-kali dalam sehari tidak mengirim pesan berulang.
+  function waAutoSudahKirim(trigger, tanggal) {
+    if (!Array.isArray(db.waAutoLog)) db.waAutoLog = [];
+    return db.waAutoLog.some(item => item.trigger === trigger && item.tanggal === tanggal);
+  }
+  function waAutoTandai(trigger, tanggal, jumlah) {
+    if (!Array.isArray(db.waAutoLog)) db.waAutoLog = [];
+    db.waAutoLog = db.waAutoLog.filter(item => item.trigger !== trigger || item.tanggal !== tanggal);
+    db.waAutoLog.push({ trigger, tanggal, jumlah, waktu: nowISO() });
+    // Hanya perlu menyimpan beberapa hari terakhir.
+    if (db.waAutoLog.length > 60) db.waAutoLog = db.waAutoLog.slice(-60);
+    save();
+  }
+
+  // Satu pesan rekap absensi untuk satu santri pada rentang tanggal tertentu.
+  function waAbsensiMessage(santri, dari, sampai, judul) {
+    const rec = rekapKehadiranSantri(santri.id, dari, sampai);
+    const t = rec.total;
+    const bagian = ['Hadir ' + t.Hadir, 'Izin ' + t.Izin, 'Sakit ' + t.Sakit];
+    if (t.Libur) bagian.push('Libur ' + t.Libur);
+    bagian.push('Alfa ' + t.Alfa);
+    const lembaga = (db.settings && db.settings.namaLembaga) || '';
+    const format = d => {
+      try { return d.split('-').reverse().join('/'); } catch(e) { return d; }
+    };
+    return '📋 ' + judul + ' ' + santri.nama + ' (' +
+      format(dari) + (dari === sampai ? '' : ' - ' + format(sampai)) + '): ' +
+      bagian.join(', ') + '.' + (lembaga ? ' — ' + lembaga : '');
+  }
+
+
   function save() {
     const changes = changesSincePersisted();
     if (!changes) return Promise.resolve(true);
@@ -1224,6 +1296,7 @@ const Store = (() => {
     simpanTingkat, hapusTingkat, simpanKelas, hapusKelas, tingkatAda, kelasDipakaiDiTalim, jumlahSantriKelas, naturalKelasSort,
     talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
     waSend, waLog, waReady, waAutoEnabled, waSendWali, waStatus, waQrDataUrl,
+    waAutoTriggerSettings, waAutoHour, waAutoDue, waAutoSudahKirim, waAutoTandai, waAbsensiMessage,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,
     setoranRentang, avgNilaiRentang, padaRentang, juzHafalanDisplay,
     absensiUstadzOf, absensiUstadzRow, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,
