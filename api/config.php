@@ -421,6 +421,8 @@ function defaultSettings(): array {
         ],
         'talimMapel' => [],
         'talimMalam' => ['ustadzIds' => [], 'judulKitab' => '', 'bab' => ''],
+        // Kalender libur lembaga: [{ tanggal, keterangan, sesi: 'semua'|[...] }]
+        'liburLembaga' => [],
         'notifActive' => true,
         'notifMaxPerDay' => 3,
         'notifWali' => true,

@@ -109,6 +109,7 @@ const Admin = (() => {
       { view: 'admin_halaqah', label: 'Halaqah', active: active === 'admin_halaqah' },
       { view: 'admin_master', label: 'Master Surat', active: active === 'admin_master' },
       { view: 'admin_absensi_ustadz', label: 'Absensi Ustadz', active: active === 'admin_absensi_ustadz' },
+      { view: 'admin_libur', label: 'Kalender Libur', active: active === 'admin_libur' },
       { view: 'admin_riwayat', label: 'Riwayat', active: active === 'admin_riwayat' },
       { view: 'admin_laporan', label: 'Laporan', active: active === 'admin_laporan' },
       { view: 'admin_rekap_kehadiran', label: 'Rekap Kehadiran', active: active === 'admin_rekap_kehadiran' },
@@ -154,6 +155,61 @@ const Admin = (() => {
       .filter(a => a.tanggal === Store.todayStr() && a.status === 'Hadir')
       .map(a => a.ustadzId)).size;
 
+    // Banner libur lembaga (dari Settings → Kalender Libur) bila hari ini libur.
+    function adminLiburBanner() {
+      const info = Store.getLiburLembagaInfo(Store.todayStr());
+      if (!info) return '';
+      return `
+        <div class="clay-card mt" style="border-left:4px solid #a855f7;background:#faf5ff">
+          <div class="row center" style="gap:10px;flex-wrap:wrap">
+            <span class="badge purple" style="font-size:13px">Libur Lembaga</span>
+            <b>${UI.esc(info.keterangan || 'Libur Lembaga')}</b>
+            <span class="muted" style="font-size:12px">Sesi: ${UI.esc(info.sesi === 'semua' ? 'Semua Sesi' : (Array.isArray(info.sesi) ? info.sesi.join(', ') : String(info.sesi)))}</span>
+            <button class="clay-btn sm ghost" data-go="admin_libur" style="margin-left:auto;color:#7e22ce;border:1px solid #d8b4fe">Kelola Kalender Libur</button>
+          </div>
+        </div>`;
+    }
+
+    // Rekap absensi per halaqah × sesi hari ini: memetakan status ustadz
+    // pengampu (bisa lebih dari satu) — Libur bila ada yang mencatat Libur,
+    // selain itu tampilkan status gabungan atau "Belum".
+    function adminRekapAbsensiHariIni() {
+      const SESI_HARI = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
+      const today = Store.todayStr();
+      const rows = db.halaqah.map(h => {
+        const uIds = Store.ustadzIdsForHalaqah(h);
+        const cells = SESI_HARI.map(sesi => {
+          const recs = (db.absensiUstadz || []).filter(a =>
+            a.tanggal === today && a.sesi === sesi && uIds.includes(a.ustadzId));
+          if (recs.some(r => r.status === 'Libur')) return '<td><span class="badge purple">Libur</span></td>';
+          if (!recs.length) return '<td><span class="badge warn">Belum</span></td>';
+          const uniq = [...new Set(recs.map(r => r.status))];
+          return `<td><span class="badge ${uniq.every(s => s === 'Hadir') ? 'green' : 'blue'}">${UI.esc(uniq.join('+'))}</span></td>`;
+        }).join('');
+        const belumSesi = SESI_HARI.filter(sesi => !(db.absensiUstadz || []).some(a =>
+          a.tanggal === today && a.sesi === sesi && uIds.includes(a.ustadzId)));
+        return `<tr>
+          <td><b>${UI.esc(h.nama)}</b></td>${cells}
+          <td>${(belumSesi.length && uIds.length)
+            ? `<button class="clay-btn sm ghost" data-libur-cepat="${UI.esc(h.nama)}" style="color:#7e22ce;border:1px solid #d8b4fe">Libur Semua Sesi</button>`
+            : ''}</td>
+        </tr>`;
+      }).join('');
+      if (!db.halaqah.length) return '';
+      return `
+        <div class="clay-card mt">
+          <div class="row center" style="justify-content:space-between">
+            <div class="section-title" style="margin:0">Status Absensi Halaqah Hari Ini</div>
+            <button class="clay-btn sm ghost" data-go="admin_libur" style="color:#7e22ce;border:1px solid #d8b4fe">+ Libur Terjadwal</button>
+          </div>
+          <div class="muted" style="font-size:12px;margin:6px 0 10px">Halaqah yang belum absen bisa langsung diliburkan dari barisnya.</div>
+          <div class="table-wrap"><table class="clay-table">
+            <thead><tr><th>Halaqah</th>${SESI_HARI.map(s => `<th>${s}</th>`).join('')}<th>Aksi</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table></div>
+        </div>`;
+    }
+
     const kpi = `
       <div class="grid kpi">
         ${Shared.statCard(Shared.ICONS.users, db.santri.length, 'Santri', '#16A34A')}
@@ -184,6 +240,8 @@ const Admin = (() => {
 
     const content = `
       ${kpi}
+      ${adminLiburBanner()}
+      ${adminRekapAbsensiHariIni()}
       <div class="grid cols-2 mt">
         <div class="clay-card">
           <div class="section-title"> Progress Hafalan per Halaqah</div>
@@ -217,6 +275,29 @@ const Admin = (() => {
       </div>`;
     document.getElementById('view-content').innerHTML = content;
     document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => App.navigate(b.dataset.go));
+    // Libur cepat dari tabel rekap: meliburkan semua sesi hari ini untuk satu
+    // halaqah tanpa membuka dialog panjang (dipakai saat halaqah lupa absen).
+    document.querySelectorAll('[data-libur-cepat]').forEach(btn => {
+      btn.onclick = () => {
+        const hNama = btn.dataset.liburCepat;
+        const halaqah = db.halaqah.find(h => h.nama === hNama);
+        if (!halaqah) return;
+        const uId = Store.ustadzIdsForHalaqah(halaqah)[0];
+        if (!uId) { UI.toast('Halaqah belum punya ustadz pengampu', 'error'); return; }
+        UI.confirmDialog(
+          'Libur Semua Sesi',
+          `Halaqah <b>${UI.esc(hNama)}</b> akan dicatat <b>Libur</b> untuk semua sesi hari ini (${UI.fmtDate(Store.todayStr())}). Seluruh santri tidak terhitung Alfa. Lanjutkan?`,
+          async () => {
+            const sesiAll = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
+            const ok = await Store.liburkanHalaqah(uId, sesiAll, hNama, 'Libur (diatur admin)', Store.todayStr());
+            if (ok) {
+              UI.toast(`Halaqah ${hNama} diliburkan semua sesi ✓`, 'success');
+              dashboard();
+            }
+          }
+        );
+      };
+    });
     const imp = document.getElementById('qa-import'); if (imp) imp.onclick = () => importSantriDialog();
   }
 
@@ -2375,5 +2456,159 @@ const Admin = (() => {
     if (waLogBtn) waLogBtn.onclick = renderWaLog;
   }
 
-  return { nav, dashboard, santri, ustadz, halaqah, master, absensiUstadz, riwayat, laporan, rekapKehadiran, rekapSetoran, notif, talim, settings, importSantriDialog };
+  /* ---------------- Kalender Libur (Libur Lembaga) ----------------
+     Admin menetapkan tanggal libur untuk seluruh lembaga. Tanggal di masa
+     lalu bisa langsung diterapkan ke absensi semua halaqah; tanggal depan
+     tersimpan sebagai jadwal dan diterapkan saat admin menekan Terapkan. */
+  function adminLibur() {
+    Shared.shell('admin', nav('admin_libur'), '');
+    Shared.setHeader('Kalender Libur', 'Libur lembaga untuk semua halaqah & santri');
+    const db = Store.get();
+    const t = Store.todayStr();
+    const SESI_LIST = Store.SESI_REKAP;
+
+    function sesiLabel(sesi) {
+      if (sesi === 'semua' || !sesi) return 'Semua Sesi';
+      return (Array.isArray(sesi) ? sesi : [sesi]).join(', ');
+    }
+
+    function sudahDiterapkan(tanggal) {
+      return (db.absensiUstadz || []).some(a => a.tanggal === tanggal && a.status === 'Libur');
+    }
+
+    function renderLibur() {
+      const items = Store.getLiburLembaga();
+      const masaDepan = items.filter(i => i.tanggal >= t);
+      const lampau = items.filter(i => i.tanggal < t).reverse();
+
+      const rowHtml = i => {
+        const applied = sudahDiterapkan(i.tanggal);
+        const isToday = i.tanggal === t;
+        return `<tr>
+          <td><b>${UI.fmtDate(i.tanggal)}</b>${isToday ? ' <span class="badge purple">Hari Ini</span>' : ''}</td>
+          <td>${UI.esc(i.keterangan || 'Libur Lembaga')}</td>
+          <td>${UI.esc(sesiLabel(i.sesi))}</td>
+          <td>${applied
+            ? '<span class="badge purple">Sudah diterapkan</span>'
+            : '<span class="badge warn">Belum diterapkan</span>'}</td>
+          <td>
+            <div class="row" style="gap:6px">
+              ${applied ? '' : `<button class="clay-btn sm secondary" data-terapkan="${UI.esc(i.tanggal)}">Terapkan</button>`}
+              <button class="clay-btn sm danger ghost" data-hapus-libur="${UI.esc(i.tanggal)}">Hapus</button>
+            </div>
+          </td>
+        </tr>`;
+      };
+
+      const tableHtml = list => list.length
+        ? `<div class="table-wrap"><table class="clay-table">
+            <thead><tr><th>Tanggal</th><th>Keterangan</th><th>Sesi</th><th>Status</th><th>Aksi</th></tr></thead>
+            <tbody>${list.map(rowHtml).join('')}</tbody>
+          </table></div>`
+        : '<div class="empty">Belum ada data.</div>';
+
+      document.getElementById('view-content').innerHTML = `
+        <div class="clay-card mb">
+          <div class="section-title">Tambah Tanggal Libur</div>
+          <div class="muted" style="font-size:12px;margin-bottom:10px">
+            Tanggal libur berlaku untuk <b>semua halaqah</b>. Bisa diatur jauh hari ke depan.
+            Tekan <b>Terapkan</b> pada tabel untuk mencatat status Libur ke absensi semua ustadz &amp; santri.
+          </div>
+          <div class="row" style="align-items:flex-end">
+            <div style="flex:0 0 170px">${UI.field('Tanggal', '<input type="date" class="clay-input" id="libur-tanggal" value="' + t + '">')}</div>
+            <div style="flex:1">${UI.field('Keterangan', '<input class="clay-input" id="libur-ket" placeholder="Contoh: Libur Maulid Nabi / Ujian Semester">')}</div>
+          </div>
+          <div class="mt">
+            <div class="field-label">Sesi yang Diliburkan</div>
+            <div class="row" style="gap:10px;flex-wrap:wrap;margin-top:4px">
+              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="radio" name="libur-lembaga-sesi" value="semua" checked> <span>Semua Sesi</span>
+              </label>
+              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="radio" name="libur-lembaga-sesi" value="custom"> <span>Pilih Sesi Tertentu</span>
+              </label>
+            </div>
+            <div id="libur-lembaga-custom" style="display:none;margin-top:8px;padding:8px 12px;background:var(--bg);border-radius:var(--radius-md)">
+              <div class="row" style="gap:12px;flex-wrap:wrap">
+                ${SESI_LIST.map(s => `<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" data-libur-lembaga-sesi value="${UI.esc(s)}"> ${UI.esc(s)}</label>`).join('')}
+              </div>
+            </div>
+          </div>
+          <div class="row mt">
+            <button class="clay-btn primary" id="btn-tambah-libur">+ Tambah Libur Lembaga</button>
+          </div>
+        </div>
+        <div class="clay-card mb">
+          <div class="section-title">Jadwal Libur Mendatang</div>
+          ${tableHtml(masaDepan)}
+        </div>
+        <div class="clay-card">
+          <div class="section-title">Riwayat Libur (Lampau)</div>
+          ${tableHtml(lampau)}
+        </div>`;
+
+      document.querySelectorAll('input[name="libur-lembaga-sesi"]').forEach(r => {
+        r.onchange = () => {
+          const custom = document.getElementById('libur-lembaga-custom');
+          if (custom) custom.style.display = r.value === 'custom' && r.checked ? 'block' : 'none';
+        };
+      });
+
+      document.getElementById('btn-tambah-libur').onclick = async () => {
+        const tanggal = document.getElementById('libur-tanggal').value;
+        const keterangan = document.getElementById('libur-ket').value.trim();
+        if (!tanggal) { UI.toast('Pilih tanggal libur', 'error'); return; }
+        const scope = document.querySelector('input[name="libur-lembaga-sesi"]:checked')?.value || 'semua';
+        let sesiList = 'semua';
+        if (scope === 'custom') {
+          sesiList = [...document.querySelectorAll('[data-libur-lembaga-sesi]:checked')].map(cb => cb.value);
+          if (!sesiList.length) { UI.toast('Pilih minimal satu sesi', 'error'); return; }
+        }
+        const ok = await Store.tambahLiburLembaga(tanggal, keterangan || 'Libur Lembaga', sesiList);
+        if (ok) {
+          UI.toast('Libur lembaga tersimpan ✓', 'success');
+          renderLibur();
+        }
+      };
+
+      document.querySelectorAll('[data-terapkan]').forEach(btn => {
+        btn.onclick = () => {
+          const tanggal = btn.dataset.terapkan;
+          UI.confirmDialog(
+            'Terapkan Libur Lembaga',
+            `Seluruh halaqah akan dicatat <b>Libur</b> pada <b>${UI.fmtDate(tanggal)}</b> untuk sesi yang dipilih. Absensi yang sudah ada pada sesi tersebut akan ditimpa. Lanjutkan?`,
+            async () => {
+              const ok = await Store.terapkanLiburLembaga(tanggal);
+              if (ok) {
+                UI.toast('Libur lembaga diterapkan ke semua halaqah ✓', 'success');
+                renderLibur();
+              }
+            }
+          );
+        };
+      });
+
+      document.querySelectorAll('[data-hapus-libur]').forEach(btn => {
+        btn.onclick = () => {
+          const tanggal = btn.dataset.hapusLibur;
+          const applied = sudahDiterapkan(tanggal);
+          UI.confirmDialog(
+            'Hapus Tanggal Libur',
+            `Jadwal libur <b>${UI.fmtDate(tanggal)}</b> akan dihapus${applied ? '. Catatan absensi Libur yang sudah terpasang tidak ikut terhapus (batalkan per halaqah bila perlu)' : ''}. Lanjutkan?`,
+            async () => {
+              const ok = await Store.hapusLiburLembaga(tanggal);
+              if (ok) {
+                UI.toast('Tanggal libur dihapus', 'info');
+                renderLibur();
+              }
+            }
+          );
+        };
+      });
+    }
+
+    renderLibur();
+  }
+
+  return { nav, dashboard, santri, ustadz, halaqah, master, absensiUstadz, riwayat, laporan, rekapKehadiran, rekapSetoran, notif, talim, adminLibur, settings, importSantriDialog };
 })();

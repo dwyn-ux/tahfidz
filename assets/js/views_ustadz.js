@@ -263,6 +263,10 @@ const Ustadz = (() => {
         <div style="font-size:13px;color:var(--text-soft);margin-bottom:12px">
           Gunakan menu ini jika ada kegiatan/acara dan halaqah ditiadakan. Absensi ustadz dan seluruh santri di halaqah ini akan otomatis dicatat <b>Libur</b> sehingga tidak terhitung sebagai Alfa.
         </div>
+        <div style="margin-bottom:12px">
+          ${UI.field('Tanggal Libur', `<input type="date" class="clay-input" id="libur-tanggal-input" value="${UI.esc(t)}" min="${UI.esc(Store.todayStr())}">`)}
+          <div class="muted" style="font-size:11px;margin-top:4px">Bisa untuk hari ini atau diatur jauh hari ke depan (besok, minggu depan, dst).</div>
+        </div>
         <div class="field-label">Pilih Sesi yang Diliburkan</div>
         <div class="row" style="gap:8px;margin-bottom:12px;flex-wrap:wrap">
           <label class="clay-card pad-sm" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;margin:0">
@@ -271,7 +275,7 @@ const Ustadz = (() => {
           </label>
           <label class="clay-card pad-sm" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;margin:0">
             <input type="radio" name="libur-scope" value="hari">
-            <span>Semua Sesi Hari Ini (${SESI.length} Sesi)</span>
+            <span data-libur-hari-label>Semua Sesi Hari Ini (${SESI.length} Sesi)</span>
           </label>
           <label class="clay-card pad-sm" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;margin:0">
             <input type="radio" name="libur-scope" value="custom">
@@ -305,6 +309,7 @@ const Ustadz = (() => {
           label: 'Liburkan Halaqah', cls: 'primary',
           onClick: async (m, c) => {
             const alasan = (m.querySelector('#libur-alasan')?.value || '').trim() || 'Ada kegiatan / Libur';
+            const tgl = m.querySelector('#libur-tanggal-input')?.value || t;
             const scope = m.querySelector('input[name="libur-scope"]:checked')?.value || 'sesi';
             let sesiList = [initialSesi];
             if (scope === 'hari') {
@@ -317,9 +322,9 @@ const Ustadz = (() => {
               }
             }
 
-            const ok = await Store.liburkanHalaqah(ustadz.id, sesiList, hNama, alasan, t);
+            const ok = await Store.liburkanHalaqah(ustadz.id, sesiList, hNama, alasan, tgl);
             if (ok) {
-              UI.toast(`Halaqah ${hNama} berhasil diliburkan (${sesiList.join(', ')}) ✓`, 'success');
+              UI.toast(`Halaqah ${hNama} diliburkan ${UI.fmtDate(tgl)} (${sesiList.join(', ')}) ✓`, 'success');
               c();
               if (onDone) onDone(sesiList);
             }
@@ -334,6 +339,19 @@ const Ustadz = (() => {
         if (customDiv) customDiv.style.display = radio.value === 'custom' ? 'block' : 'none';
       };
     });
+
+    // Tanggal bisa berbeda dari hari ini; perbarui sub judul & label "Hari Ini"
+    // agar pilihan sesi tetap jelas untuk tanggal terpilih.
+    const tanggalInput = modal.querySelector('#libur-tanggal-input');
+    if (tanggalInput) {
+      tanggalInput.onchange = () => {
+        const tgl = tanggalInput.value || t;
+        const sub = modal.querySelector('.modal-sub');
+        if (sub) sub.textContent = `${hNama} — ${UI.fmtDate(tgl)}`;
+        const hariLabel = modal.querySelector('[data-libur-hari-label]');
+        if (hariLabel) hariLabel.textContent = (tgl === Store.todayStr() ? 'Semua Sesi Hari Ini' : 'Semua Sesi Tanggal Terpilih') + ` (${SESI.length} Sesi)`;
+      };
+    }
 
     modal.querySelectorAll('[data-tag-alasan]').forEach(btn => {
       btn.onclick = () => {
@@ -396,10 +414,31 @@ const Ustadz = (() => {
     // Sebelum absen, halaman tetap tampil tetapi status Santri terkunci.
     const locked = () => !selfUstadz || !selfRecord();
 
+    // Untuk sesi Ta'lim Malam: filter menggunakan kelas (tingkat|kelas) sesuai
+    // penugasan ta'lim ustadz, bukan halaqah. Kalau tidak ada penugasan atau
+    // bukan sesi ta'lim, fallback ke semua kelas (kelasKey = '').
+    const talimAssignments = isTalim ? Store.talimAssignmentsForUstadz(selfUstadz) : [];
+    const talimKelasKeys = isTalim
+      ? [...new Set(talimAssignments.flatMap(a => a.kelasKeys))]
+      : [];
+    // Nilai awal filter kelas: kelas pertama yang ditugaskan (jika ada)
+    let kelasFilter = isTalim ? (talimKelasKeys[0] || '') : '';
+
+    function rosterForFilter() {
+      // Mode ta'lim: filter santri berdasarkan kelas (tingkat + kelas pendidikan)
+      if (isTalim) {
+        if (!kelasFilter) return allSantri; // '' = semua santri
+        const { tingkat, kelas } = Store.talimClassFromKey(kelasFilter);
+        return allSantri.filter(s => Store.tingkatForSantri(s) === tingkat && Store.kelasForSantri(s) === kelas);
+      }
+      // Mode normal: filter berdasarkan halaqah
+      const halaqah = Store.findHalaqahByName(halaqahFilter);
+      return halaqah ? allSantri.filter(s => Store.santriHasHalaqah(s, halaqah)) : allSantri;
+    }
+
     function renderAbsensi() {
       // Pencarian nama tidak mengubah cakupan absensi yang akan disimpan.
-      const halaqah = Store.findHalaqahByName(halaqahFilter);
-      const roster = halaqah ? allSantri.filter(s => Store.santriHasHalaqah(s, halaqah)) : allSantri;
+      const roster = rosterForFilter();
       // Hanya catatan ustadz ini yang ditampilkan dan diedit, sehingga absensi
       // ustadz lain di halaqah yang sama tetap utuh.
       const sessionRecords = db.kehadiran.filter(k => k.tanggal === t && k.sesi === sesiAktif && (k.ustadzId || '') === ustadzId && roster.some(s => s.id === k.santriId));
@@ -434,6 +473,16 @@ const Ustadz = (() => {
       }).join('');
 
       document.getElementById('view-content').innerHTML = `
+        ${Store.isLiburLembaga(t) ? (() => {
+          const info = Store.getLiburLembagaInfo(t);
+          return `<div class="clay-card" style="margin-bottom:14px;border-left:4px solid #a855f7;background:#faf5ff">
+            <div class="row center" style="gap:10px;flex-wrap:wrap">
+              <span class="badge purple" style="font-size:13px">Libur Lembaga</span>
+              <b>${UI.esc((info && info.keterangan) || 'Libur Lembaga')}</b>
+              <span class="muted" style="font-size:12px">Seluruh halaqah tidak perlu diabsen hari ini.</span>
+            </div>
+          </div>`;
+        })() : ''}
         ${selfUstadz ? (isLocked ? `
         <div class="clay-card" style="margin-bottom:14px;border-left:4px solid #F59E0B">
           <div class="row" style="justify-content:space-between;align-items:center;gap:10px">
@@ -508,7 +557,7 @@ const Ustadz = (() => {
           </div>
           <div class="row mb" style="align-items:flex-end">
             <div style="flex:1;min-width:180px">
-              <label class="field-label">Halaqah</label>
+              <label class="field-label">${isTalim ? 'Kelas' : 'Halaqah'}</label>
               <select class="clay-select" id="abs-halaqah"></select>
             </div>
             <div style="flex:2;min-width:180px">
@@ -523,11 +572,18 @@ const Ustadz = (() => {
         </div>`;
 
       const halaqahSelect = document.getElementById('abs-halaqah');
-      // Ustadz memilih antara seluruh santri atau halaqah yang diampunya.
-      // Jangan tampilkan daftar halaqah lain pada form absensi.
-      halaqahSelect.innerHTML = (ownHalaqah ? '<option value="' + UI.esc(ownHalaqah) + '">' + UI.esc(ownHalaqah) + '</option>' : '')
-        + '<option value="">Semua Santri</option>';
-      halaqahSelect.value = halaqahFilter;
+      // Mode ta'lim: opsi kelas sesuai penugasan ustadz.
+      // Mode normal: ustadz memilih antara halaqahnya atau semua santri.
+      if (isTalim) {
+        halaqahSelect.innerHTML = talimKelasKeys.map(key =>
+          `<option value="${UI.esc(key)}">${UI.esc(Store.talimClassLabel(key))}</option>`
+        ).join('') + '<option value="">Semua Santri</option>';
+        halaqahSelect.value = kelasFilter;
+      } else {
+        halaqahSelect.innerHTML = (ownHalaqah ? '<option value="' + UI.esc(ownHalaqah) + '">' + UI.esc(ownHalaqah) + '</option>' : '')
+          + '<option value="">Semua Santri</option>';
+        halaqahSelect.value = halaqahFilter;
+      }
       const searchInput = document.getElementById('abs-search');
       searchInput.value = searchTerm;
 
@@ -540,7 +596,11 @@ const Ustadz = (() => {
         // tetap meminta absen.
         mintaAbsenUstadz();
       });
-      halaqahSelect.onchange = () => { halaqahFilter = halaqahSelect.value; renderAbsensi(); };
+      halaqahSelect.onchange = () => {
+        if (isTalim) { kelasFilter = halaqahSelect.value; } else { halaqahFilter = halaqahSelect.value; }
+        pendingStatus = {}; editing = null;
+        renderAbsensi();
+      };
       const applySearch = () => {
         const term = searchTerm.toLowerCase();
         document.querySelectorAll('#abs-body tr[data-id]').forEach(tr => {

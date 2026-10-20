@@ -59,7 +59,7 @@ const Store = (() => {
         juzOrder: [30,29,28,27,26,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
         notifActive: true, notifMaxPerDay: 3, notifWali: true, notifUstadz: true,
         notifAbsensiWali: true, notifAbsensiPeriode: 'harian',
-        waBridgeUrl: '', waBridgeKey: '', waAuto: false
+        waBridgeUrl: '', waBridgeKey: '', waAuto: false, liburLembaga: []
       },
       users: [], santri: [], wali: [], ustadz: [], halaqah: [],
       tingkat: DEFAULT_TINGKAT.slice(), kelas: [],
@@ -513,6 +513,8 @@ const Store = (() => {
     settings.talimMalam.ustadzIds = Array.isArray(settings.talimMalam.ustadzIds) ? settings.talimMalam.ustadzIds.filter(Boolean) : [];
     settings.talimMalam.judulKitab = String(settings.talimMalam.judulKitab || '');
     settings.talimMalam.bab = String(settings.talimMalam.bab || '');
+    if (!Array.isArray(settings.liburLembaga)) settings.liburLembaga = [];
+    settings.liburLembaga = settings.liburLembaga.filter(item => item && item.tanggal);
     return settings;
   }
 
@@ -946,6 +948,78 @@ const Store = (() => {
     return save();
   }
 
+  // ─── Libur Lembaga ────────────────────────────────────────────────────────
+  function getLiburLembaga() {
+    normalizeSettings();
+    return (db.settings.liburLembaga || []).slice().sort((a, b) =>
+      String(a.tanggal).localeCompare(String(b.tanggal))
+    );
+  }
+
+  function isLiburLembaga(tanggal) {
+    const t = tanggal || todayStr();
+    return (db.settings.liburLembaga || []).some(item => item.tanggal === t);
+  }
+
+  function getLiburLembagaInfo(tanggal) {
+    const t = tanggal || todayStr();
+    return (db.settings.liburLembaga || []).find(item => item.tanggal === t) || null;
+  }
+
+  async function tambahLiburLembaga(tanggal, keterangan, sesiList) {
+    if (!tanggal) return false;
+    normalizeSettings();
+    if (!db.settings.liburLembaga) db.settings.liburLembaga = [];
+    db.settings.liburLembaga = db.settings.liburLembaga.filter(item => item.tanggal !== tanggal);
+    db.settings.liburLembaga.push({
+      tanggal,
+      keterangan: keterangan || 'Libur Lembaga',
+      sesi: Array.isArray(sesiList) && sesiList.length ? sesiList : 'semua'
+    });
+    log('Tambah libur lembaga ' + tanggal + ': ' + (keterangan || 'Libur Lembaga'));
+    return save();
+  }
+
+  async function hapusLiburLembaga(tanggal) {
+    if (!tanggal) return false;
+    normalizeSettings();
+    if (!db.settings.liburLembaga) db.settings.liburLembaga = [];
+    db.settings.liburLembaga = db.settings.liburLembaga.filter(item => item.tanggal !== tanggal);
+    log('Hapus libur lembaga ' + tanggal);
+    return save();
+  }
+
+  async function terapkanLiburLembaga(tanggal) {
+    const t = tanggal || todayStr();
+    const info = getLiburLembagaInfo(t);
+    const SESI_ALL = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
+    const sesiArr = (info && info.sesi !== 'semua' && Array.isArray(info.sesi)) ? info.sesi : SESI_ALL;
+    const alasan = (info && info.keterangan) ? info.keterangan : 'Libur Lembaga';
+
+    for (const halaqah of db.halaqah) {
+      const ustadzIds = ustadzIdsForHalaqah(halaqah);
+      const uid_h = ustadzIds[0];
+      if (!uid_h) continue;
+      await liburkanHalaqah(uid_h, sesiArr, halaqah.nama, alasan, t);
+    }
+
+    // Beri tahu seluruh ustadz agar mereka tidak mengabsen sendiri.
+    if (db.settings.notifActive) {
+      db.ustadz.forEach(u => {
+        const user = db.users.find(x => x.role === 'ustadz' && x.refId === u.id);
+        if (!user) return;
+        const pesan = '🗓️ Libur Lembaga ' + todayLocal(new Date(t + 'T00:00:00')) + ': ' + alasan +
+          ' (sesi: ' + sesiArr.join(', ') + '). Halaqah tidak perlu diabsen.';
+        if (!db.notifikasi.some(n => n.userId === user.id && n.pesan === pesan)) {
+          addNotif(user.id, 'ustadz', pesan);
+        }
+      });
+    }
+
+    log('Terapkan libur lembaga ' + t + ': ' + alasan);
+    return save();
+  }
+
   function halaqahLiburInfo(halaqahRef, tanggal, sesi, ustadzId) {
     const t = tanggal || todayStr();
     const h = resolveHalaqah(halaqahRef);
@@ -1108,7 +1182,8 @@ const Store = (() => {
       const mulai = new Date(kemarin); mulai.setDate(mulai.getDate() - 6);
       const cek = new Date(mulai);
       while (cek <= kemarin) {
-        if (isHariKerja(cek)) {
+        // Tanggal libur lembaga tidak dihitung sebagai hari setoran.
+        if (isHariKerja(cek) && !isLiburLembaga(todayLocal(cek))) {
           const tgl = todayLocal(cek);
           if (!sudah(s.id, tgl) && notifCount < maxNotif) {
             const adaSetoran = db.ziyadahHafalan.some(z => z.santriId === s.id && z.tanggal === tgl)
@@ -1152,7 +1227,7 @@ const Store = (() => {
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,
     setoranRentang, avgNilaiRentang, padaRentang, juzHafalanDisplay,
     absensiUstadzOf, absensiUstadzRow, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,
-    liburkanHalaqah, batalkanLiburHalaqah, halaqahLiburInfo,
+    liburkanHalaqah, batalkanLiburHalaqah, halaqahLiburInfo, getLiburLembaga, isLiburLembaga, getLiburLembagaInfo, tambahLiburLembaga, hapusLiburLembaga, terapkanLiburLembaga,
     rekapKehadiranSantri, rekapKehadiranUstadz, tanggalRange, tambahHari, SESI_REKAP,
     addNotif, notifFor, clearNotifs, checkSetoranTerlewat
   };
