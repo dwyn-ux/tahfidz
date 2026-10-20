@@ -327,6 +327,31 @@ const Admin = (() => {
     UI.toast('Data santri berhasil diunduh (.xlsx)', 'success');
   }
 
+  /* ---------------- Tombol aksi baris tabel ----------------
+     Sebelumnya tombol aksi hanya berupa ikon (✏️ / 🗑) sehingga di HP tampak
+     seperti tombol kosong dan rawan salah pencet. Semua aksi baris sekarang
+     memakai label teks dengan ukuran seragam. */
+  function rowActionButtons(actions) {
+    return `<div class="row actions-inline">${actions.map(action =>
+      `<button type="button" class="clay-btn sm ${action.cls || 'ghost'}"${action.attr} title="${UI.esc(action.title || action.label)}" aria-label="${UI.esc(action.title || action.label)}">${UI.esc(action.label)}</button>`
+    ).join('')}</div>`;
+  }
+
+  function santriRowActions(santri) {
+    return rowActionButtons([
+      { label: 'Edit', attr: ` data-edit="${UI.esc(santri.id)}"` },
+      { label: 'Reset', cls: 'secondary', attr: ` data-reset="${UI.esc(santri.waliId || '')}"` },
+      { label: 'Hapus', cls: 'danger', attr: ` data-del="${UI.esc(santri.id)}"` }
+    ]);
+  }
+
+  function ustadzRowActions(ustadz) {
+    return rowActionButtons([
+      { label: 'Edit', attr: ` data-edit="${UI.esc(ustadz.id)}"` },
+      { label: 'Hapus', cls: 'danger', attr: ` data-del="${UI.esc(ustadz.id)}"` }
+    ]);
+  }
+
   function santri() {
     Shared.shell('admin', nav('admin_santri'), '');
     Shared.setHeader('Manajemen Santri', 'Kelola data santri & akun wali otomatis');
@@ -343,11 +368,7 @@ const Admin = (() => {
         <td>${UI.esc(Store.halaqahSummaryForSantri(s))}</td>
         <td><span class="badge ${s.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(s.status)}</span></td>
         <td><code>${UI.esc(username)}</code></td>
-        <td>
-          <button class="clay-btn sm" data-edit="${s.id}">✏️</button>
-          <button class="clay-btn sm danger" data-del="${s.id}">🗑</button>
-          <button class="clay-btn sm secondary" data-reset="${s.waliId}">🔑 Reset</button>
-        </td>
+        <td>${santriRowActions(s)}</td>
       </tr>`;
     }).join('');
     document.getElementById('view-content').innerHTML = `
@@ -444,11 +465,7 @@ const Admin = (() => {
               <td>${UI.esc(Store.halaqahSummaryForSantri(s))}</td>
               <td><span class="badge ${s.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(s.status)}</span></td>
               <td><code>${UI.esc(username)}</code></td>
-              <td>
-                <button class="clay-btn sm" data-edit="${s.id}">✏️</button>
-                <button class="clay-btn sm danger" data-del="${s.id}">🗑</button>
-                <button class="clay-btn sm secondary" data-reset="${s.waliId}">🔑 Reset</button>
-              </td>
+              <td>${santriRowActions(s)}</td>
             </tr>`;
           }).join('');
           document.getElementById('santri-table-body').innerHTML = newRows || `<tr><td colspan="9"><div class="empty">Tidak ada santri yang sesuai.</div></td></tr>`;
@@ -740,10 +757,7 @@ const Admin = (() => {
         <td>${UI.esc(halaqahNames.join(', ') || u.halaqah || '-')}</td>
         <td>${UI.esc(penugasanTalim || '-')}</td>
         <td><span class="badge ${u.status === 'Aktif' ? 'green' : 'gray'}">${UI.esc(u.status)}</span></td>
-        <td>
-          <button class="clay-btn sm" data-edit="${u.id}">✏️</button>
-          <button class="clay-btn sm danger" data-del="${u.id}">🗑</button>
-        </td>
+        <td>${ustadzRowActions(u)}</td>
       </tr>`;
     }).join('');
     document.getElementById('view-content').innerHTML = `
@@ -920,7 +934,10 @@ const Admin = (() => {
           <div class="section-title" style="margin:0">${UI.esc(title)}${h ? ` <span class="muted" style="font-size:13px;font-weight:400">· ${UI.esc(Store.ustadzNamesForHalaqah(h).join(', ') || 'Belum ditetapkan')}</span>` : ''}</div>
           ${h ? `<div class="muted" style="font-size:13px;margin-top:5px">Level: ${UI.esc(h.level || '-')} · ${UI.esc(h.hari || '-')} · ${UI.esc(h.jam || '-')} · ${UI.esc(h.ruangan || '-')}<br>Setoran Bacaan: <b>${h.setoranBacaan ? 'Aktif' : 'Nonaktif'}</b></div>` : '<div class="muted" style="font-size:13px;margin-top:5px">Santri yang belum memiliki halaqah aktif.</div>'}
         </div>
-        ${h ? `<div><button class="clay-btn sm" data-edit-halaqah="${UI.esc(h.id)}">✏️ Edit Halaqah</button> <button class="clay-btn sm danger" data-del="${UI.esc(h.id)}">🗑</button></div>` : ''}
+        ${h ? `<div>${rowActionButtons([
+          { label: 'Edit Halaqah', attr: ` data-edit-halaqah="${UI.esc(h.id)}"` },
+          { label: 'Hapus', cls: 'danger', attr: ` data-del="${UI.esc(h.id)}"` }
+        ])}</div>` : ''}
       </div>
       <div class="table-wrap"><table class="clay-table">
         <thead><tr><th class="center">No</th><th>Santri</th><th>Tingkat & Kelas</th><th>Jenis Setoran</th><th>Pindah ke Halaqah</th><th class="center">Aksi</th></tr></thead>

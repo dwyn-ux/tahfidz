@@ -125,6 +125,14 @@ h1, h2, h3, h4, .brand { font-family: 'Poppins', sans-serif; }
 .clay-btn.ghost { background: var(--bg); }
 .clay-btn.sm { padding: 8px 14px; font-size: 13px; }
 
+/* Tombol aksi di dalam baris tabel (Edit / Reset / Hapus) dibuat sejajar,
+   berukuran seragam, dan tidak melipat ke bawah di kolom yang sempit. */
+.actions-inline { flex-wrap: nowrap; gap: 6px; align-items: center; }
+.actions-inline .clay-btn {
+  flex: 0 0 auto; min-width: 62px; justify-content: center;
+  white-space: nowrap; padding: 7px 12px; font-size: 12.5px;
+}
+
 .clay-input, .clay-select, .clay-textarea {
   width: 100%; border: 1px solid #cbd5d1; background: #fff;
   border-radius: var(--radius-md); padding: 12px 14px;
@@ -625,6 +633,12 @@ label.field-label { font-size: 12px; letter-spacing: .02em; color: #526172; }
   .clay-table td:last-child { border-bottom: 0; }
   .clay-table td .row { gap: 6px; }
   .clay-table td .clay-btn { padding: 7px 10px; font-size: 12px; }
+  /* Di HP, kolom aksi jadi baris kartu tersendiri: tombol dibagi rata
+     selebar kartu supaya tidak ada tombol yang terpotong. */
+  .clay-table td[data-label="Aksi"] .actions-inline { width: 100%; }
+  .clay-table td[data-label="Aksi"] .actions-inline .clay-btn {
+    flex: 1 1 0; min-width: 0; padding: 9px 10px;
+  }
 }
 
 /* Compact phones: prevent wide controls or inline content from forcing a
