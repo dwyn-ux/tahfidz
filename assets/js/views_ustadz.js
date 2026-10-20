@@ -416,20 +416,23 @@ const Ustadz = (() => {
 
     // Untuk sesi Ta'lim Malam: filter menggunakan kelas (tingkat|kelas) sesuai
     // penugasan ta'lim ustadz, bukan halaqah. Kalau tidak ada penugasan atau
-    // bukan sesi ta'lim, fallback ke semua kelas (kelasKey = '').
+    // bukan sesi ta'lim, fallback ke semua kelas (tanpa pilihan = semua santri).
     const talimAssignments = isTalim ? Store.talimAssignmentsForUstadz(selfUstadz) : [];
     const talimKelasKeys = isTalim
       ? [...new Set(talimAssignments.flatMap(a => a.kelasKeys))]
       : [];
-    // Nilai awal filter kelas: kelas pertama yang ditugaskan (jika ada)
-    let kelasFilter = isTalim ? (talimKelasKeys[0] || '') : '';
+    // Filter kelas mode Ta'lim bersifat multi pilih: satu absensi boleh
+    // mencakup beberapa kelas sekaligus. Set kosong = seluruh santri,
+    // setara dengan opsi "Semua Santri".
+    // Nilai awal: kelas pertama yang ditugaskan (jika ada).
+    let kelasFilters = new Set(isTalim && talimKelasKeys.length ? [talimKelasKeys[0]] : []);
 
     function rosterForFilter() {
       // Mode ta'lim: filter santri berdasarkan kelas (tingkat + kelas pendidikan)
+      // yang sedang dicentang, bisa lebih dari satu kelas.
       if (isTalim) {
-        if (!kelasFilter) return allSantri; // '' = semua santri
-        const { tingkat, kelas } = Store.talimClassFromKey(kelasFilter);
-        return allSantri.filter(s => Store.tingkatForSantri(s) === tingkat && Store.kelasForSantri(s) === kelas);
+        if (!kelasFilters.size) return allSantri; // kosong = semua santri
+        return allSantri.filter(s => kelasFilters.has(Store.talimClassKey(Store.tingkatForSantri(s), Store.kelasForSantri(s))));
       }
       // Mode normal: filter berdasarkan halaqah
       const halaqah = Store.findHalaqahByName(halaqahFilter);
@@ -556,10 +559,15 @@ const Ustadz = (() => {
             ${SESI.map(s => `<button class="pill ${s === sesiAktif ? 'active' : ''}" data-sesi="${s}">${s === 'Subuh' ? '' : s === 'Maghrib' ? '' : ''} ${s}</button>`).join('')}
           </div>
           <div class="row mb" style="align-items:flex-end">
+            ${isTalim ? `
+            <div style="flex:1;min-width:220px">
+              <label class="field-label">Kelas <span class="muted" style="font-weight:400">(boleh pilih lebih dari satu)</span></label>
+              <div class="row" id="abs-kelas-checks" style="gap:8px"></div>
+            </div>` : `
             <div style="flex:1;min-width:180px">
-              <label class="field-label">${isTalim ? 'Kelas' : 'Halaqah'}</label>
+              <label class="field-label">Halaqah</label>
               <select class="clay-select" id="abs-halaqah"></select>
-            </div>
+            </div>`}
             <div style="flex:2;min-width:180px">
               <label class="field-label">Cari Santri</label>
               <input class="clay-input" id="abs-search" type="search" placeholder="Nama atau NIS santri">
@@ -571,18 +579,46 @@ const Ustadz = (() => {
           </table></div>
         </div>`;
 
-      const halaqahSelect = document.getElementById('abs-halaqah');
-      // Mode ta'lim: opsi kelas sesuai penugasan ustadz.
-      // Mode normal: ustadz memilih antara halaqahnya atau semua santri.
+      // Mode ta'lim: opsi kelas sesuai penugasan ustadz dan boleh dicentang
+      // lebih dari satu sekaligus. Mode normal: ustadz memilih antara
+      // halaqahnya atau semua santri (tetap satu pilihan).
       if (isTalim) {
-        halaqahSelect.innerHTML = talimKelasKeys.map(key =>
-          `<option value="${UI.esc(key)}">${UI.esc(Store.talimClassLabel(key))}</option>`
-        ).join('') + '<option value="">Semua Santri</option>';
-        halaqahSelect.value = kelasFilter;
+        const kelasBox = document.getElementById('abs-kelas-checks');
+        const checkPill = (value, label, checked) => `
+          <label class="pill ${checked ? 'active' : ''}" style="display:inline-flex;align-items:center;gap:6px;padding:7px 11px;cursor:pointer">
+            <input type="checkbox" data-kelas-filter value="${UI.esc(value)}" ${checked ? 'checked' : ''} style="margin:0;accent-color:${checked ? '#fff' : 'var(--primary)'}"> ${UI.esc(label)}
+          </label>`;
+        kelasBox.innerHTML = talimKelasKeys.map(key => checkPill(key, Store.talimClassLabel(key), kelasFilters.has(key))).join('')
+          + checkPill('', 'Semua Santri', !kelasFilters.size);
+        kelasBox.querySelectorAll('[data-kelas-filter]').forEach(cb => {
+          cb.onchange = () => {
+            const key = cb.value;
+            if (!key) {
+              // "Semua Santri" mengosongkan pilihan. Melepas centangnya
+              // mengembalikan pilihan ke kelas pertama agar daftar santri
+              // tetap jelas, bukan diam-diam kembali ke seluruh santri.
+              if (cb.checked) kelasFilters = new Set();
+              else if (talimKelasKeys.length) kelasFilters = new Set([talimKelasKeys[0]]);
+            } else if (cb.checked) {
+              kelasFilters.add(key);
+            } else {
+              kelasFilters.delete(key);
+            }
+            // Status yang belum disimpan tidak dihapus saat kelas ditambah
+            // atau dikurangi, sebab santri yang sama masih berada di daftar.
+            renderAbsensi();
+          };
+        });
       } else {
+        const halaqahSelect = document.getElementById('abs-halaqah');
         halaqahSelect.innerHTML = (ownHalaqah ? '<option value="' + UI.esc(ownHalaqah) + '">' + UI.esc(ownHalaqah) + '</option>' : '')
           + '<option value="">Semua Santri</option>';
         halaqahSelect.value = halaqahFilter;
+        halaqahSelect.onchange = () => {
+          halaqahFilter = halaqahSelect.value;
+          pendingStatus = {}; editing = null;
+          renderAbsensi();
+        };
       }
       const searchInput = document.getElementById('abs-search');
       searchInput.value = searchTerm;
@@ -596,11 +632,6 @@ const Ustadz = (() => {
         // tetap meminta absen.
         mintaAbsenUstadz();
       });
-      halaqahSelect.onchange = () => {
-        if (isTalim) { kelasFilter = halaqahSelect.value; } else { halaqahFilter = halaqahSelect.value; }
-        pendingStatus = {}; editing = null;
-        renderAbsensi();
-      };
       const applySearch = () => {
         const term = searchTerm.toLowerCase();
         document.querySelectorAll('#abs-body tr[data-id]').forEach(tr => {
