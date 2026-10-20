@@ -2432,6 +2432,8 @@ const Admin = (() => {
       db.settings.notifMaxPerDay = parseInt(document.getElementById('s-notif-max').value) || 3;
       db.settings.notifAbsensiWali = document.getElementById('s-notif-absensi-wali').classList.contains('on');
       db.settings.notifAbsensiPeriode = document.getElementById('s-notif-absensi-periode').value;
+      db.settings.waBridgeUrl = document.getElementById('s-wa-url').value.trim();
+      db.settings.waBridgeKey = document.getElementById('s-wa-key').value.trim();
       db.settings.waAuto = document.getElementById('s-wa-auto').classList.contains('on');
       // Pemicu WA baru (bisa lebih dari satu)
       if (!db.settings.waAutoTrigger || typeof db.settings.waAutoTrigger !== 'object') db.settings.waAutoTrigger = {};
