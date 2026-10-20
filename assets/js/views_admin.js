@@ -1495,7 +1495,25 @@ const Admin = (() => {
   ${baris('Santri', daftarSantri, x => x)}
   ${baris('Ustadz', ustadz, x => x)}
 </body></html>`;
-      Shared.downloadExcel('Rekap_Kehadiran_' + f.dari + '_sd_' + f.sampai, html);
+      // Rekap kehadiran memuat dua tabel (Santri & Ustadz), jadi dikirim ke
+      // Excel sebagai satu file dengan dua sheet terpisah, bukan digabung.
+      const parsed = Shared.htmlTableToSheet(html);
+      if (parsed) {
+        const sumber = new DOMParser().parseFromString(html, 'text/html');
+        const sheets = [...sumber.querySelectorAll('table')].map(tabel => {
+          const wrapper = document.createElement('div');
+          wrapper.appendChild(tabel.cloneNode(true));
+          const sheet = Shared.htmlTableToSheet(wrapper.innerHTML);
+          return sheet && sheet.sheet;
+        }).filter(Boolean);
+        if (sheets.length) {
+          Shared.downloadXlsx('Rekap_Kehadiran_' + f.dari + '_sd_' + f.sampai, sheets);
+        } else {
+          Shared.downloadExcel('Rekap_Kehadiran_' + f.dari + '_sd_' + f.sampai, html);
+        }
+      } else {
+        Shared.downloadExcel('Rekap_Kehadiran_' + f.dari + '_sd_' + f.sampai, html);
+      }
       UI.toast('Berhasil export Excel', 'success');
     };
     apply();

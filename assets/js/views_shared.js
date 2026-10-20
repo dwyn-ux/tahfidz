@@ -522,7 +522,56 @@ function renderLaporan(filters) {
     if (pdf) pdf.onclick = () => window.print();
   }
 
+  /* ---------------- Konversi tabel HTML ke .xlsx ----------------
+     Beberapa layar sudah menyusun isi laporan sebagai tabel HTML. File .xls
+     berbasis HTML sering ditolak aplikasi HP (Android hanya melihatnya sebagai
+     teks), jadi markup itu dibaca ulang di sini lalu diunduh sebagai .xlsx
+     asli yang pasti bisa dibuka. Kalau strukturnya tak terduga, pemanggil
+     kembali memakai jalur .xls lama. */
+  function htmlTableToSheet(html) {
+    const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+    const table = doc.querySelector('table');
+    if (!table) return null;
+    const columns = [];
+    [...table.querySelectorAll('thead th')].forEach((th, index) => {
+      // Sub-label pada header (mis. tanggal di bawah nama hari) digabung
+      // dengan spasi supaya tidak menempel pada judul kolomnya.
+      const label = (th.textContent || '').replace(/\s+/g, ' ').trim() || ('Kolom ' + (index + 1));
+      columns.push({ key: 'c' + index, label });
+    });
+    if (!columns.length) return null;
+    const cellValue = (cell, index) => {
+      // Satu sel Excel tidak bisa memuat ganti baris, jadi <br> jadi pemisah.
+      const clone = cell.cloneNode(true);
+      clone.querySelectorAll('br').forEach(br => br.replaceWith(' '));
+      const text = (clone.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!text) return '';
+      if (index === 0 && /^\d+$/.test(text)) return Number(text); // kolom No tetap angka
+      return text;
+    };
+    const rows = [...table.querySelectorAll('tbody tr')].map(tr => {
+      const cells = [...tr.querySelectorAll('td')];
+      const row = {};
+      columns.forEach((column, index) => {
+        row[column.key] = cells[index] ? cellValue(cells[index], index) : '';
+      });
+      return row;
+    });
+    if (!rows.length) return null;
+    const heading = sel => {
+      const node = doc.querySelector(sel);
+      return node ? (node.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    };
+    const sheetName = heading('.title') || heading('.sub') || 'Data';
+    return { sheet: { name: sheetName, columns, rows } };
+  }
+
   function downloadExcel(filename, html) {
+    const parsed = htmlTableToSheet(html);
+    if (parsed) {
+      downloadXlsx(filename, [parsed.sheet]);
+      return;
+    }
     const blob = new Blob(['﻿' + html], { type: 'application/vnd.ms-excel' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1152,5 +1201,5 @@ function exportLaporanExcel(filters) {
     </div>`;
   }
 
-  return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, downloadExcel, downloadXlsx, downloadTemplateExcel, bulanLabel, mondayOf, rekapSetoranRange, setRekapSetoranRange, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, ICONS, hafalanMapHTML };
+  return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, htmlTableToSheet, downloadExcel, downloadXlsx, downloadTemplateExcel, bulanLabel, mondayOf, rekapSetoranRange, setRekapSetoranRange, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, ICONS, hafalanMapHTML };
 })();
