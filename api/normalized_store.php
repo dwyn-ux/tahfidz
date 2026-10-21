@@ -8,8 +8,11 @@
  */
 final class NormalizedStore {
     public const MIGRATION_NAME = '2026_10_normalize_records';
-    // Penanda penambahan kolom/tabel setelah migrasi records (absensi per ustadz).
-    public const UPGRADE_NAME = '2026_10_absensi_ustadz';
+    // Penanda penambahan kolom/tabel setelah migrasi records. Nilai ini
+    // dinaikkan setiap kali ada tabel baru; ensureSchema() bersifat
+    // idempotent (CREATE TABLE IF NOT EXISTS + kolom aditif), jadi instalasi
+    // lama otomatis mendapat tabel baru tanpa kehilangan data.
+    public const UPGRADE_NAME = '2026_10_wa_auto_log';
 
     /**
      * Pemetaan nama rekaman yang dipakai frontend ke tabel dan kolom SQL.
@@ -173,6 +176,18 @@ final class NormalizedStore {
                     'message' => ['message', $text], 'tanggal' => ['tanggal', $timestamp],
                 ],
                 'indexes' => [['tanggal'], ['recipient']],
+            ],
+            // Penanda "rekap sudah terkirim" per pemicu per PERIODE. Id-nya
+            // deterministik (wal_<pemicu>_<kunci periode>) sehingga rekap untuk
+            // periode yang sama tidak dikirim dua kali walau cron dan aplikasi
+            // sama-sama memanggil. Ditulis hanya oleh server.
+            'waAutoLog' => [
+                'table' => 'wa_auto_log',
+                'fields' => [
+                    'trigger' => ['trigger_name', $short], 'tanggal' => ['tanggal', $date],
+                    'jumlah' => ['jumlah', $integer], 'waktu' => ['waktu', $timestamp],
+                ],
+                'indexes' => [['trigger_name', 'tanggal']],
             ],
         ];
         return $definitions;

@@ -2171,8 +2171,10 @@ const Admin = (() => {
         <div class="section-title"> Pemicu WA Otomatis</div>
         <div class="muted" style="font-size:12px;margin-bottom:10px">
           Pemicu "Setoran" dikirim langsung saat ustadz menyimpan setoran (jika aktif).
-          Pemicu jadwal (Harian/Mingguan/Bulanan) dikirim saat ada yang membuka aplikasi setelah jam yang disetel, memakai periode yang sudah selesai.
-          Untuk pengiriman tepat waktu tanpa interaksi pengguna, jalankan cron dari server: <code>curl -H "Authorization: Bearer &lt;TOKEN_ADMIN&gt;" "https://domain/api/index.php?action=wa_auto_reminder"</code>.
+          Pemicu jadwal (Harian/Mingguan/Bulanan) memakai periode yang sudah selesai (kemarin / minggu lalu / bulan lalu) dan dijalankan di server, sehingga tidak perlu ada yang membuka aplikasi.
+          Setelan ini cukup untuk aplikasi biasa. Agar terkirim tepat waktu tanpa interaksi pengguna, jalankan cron di server:
+          <code>curl -H "Authorization: Bearer &lt;TOKEN_ADMIN&gt;" "https://domain/api/index.php?action=wa_auto_reminder"</code>
+          <br>Rekap untuk periode yang sama hanya terkirim sekali, jadi cron dan aplikasi yang dibuka manual tidak mengirim dobel. Bila server sempat mati, periode yang terlewat tetap dikirim saat server hidup kembali.
         </div>
         <div style="display:flex;flex-direction:column;gap:8px">
           <label style="display:flex;align-items:center;gap:8px">
@@ -2214,6 +2216,7 @@ const Admin = (() => {
         <div class="row mt">
           <button class="clay-btn ghost" id="btn-wa-status">Cek Status</button>
           <button class="clay-btn ghost" id="btn-wa-test">Kirim Tes</button>
+          <button class="clay-btn ghost" id="btn-wa-recap">Kirim Rekap Sekarang</button>
         </div>
         <div id="wa-status" class="mt" style="font-size:13px"></div>
       </div>
@@ -2515,22 +2518,52 @@ const Admin = (() => {
       });
     };
 
+    // Jalankan rekap terjadwal sekarang juga, untuk mencoba tanpa menunggu
+    // jadwal. Pakai endpoint yang sama dengan cron, jadi penanda "sudah
+    // terkirim" tetap konsisten dan tidak ada pesan dobel.
+    const waRecapBtn = document.getElementById('btn-wa-recap');
+    if (waRecapBtn) waRecapBtn.onclick = async () => {
+      if (waBelumTersimpan()) { waMintaSimpan(); return; }
+      waStatusEl.innerHTML = '<span class="muted">Mengirim rekap...</span>';
+      const res = await Store.waAutoReminder();
+      if (!res || !res.ok) {
+        waStatusEl.innerHTML = '<span style="color:var(--danger)">' + UI.esc((res && res.detail) || 'Gagal menjalankan rekap.') + '</span>';
+      } else if (!res.terkirim) {
+        waStatusEl.innerHTML = '<span class="muted">' + UI.esc(res.detail || 'Tidak ada rekap baru yang perlu dikirim.') + '</span>';
+      } else {
+        waStatusEl.innerHTML = '<span style="color:var(--success)">✓ ' + res.terkirim + ' pesan masuk antrian bridge.</span>';
+      }
+      renderWaLog();
+    };
+
     function renderWaLog() {
       const el = document.getElementById('wa-log');
       if (!el) return;
-      const logs = (Store.get().logWa || []).slice(0, 50);
-      if (!logs.length) { el.innerHTML = '<span class="muted">Belum ada pengiriman.</span>'; return; }
-      el.innerHTML = logs.map(l => {
-        const status = l.status || '?';
-        const color = status === 'queued' ? 'var(--success)' : status === 'skipped' ? 'var(--warn)' : 'var(--danger)';
-        const tgl = (l.tanggal || '').replace('T', ' ').slice(5, 19);
-        const detail = l.detail ? '<div style="color:var(--danger);margin-top:2px">' + UI.esc(l.detail) + '</div>' : '';
-        const msg = l.message ? '<div class="muted" style="margin-top:2px">' + UI.esc(l.message) + '</div>' : '';
-        return '<div style="padding:6px 0;border-bottom:1px solid var(--line,#eee)">' +
-          '<span style="color:' + color + ';font-weight:600">' + UI.esc(status) + '</span> ' +
-          '<span class="muted">' + UI.esc(tgl) + '</span> → <b>' + UI.esc(l.to || '-') + '</b>' +
-          detail + msg + '</div>';
-      }).join('');
+      // Log juga ditulis server (cron / rekap terjadwal), jadi ambil versi
+      // terbaru dari server, bukan hanya salinan yang ada di browser.
+      Store.waLogServer().then(serverLogs => {
+        if (!serverLogs) return;
+        const merged = serverLogs.concat(Store.get().logWa || []);
+        const seen = new Set();
+        const logs = merged.filter(l => {
+          const key = l.id || (l.to + '|' + l.tanggal + '|' + l.message);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }).slice(0, 50);
+        if (!logs.length) { el.innerHTML = '<span class="muted">Belum ada pengiriman.</span>'; return; }
+        el.innerHTML = logs.map(l => {
+          const status = l.status || '?';
+          const color = status === 'queued' ? 'var(--success)' : status === 'skipped' ? 'var(--warn)' : 'var(--danger)';
+          const tgl = (l.tanggal || '').replace('T', ' ').slice(5, 19);
+          const detail = l.detail ? '<div style="color:var(--danger);margin-top:2px">' + UI.esc(l.detail) + '</div>' : '';
+          const msg = l.message ? '<div class="muted" style="margin-top:2px">' + UI.esc(l.message) + '</div>' : '';
+          return '<div style="padding:6px 0;border-bottom:1px solid var(--line,#eee)">' +
+            '<span style="color:' + color + ';font-weight:600">' + UI.esc(status) + '</span> ' +
+            '<span class="muted">' + UI.esc(tgl) + '</span> → <b>' + UI.esc(l.to || '-') + '</b>' +
+            detail + msg + '</div>';
+        }).join('');
+      });
     }
     const waLogBtn = document.getElementById('btn-wa-log-refresh');
     if (waLogBtn) waLogBtn.onclick = renderWaLog;

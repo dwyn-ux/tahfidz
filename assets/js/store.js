@@ -197,7 +197,10 @@ const Store = (() => {
       const upsert = Object.keys(newRows)
         .filter(id => !oldRows[id] || !sameValue(oldRows[id], newRows[id]))
         .map(id => newRows[id]);
-      const remove = Object.keys(oldRows).filter(id => !newRows[id]);
+      // Log WA hanya bertambah, tidak pernah dihapus dari sisi browser:
+      // server juga menulis baris log (mis. saat cron mengirim rekap), dan
+      // pemotongan 100 baris di browser akan ikut menghapus baris itu.
+      const remove = type === 'logWa' ? [] : Object.keys(oldRows).filter(id => !newRows[id]);
       if (upsert.length || remove.length) records[type] = { upsert, remove };
     });
 
@@ -244,6 +247,13 @@ const Store = (() => {
     return api('wa&op=status').then(r => (r && r.data) || null);
   }
 
+  // Log WA versi server (terbaru). Log juga ditulis server saat cron atau
+  // rekap terjadwal berjalan, jadi panel Log WhatsApp perlu mengambilnya
+  // langsung dari server, bukan dari salinan di browser.
+  function waLogServer() {
+    return api('wa&op=log').then(r => (r && r.data) || null).catch(() => null);
+  }
+
   // QR pairing juga lewat API (endpoint itu butuh Authorization header), lalu
   // dikembalikan sebagai object URL supaya bisa dipakai sebagai <img src>.
   function waQrDataUrl() {
@@ -270,13 +280,26 @@ const Store = (() => {
     return value === true || value === 1 || value === '1' || value === 'true';
   }
 
+  // Nomor WhatsApp wali. Record wali diutamakan karena wali bisa
+  // memperbarui nomornya sendiri lewat halaman Profil; field noHpWali pada
+  // Santri hanya dipakai sebagai cadangan untuk data lama.
+  function waNomorWali(santriId) {
+    const s = db.santri.find(x => x.id === SantriId);
+    if (!s) return '';
+    const wali = (db.wali || []).find(w => w.id === s.waliId)
+      || (db.wali || []).find(w => w.santriId === s.id);
+    if (wali && wali.noHp && String(wali.noHp).trim()) return String(wali.noHp).trim();
+    return s.noHpWali ? String(s.noHpWali).trim() : '';
+  }
+
   // Kirim laporan ke no. WA wali dari santri (auto jika waAuto aktif). Fire-and-forget.
   function waSendWali(santriId, message) {
-    const s = db.santri.find(x => x.id === santriId);
+    const s = db.santri.find(x => x.id === SantriId);
     if (!s) { waLog({ to: null, status: 'skipped', detail: 'Santri tidak ditemukan', message }); return Promise.resolve(false); }
-    if (!waAutoEnabled()) { waLog({ to: s.noHpWali, status: 'skipped', detail: 'WhatsApp Otomatis nonaktif', message }); return Promise.resolve(false); }
-    if (!s.noHpWali) { waLog({ to: null, status: 'skipped', detail: 'Santri tanpa no. HP wali', message }); return Promise.resolve(false); }
-    return waSend(s.noHpWali, message);
+    if (!waAutoEnabled()) { waLog({ to: null, status: 'skipped', detail: 'WhatsApp Otomatis nonaktif', message }); return Promise.resolve(false); }
+    const nomor = waNomorWali(santriId);
+    if (!nomor) { waLog({ to: null, status: 'skipped', detail: 'Santri tanpa no. HP wali', message }); return Promise.resolve(false); }
+    return waSend(nomor, message);
   }
   /* ---------- Pemicu WA otomatis (setoran / harian / mingguan / bulanan) ---------- */
 
@@ -306,32 +329,19 @@ const Store = (() => {
     return { jam, menit };
   }
 
-  // Pemicu berjadwal hanya dikirim pada hari yang cocok. Rekap yang dikirim
-  // adalah periode yang sudah selesai (kemarin / pekan lalu / bulan lalu)
-  // supaya tidak ada absensi yang masih bisa dikoreksi ikut terkirim.
-  function waAutoDue(trigger, now = new Date()) {
-    if (trigger === 'harian') return true;
-    if (trigger === 'mingguan') return now.getDay() === 1; // Senin
-    if (trigger === 'bulanan') return now.getDate() === 1;
-    return true;
-  }
-
-  // Tandai bahwa pemicu sudah dikirim hari ini, agar membuka aplikasi
-  // berkali-kali dalam sehari tidak mengirim pesan berulang.
-  function waAutoSudahKirim(trigger, tanggal) {
-    if (!Array.isArray(db.waAutoLog)) db.waAutoLog = [];
-    return db.waAutoLog.some(item => item.trigger === trigger && item.tanggal === tanggal);
-  }
-  function waAutoTandai(trigger, tanggal, jumlah) {
-    if (!Array.isArray(db.waAutoLog)) db.waAutoLog = [];
-    db.waAutoLog = db.waAutoLog.filter(item => item.trigger !== trigger || item.tanggal !== tanggal);
-    db.waAutoLog.push({ trigger, tanggal, jumlah, waktu: nowISO() });
-    // Hanya perlu menyimpan beberapa hari terakhir.
-    if (db.waAutoLog.length > 60) db.waAutoLog = db.waAutoLog.slice(-60);
-    save();
+  // Pemicu berjadwal (harian/mingguan/bulanan) dijalankan di server supaya
+  // bisa dipanggil cron dan penanda "sudah terkirim"-nya tersimpan di
+  // database. Lihat api/wa_service.php.
+  function waAutoReminder() {
+    return api('wa_auto_reminder', { method: 'POST', body: {} }).catch(e => {
+      console.warn('WA reminder gagal', e);
+      return { ok: false, terkirim: 0, detail: (e && e.message) || 'Gagal' };
+    });
   }
 
   // Satu pesan rekap absensi untuk satu santri pada rentang tanggal tertentu.
+  // Dipakai untuk pratinjau di aplikasi; pesan yang benar-benar dikirim
+  // disusun di server agar sama persis dengan yang dilihat wali.
   function waAbsensiMessage(santri, dari, sampai, judul) {
     const rec = rekapKehadiranSantri(santri.id, dari, sampai);
     const t = rec.total;
@@ -1295,8 +1305,8 @@ const Store = (() => {
     tingkatOptions, kelasOptions, tingkatForSantri, kelasForSantri, normalizeSantriEducation, kelasLabel, educationLabel,
     simpanTingkat, hapusTingkat, simpanKelas, hapusKelas, tingkatAda, kelasDipakaiDiTalim, jumlahSantriKelas, naturalKelasSort,
     talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
-    waSend, waLog, waReady, waAutoEnabled, waSendWali, waStatus, waQrDataUrl,
-    waAutoTriggerSettings, waAutoHour, waAutoDue, waAutoSudahKirim, waAutoTandai, waAbsensiMessage,
+    waSend, waLog, waReady, waAutoEnabled, waSendWali, waNomorWali, waStatus, waQrDataUrl, waLogServer,
+    waAutoTriggerSettings, waAutoHour, waAutoReminder, waAbsensiMessage,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,
     setoranRentang, avgNilaiRentang, padaRentang, juzHafalanDisplay,
     absensiUstadzOf, absensiUstadzRow, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,

@@ -54,6 +54,22 @@ define('DB_DRIVER', isset($envVars['DB_DRIVER']) ? $envVars['DB_DRIVER'] : 'sqli
 // SQLite file (used only when DB_DRIVER === 'sqlite')
 define('DB_SQLITE_PATH', __DIR__ . '/tahfidzku.sqlite');
 
+/* ---------------- APP_TIMEZONE ----------------
+ * Server sering berjalan di UTC, sedangkan browser pengguna memakai zona waktu
+ * setempat. Tanpa penyelarasan ini, "hari ini" dan "jam kirim" di server bisa
+ * berbeda sehari dari yang dilihat pengguna, sehingga rekap harian terkirim
+ * untuk periode yang salah. Setel ke zona waktu lembaga (mis. Asia/Jakarta).
+ * Kosongkan untuk memakai bawaan server. */
+$appTimezone = trim((string)($envVars['APP_TIMEZONE'] ?? 'Asia/Jakarta'));
+if ($appTimezone !== '') {
+    try {
+        new DateTimeZone($appTimezone);
+        date_default_timezone_set($appTimezone);
+    } catch (Throwable $e) {
+        error_log('[tahfidzku] APP_TIMEZONE tidak valid, memakai bawaan server: ' . $appTimezone);
+    }
+}
+
 /* ---------------- APP_SECRET (HMAC signing key) ----------------
  * Loaded from .env. If not set, a random secret is generated and
  * persisted to .secret file. NEVER use the old hardcoded default. */

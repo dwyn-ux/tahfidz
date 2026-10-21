@@ -34,6 +34,7 @@ terpisah; aplikasi PHP/JS tinggal POST pesan ke bridge.
 cd wa-bridge
 npm install
 npm start                 # default port 3210
+./run.sh                  # sama, tapi otomatis dijalankan ulang kalau crash
 ```
 
 `WA_KEY` dibaca dari `wa-bridge/.env` ( sudah di-`.gitignore`). Buat sekali:
@@ -61,17 +62,57 @@ Semua endpoint (termasuk `/qr`) mewajibkan header `X-WA-Key`, atau query
 `?key=` untuk `/qr` yang dibuka langsung di tab browser.
 
 Browser tidak pernah memegang `WA_KEY`: aplikasi mengirim `?action=wa&op=…`
-(`status` / `qr` / `send`) ke API, lalu PHP meneruskannya ke bridge memakai nilai
-yang tersimpan di server. `status` dan `qr` hanya untuk admin; `send` juga
-punya ustadz, namun hanya untuk laporan otomatis ke wali saat `waAuto` aktif.
+(`status` / `qr` / `send` / `log`) ke API, lalu PHP meneruskannya ke bridge
+memakai nilai yang tersimpan di server. `status`, `qr`, dan `log` hanya untuk
+admin; `send` juga punya ustadz, namun hanya untuk laporan otomatis ke wali
+saat `waAuto` aktif.
 
-Pesan antri dengan delay acak 6–12 detik antar pesan (anti-banned).
+Pesan antri dengan delay acak 8–20 detik antar pesan (anti-banned).
 Bisa diubah lewat env `WA_MIN_DELAY` / `WA_MAX_DELAY`.
 
 **Hubungkan ke aplikasi:** Admin → Settings → *WhatsApp* → isi URL bridge
 (`http://localhost:3210` atau `https://wa.example.com:3210`) dan Key bridge,
 tekan *Simpan Pengaturan*, lalu *Cek Status* untuk melihat QR dan *Kirim Tes*.
-Laporan tahsin/ziyadah/mutqin otomatis terkirim ke `noHpWali` saat setoran disimpan.
+Laporan tahsin/ziyadah/mutqin otomatis terkirim ke nomor wali saat setoran disimpan.
+
+### Pemicu otomatis
+
+Ada dua jenis pemicu, keduanya bisa dinyalakan bersamaan:
+
+| Pemicu | Kapan dikirim | Periode rekap |
+|--------|---------------|----------------|
+| Saat Setoran | langsung, saat ustadz menyimpan setoran | laporan capaian |
+| Rekap Harian | setiap hari setelah jam yang disetel | kemarin |
+| Rekap Mingguan | setelah minggu berjalan (dari Senin) | minggu sebelumnya (Sen–Min) |
+| Rekap Bulanan | setelah tanggal 1 | bulan sebelumnya |
+
+Rekap berjadwal **dijalankan di server** (`api/wa_service.php`), bukan di
+browser. Alasannya:
+
+- bisa dipanggil cron, sehingga terkirim tepat waktu tanpa perlu ada orang
+  yang membuka aplikasi;
+- penanda "sudah terkirim" tersimpan di database (`wa_auto_log`) dengan kunci
+  per *periode*, sehingga cron dan aplikasi yang dibuka manual tidak mengirim
+  pesan dobel, dan rekap untuk periode yang sama tidak pernah terulang;
+- bila server sempat mati, periode yang terlewat tetap dikirim saat server
+  hidup kembali (batas 7 periode harian / 3 mingguan-bulanan per pemanggilan).
+
+Tanpa cron, rekap tetap terkirim saat admin atau ustadz membuka aplikasi
+setelah jam yang disetel.
+
+**Cron harian** (butuh token admin, bisa dibuat lewat `api/index.php?action=login`):
+
+```cron
+15 7 * * * curl -s -H "Authorization: Bearer <TOKEN_ADMIN>" "https://domain-anda.com/api/index.php?action=wa_auto_reminder"
+```
+
+Nomor wali diambil dari record wali (bisa diperbarui sendiri oleh wali lewat
+halaman Profil); `noHpWali` pada data Santri dipakai sebagai cadangan untuk
+data lama.
+
+**Zona waktu:** server sering berjalan di UTC sedangkan browser memakai zona
+waktu setempat. Setel `APP_TIMEZONE=Asia/Jakarta` di `api/.env` supaya "hari
+ini" dan "jam kirim" sama dengan yang dilihat pengguna.
 
 > Keamanan: pasang reverse-proxy dengan HTTPS + jangan ekspos port bridge ke publik
 > tanpa proteksi (pakai `X-WA-Key` dan batasi akses).
@@ -93,6 +134,7 @@ Laporan tahsin/ziyadah/mutqin otomatis terkirim ke `noHpWali` saat setoran disim
    DB_PASS=password_db          # ganti dengan password DB
    APP_SECRET=<string acak >= 32 karakter>   # WAJIB diisi, contoh: php -r "echo bin2hex(random_bytes(32));"
    CORS_ALLOW_ORIGIN=https://domain-anda.com
+   APP_TIMEZONE=Asia/Jakarta  # zona waktu lembaga; server sering UTC
    INSTALL_TOKEN=<string acak>  # dipakai sekali untuk menjalankan installer
    ADMIN_PASSWORD=<password admin awal>
    ```
@@ -108,6 +150,28 @@ Laporan tahsin/ziyadah/mutqin otomatis terkirim ke `noHpWali` saat setoran disim
 5. **HAPUS `api/install.php`** jika masih ada (untuk keamanan).
 
 6. **Buka aplikasi**: `https://domain-anda.com/index.html`
+
+### Menjalankan di server sendiri (bukan shared hosting)
+
+Untuk development atau pemakaian lokal ada dua skrip yang menjaga layanan tetap
+hidup (memulai ulang otomatis kalau prosesnya berhenti):
+
+```bash
+# API PHP
+./run-api.sh                 # default 0.0.0.0:8000, ubah lewat API_HOST/API_PORT
+
+# WA Bridge
+cd wa-bridge && ./run.sh     # default port 3210
+```
+
+Keduanya bisa dijalankan di belakang layar:
+
+```bash
+setsid nohup ./run-api.sh > /tmp/tahfidz-api.log 2>&1 &
+cd wa-bridge && setsid nohup ./run.sh > /tmp/wa-bridge.log 2>&1 &
+```
+
+Butuh PHP 8 dengan ekstensi `pdo_sqlite` (atau `pdo_mysql`) dan Node.js 18+.
 
 > File `api/.htaccess` ikut ter-upload dan akan melindungi `api/.env`, `api/.secret`,
 > dan file database dari akses web, serta meneruskan header `Authorization`

@@ -4,6 +4,7 @@
  * All requests: /api/index.php?action=...
  */
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/wa_service.php';
 
 $action = $_GET['action'] ?? '';
 
@@ -305,12 +306,22 @@ switch ($action) {
         $waUser = requireAuth();
         $waIsAdmin = ($waUser['role'] ?? '') === 'admin';
         $waOp = $_GET['op'] ?? 'status';
-        if (!in_array($waOp, ['status', 'qr', 'send'], true)) err('Unknown wa op', 400);
+        if (!in_array($waOp, ['status', 'qr', 'send', 'log'], true)) err('Unknown wa op', 400);
         // Cek koneksi dan QR hanya untuk admin: keduanya menyangkut nomor
         // bridge dan kuncinya, bukan data wali.
         if ($waOp !== 'send' && !$waIsAdmin) err('Method not allowed', 403);
 
         $waSettings = getSettings();
+
+        // Log pengiriman dibaca dari database, bukan dari bridge, karena
+        // bridge tidak menyimpan riwayat (hanya antrean). Bridge pun belum
+        // tentu dikonfigurasi, jadi op ini tidak boleh bergantung padanya.
+        if ($waOp === 'log') {
+            $rows = getRecords('logWa');
+            usort($rows, fn($a, $b) => strcmp((string)($b['tanggal'] ?? ''), (string)($a['tanggal'] ?? '')));
+            send(['ok' => true, 'data' => array_slice($rows, 0, 100)]);
+        }
+
         $waUrl = rtrim((string)($waSettings['waBridgeUrl'] ?? ''), '/');
         $waKey = (string)($waSettings['waBridgeKey'] ?? '');
         if (!$waUrl) err('WA bridge belum diatur (Settings → WhatsApp).', 400);
@@ -341,6 +352,26 @@ switch ($action) {
         }
         if ($waOp === 'status') send(['ok' => $r['ok'], 'status' => $r['status'], 'data' => $r['data']]);
         send(['ok' => $r['ok'], 'status' => $r['status'], 'detail' => $r['detail']]);
+        break;
+
+    /* ---------------- WHATSAPP REMINDER (cron) ----------------
+       Pemicu terjadwal (rekap harian/mingguan/bulanan) dijalankan di server
+       supaya bisa dipanggil cron tanpa browser terbuka, dan penanda "sudah
+       terkirim" tersimpan di database sehingga cron dan aplikasi yang dibuka
+       manual tidak mengirim pesan yang sama dua kali.
+       Contoh (cron harian):
+         curl -H "Authorization: Bearer <TOKEN_ADMIN>" \
+              "https://domain-anda.com/api/index.php?action=wa_auto_reminder" */
+    case 'wa_auto_reminder':
+        $waUser = requireAuth();
+        // Hanya admin/ustadz yang boleh memicu pengiriman massal; wali
+        // hanya boleh menerima laporan.
+        if (!in_array($waUser['role'] ?? '', ['admin', 'ustadz'], true)) {
+            err('Method not allowed', 403);
+        }
+        NormalizedStore::ensureUpgrade();
+        $waReminder = waJalankanReminder();
+        send($waReminder);
         break;
 
     default:
