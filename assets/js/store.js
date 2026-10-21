@@ -1198,6 +1198,9 @@ const Store = (() => {
   // Rekap kehadiran Santri per periode. Kehadiran dihitung satu status per sesi
   // (paling baru), supaya koreksi absensi tidak terhitung dua kali.
   function rekapKehadiranSantri(santriId, dari, sampai, sesiList) {
+    const list = sesiList || SESI_REKAP; const allDays = tanggalRange(dari, sampai); const records = dedupeKehadiran(db.kehadiran.filter(k => k.santriId === santriId && allDays.includes(k.tanggal))); const recDates = new Set(records.map(r => r.tanggal)); const days = allDays.filter(tgl => { const d = new Date(tgl + 'T12:00:00').getDay(); return (d >= 1 && d <= 5) || recDates.has(tgl); }); return rekapKehadiranOrang(records, days, list, list);
+  }
+  function _oldRekapKehadiranSantri(santriId, dari, sampai, sesiList) {
     const list = sesiList || SESI_REKAP;
     const days = tanggalRange(dari, sampai);
     const records = dedupeKehadiran(
@@ -1207,6 +1210,9 @@ const Store = (() => {
 
   // Rekap kehadiran Ustadz per periode. Alfa = sesi yang tanpa catatan absensi.
   function rekapKehadiranUstadz(ustadzId, dari, sampai, sesiList) {
+    const list = sesiList || SESI_REKAP; const allDays = tanggalRange(dari, sampai); const records = dedupeAbsensiUstadz(db.absensiUstadz.filter(a => a.ustadzId === ustadzId && allDays.includes(a.tanggal))); const recDates = new Set(records.map(r => r.tanggal)); const days = allDays.filter(tgl => { const d = new Date(tgl + 'T12:00:00').getDay(); return (d >= 1 && d <= 5) || recDates.has(tgl); }); return rekapKehadiranOrang(records, days, list, list);
+  }
+  function _oldRekapKehadiranUstadz(ustadzId, dari, sampai, sesiList) {
     const list = sesiList || SESI_REKAP;
     const days = tanggalRange(dari, sampai);
     const records = dedupeAbsensiUstadz(

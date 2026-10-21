@@ -86,11 +86,11 @@ function waPeriode(string $trigger, string $hariIni): ?array {
         return ['dari' => $kemarin, 'sampai' => $kemarin, 'judul' => 'Rekap absensi harian', 'kunci' => $kemarin];
     }
     if ($trigger === 'mingguan') {
-        // Minggu yang sudah lewat penuh: Senin lalu sampai Minggu lalu.
-        $senin = waTambahHari(waAwalMinggu($hariIni), -7);
+        // Rekap mingguan dikirim di hari Sabtu untuk periode Senin–Jumat (Sabtu & Ahad libur setoran).
+        $dt = DateTimeImmutable::createFromFormat('!Y-m-d', $hariIni); $dow = $dt ? (int)$dt->format('N') : 1; $senin = waTambahHari(waAwalMinggu($hariIni), $dow >= 6 ? 0 : -7);
         return [
             'dari' => $senin,
-            'sampai' => waTambahHari($senin, 6),
+            'sampai' => waTambahHari($senin, 4), // Jumat
             'judul' => 'Rekap absensi mingguan',
             'kunci' => $senin,
         ];
@@ -113,7 +113,7 @@ function waPeriodeSebelumnya(string $trigger, array $periode): ?array {
     }
     if ($trigger === 'mingguan') {
         $senin = waTambahHari($periode['dari'], -7);
-        return ['dari' => $senin, 'sampai' => waTambahHari($senin, 6), 'judul' => $periode['judul'], 'kunci' => $senin];
+        return ['dari' => $senin, 'sampai' => waTambahHari($senin, 4), 'judul' => $periode['judul'], 'kunci' => $senin]; // Jumat
     }
     if ($trigger === 'bulanan') {
         $date = DateTimeImmutable::createFromFormat('!Y-m-d', $periode['dari']);
@@ -159,7 +159,8 @@ function waRekapSantri(array $records, string $santriId, string $dari, string $s
     $hari = [];
     $cursor = $dari;
     while ($cursor <= $sampai && count($hari) <= 366) {
-        $hari[] = $cursor;
+        $dt = DateTimeImmutable::createFromFormat('!Y-m-d', $cursor); $dow = $dt ? (int)$dt->format('N') : 1;
+        if ($dow >= 1 && $dow <= 5) { $hari[] = $cursor; } else { foreach ($records as $r) { if (($r['santriId'] ?? '') === $santriId && ($r['tanggal'] ?? '') === $cursor) { $hari[] = $cursor; break; } } }
         $cursor = waTambahHari($cursor, 1);
     }
     $total = ['Hadir' => 0, 'Izin' => 0, 'Sakit' => 0, 'Libur' => 0, 'Alfa' => 0];
@@ -296,6 +297,7 @@ function waJalankanReminder(?DateTimeImmutable $now = null): array {
 
     foreach (['harian', 'mingguan', 'bulanan'] as $trigger) {
         if (empty($flags[$trigger])) continue;
+        if ($trigger === 'mingguan' && (int)$now->format('N') < 6) continue; // Rekap mingguan dikirim di hari Sabtu
 
         // Penanda memakai kunci PERIODE, bukan per hari: rekap untuk periode
         // yang sama hanya dikirim sekali, berapa kali pun cron atau aplikasi

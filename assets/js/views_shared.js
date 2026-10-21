@@ -235,10 +235,62 @@ const Shared = (() => {
     let cum = [0];
     for (let i = 1; i <= 114; i++) cum[i] = cum[i - 1] + getSurah(i).ayahs;
     return (s, a) => cum[Number(s) - 1] + Number(a);
+  })(); /*
   })();
 
+// Detail info saat centang setoran di-hover (desktop) atau di-tap/hold (HP)
+if (typeof document !== 'undefined' && !document._setoranDetailBound) {
+  document._setoranDetailBound = true;
+  let holdTimer = null;
+  let didHold = false;
+
+  function openSetoranInfo(el) {
+    const info = el.getAttribute('data-setoran-info');
+    if (!info) return;
+    const nama = el.getAttribute('data-santri-nama') || 'Santri';
+    const tgl = el.getAttribute('data-tanggal') || '';
+    UI.openModal({
+      title: 'Detail Setoran · ' + nama,
+      sub: tgl ? ('Tanggal: ' + UI.fmtDate(tgl)) : '',
+      bodyHTML: `<div class="clay-card pad-sm" style="white-space:pre-line;line-height:1.7;font-size:14px;background:var(--bg)">${UI.esc(info)}</div>`,
+      actions: [{ label: 'Tutup', cls: 'primary', onClick: (m, c) => c() }]
+    });
+  }
+
+  document.addEventListener('touchstart', e => {
+    const badge = e.target.closest('.setoran-check-badge');
+    if (!badge) return;
+    didHold = false;
+    holdTimer = setTimeout(() => {
+      didHold = true;
+      openSetoranInfo(badge);
+    }, 350);
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  });
+
+  document.addEventListener('touchmove', () => {
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  });
+
+  document.addEventListener('click', e => {
+    const badge = e.target.closest('.setoran-check-badge');
+    if (!badge) return;
+    if (didHold) { didHold = false; return; }
+    openSetoranInfo(badge);
+  });
+
+  document.addEventListener('contextmenu', e => {
+    if (e.target.closest('.setoran-check-badge')) {
+      e.preventDefault();
+    }
+  });
+}
+
   // Rentang rank ayat sebuah halaman g: [start, end] dari peta halaman↔ayat nyata.
-  function pageRankRange(g) {
+  */ function pageRankRange(g) {
     const st = PAGE_START[g];
     if (!st) return null;
     const lo = _rankOf(st[0], st[1]);
@@ -444,10 +496,11 @@ const Shared = (() => {
       </div>
     </div>`;
     
-    return table;
+    return table; /*
+  })(); /*
   }
 
-  /* ---------- Laporan (shared, role-aware) ---------- */
+*/ } /* ---------- Laporan (shared, role-aware) ---------- */
   let _laporanFilters = {};
 
   const BULAN_ID = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -638,13 +691,65 @@ function renderLaporan(filters) {
     const table = new Uint32Array(256);
     for (let i = 0; i < 256; i++) {
       let value = i;
-      for (let bit = 0; bit < 8; bit++) value = (value >>> 1) ^ ((value & 1) ? 0xEDB88320 : 0);
+      for (let bit = 0; bit < 8; bit++) value = (value >>> 1) ^ ((value & 1) ? 0xEDB88320 : 0); table[i] = value >>> 0; } return table; })(); /*
       table[i] = value >>> 0;
     }
-    return table;
+    return table; /*
+  })(); /*
   })();
 
-  function xlsxCrc32(bytes) {
+// Detail info saat centang setoran di-hover (desktop) atau di-tap/hold (HP)
+if (typeof document !== 'undefined' && !document._setoranDetailBound) {
+  document._setoranDetailBound = true;
+  let holdTimer = null;
+  let didHold = false;
+
+  function openSetoranInfo(el) {
+    const info = el.getAttribute('data-setoran-info');
+    if (!info) return;
+    const nama = el.getAttribute('data-santri-nama') || 'Santri';
+    const tgl = el.getAttribute('data-tanggal') || '';
+    UI.openModal({
+      title: 'Detail Setoran · ' + nama,
+      sub: tgl ? ('Tanggal: ' + UI.fmtDate(tgl)) : '',
+      bodyHTML: `<div class="clay-card pad-sm" style="white-space:pre-line;line-height:1.7;font-size:14px;background:var(--bg)">${UI.esc(info)}</div>`,
+      actions: [{ label: 'Tutup', cls: 'primary', onClick: (m, c) => c() }]
+    });
+  }
+
+  document.addEventListener('touchstart', e => {
+    const badge = e.target.closest('.setoran-check-badge');
+    if (!badge) return;
+    didHold = false;
+    holdTimer = setTimeout(() => {
+      didHold = true;
+      openSetoranInfo(badge);
+    }, 350);
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  });
+
+  document.addEventListener('touchmove', () => {
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  });
+
+  document.addEventListener('click', e => {
+    const badge = e.target.closest('.setoran-check-badge');
+    if (!badge) return;
+    if (didHold) { didHold = false; return; }
+    openSetoranInfo(badge);
+  });
+
+  document.addEventListener('contextmenu', e => {
+    if (e.target.closest('.setoran-check-badge')) {
+      e.preventDefault();
+    }
+  });
+}
+
+  */ function xlsxCrc32(bytes) {
     let crc = 0xFFFFFFFF;
     for (let i = 0; i < bytes.length; i++) crc = (crc >>> 8) ^ XLSX_CRC_TABLE[(crc ^ bytes[i]) & 0xFF];
     return (crc ^ 0xFFFFFFFF) >>> 0;
@@ -816,11 +921,62 @@ function exportLaporanExcel(filters) {
     const types = [];
     if (programs.includes('Tahsin')) types.push('tahsin');
     if (programs.includes('Ziyadah')) types.push('ziyadahBacaan', 'ziyadahHafalan');
-    if (programs.includes('Mutqin')) types.push('mutqin');
-    return types;
+    if (programs.includes('Mutqin')) types.push('mutqin'); return types;
+
   }
 
-  function dateKey(date) {
+  function formatSetoranShort(rec, type) {
+    if (!rec) return '';
+    const label = JENIS_SETORAN[type] || type;
+    let detail = '';
+    if (type === 'tahsin') {
+      detail = (rec.halAwal === rec.halAkhir || !rec.halAkhir) ? ('Hal ' + rec.halAwal) : ('Hal ' + rec.halAwal + '–' + rec.halAkhir);
+    } else {
+      detail = formatSetoranLabel(rec);
+      if (type === 'ziyadahHafalan') {
+        const h = computeHafalan(rec.sAwal, rec.aAwal, rec.sAkhir, rec.aAkhir);
+        if (h) detail += ' (' + h.pages + ' hlm · ' + h.ayahs + ' ayat)';
+      } else if (type === 'mutqin' && rec.totalHafalan) {
+        detail += ' (' + rec.totalHafalan + ' hlm)';
+      }
+    }
+    let res = label + ': ' + detail;
+    if (rec.nilai) res += ' | Nilai: ' + rec.nilai;
+    if (rec.catatan) res += ' | Catatan: ' + rec.catatan;
+    return res;
+  }
+
+  function formatSetoranDetail(rec, type) {
+    if (!rec) return '';
+    const label = JENIS_SETORAN[type] || type;
+    const lines = ['📖 ' + label];
+    if (type === 'tahsin') {
+      const hal = (rec.halAwal === rec.halAkhir || !rec.halAkhir) ? ('Hal ' + rec.halAwal) : ('Hal ' + rec.halAwal + '–' + rec.halAkhir);
+      lines.push('Halaman: ' + hal);
+    } else {
+      lines.push('Surat: ' + formatSetoranLabel(rec));
+      if (type === 'ziyadahHafalan') {
+        const h = computeHafalan(rec.sAwal, rec.aAwal, rec.sAkhir, rec.aAkhir);
+        if (h) lines.push('Panjang: ' + h.pages + ' halaman · ' + h.ayahs + ' ayat');
+      } else if (type === 'mutqin' && rec.totalHafalan) {
+        lines.push('Total Murajaah: ' + rec.totalHafalan + ' halaman');
+      }
+    }
+    if (rec.nilai) lines.push('Nilai: ' + rec.nilai);
+    if (rec.catatan) lines.push('Catatan: ' + rec.catatan);
+    if (rec.ustadzId) {
+      const u = Store.findUstadz(rec.ustadzId);
+      if (u && u.nama) lines.push('Penyimak: ' + u.nama);
+    }
+    return lines.join('\n');
+  } /*
+  }
+
+
+
+  }
+
+  */ function dateKey(date) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
@@ -889,7 +1045,7 @@ function exportLaporanExcel(filters) {
         if (!record.santriId || !record.tanggal) return;
         const key = record.santriId + '|' + record.tanggal;
         const existing = setoran.get(key) || [];
-        if (!existing.includes(type)) existing.push(type);
+        existing.push({ type, record });
         setoran.set(key, existing);
       });
     });
@@ -905,10 +1061,10 @@ function exportLaporanExcel(filters) {
         const programs = Store.programsForSantriHalaqah(s, h);
         const relevantTypes = jenisSetoranUntukProgram(programs);
         const cells = days.map(day => {
-          const types = (setoran.get(s.id + '|' + day.tanggal) || []).filter(type => relevantTypes.includes(type));
-          if (day.tanggal > today) return { status: 'future', types: [] };
-          if (types.length) return { status: 'submitted', types };
-          const isDayLibur = db.kehadiran.some(k => k.santriId === s.id && k.tanggal === day.tanggal && k.status === 'Libur');
+          const items = (setoran.get(s.id + '|' + day.tanggal) || []).filter(item => relevantTypes.includes(item.type));
+          if (day.tanggal > today) return { status: 'future', types: [], records: [] };
+          if (items.length) return { status: 'submitted', types: items.map(it => it.type), records: items };
+          const isWeekend = (new Date(day.tanggal + 'T12:00:00')).getDay() === 0 || (new Date(day.tanggal + 'T12:00:00')).getDay() === 6; const isDayLibur = isWeekend || db.kehadiran.some(k => k.santriId === s.id && k.tanggal === day.tanggal && k.status === 'Libur');
           if (isDayLibur) return { status: 'libur', types: [] };
           return { status: 'missing', types: [] };
         });
@@ -939,8 +1095,8 @@ function exportLaporanExcel(filters) {
         const cells = row.cells.map((cell, dayIndex) => {
           if (cell.status === 'future') return '<td class="center"><span class="badge gray">—</span></td>';
           if (cell.status === 'submitted') {
-            const title = cell.types.map(type => JENIS_SETORAN[type]).join(', ');
-            return `<td class="center" title="${UI.esc(title)}"><span class="badge green">✓</span></td>`;
+            const shortInfo = (cell.records || []).map(r => formatSetoranShort(r.record, r.type)).join('\n') || cell.types.map(type => JENIS_SETORAN[type]).join(', '); const fullDetail = (cell.records || []).map(r => formatSetoranDetail(r.record, r.type)).join('\n\n') || shortInfo;
+            return `<td class="center" title="${UI.esc(shortInfo)}"><span class="badge green setoran-check-badge" title="${UI.esc(shortInfo)}" data-setoran-info="${UI.esc(fullDetail)}" data-santri-nama="${UI.esc(row.s.nama)}" data-tanggal="${UI.esc(recap.days[dayIndex].tanggal)}" style="cursor:pointer;user-select:none;-webkit-user-select:none">✓</span></td>`;
           }
           if (cell.status === 'libur') {
             return '<td class="center" title="Halaqah Libur"><span class="badge purple" style="font-size:10px;padding:2px 6px">Libur</span></td>';
@@ -1227,3 +1383,54 @@ function exportLaporanExcel(filters) {
 
   return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, htmlTableToSheet, downloadExcel, downloadXlsx, downloadTemplateExcel, bulanLabel, mondayOf, rekapSetoranRange, setRekapSetoranRange, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, kirimRekapOtomatis, ICONS, hafalanMapHTML };
 })();
+
+// Detail info saat centang setoran di-hover (desktop) atau di-tap/hold (HP)
+if (typeof document !== 'undefined' && !document._setoranDetailBound) {
+  document._setoranDetailBound = true;
+  let holdTimer = null;
+  let didHold = false;
+
+  function openSetoranInfo(el) {
+    const info = el.getAttribute('data-setoran-info');
+    if (!info) return;
+    const nama = el.getAttribute('data-santri-nama') || 'Santri';
+    const tgl = el.getAttribute('data-tanggal') || '';
+    UI.openModal({
+      title: 'Detail Setoran · ' + nama,
+      sub: tgl ? ('Tanggal: ' + UI.fmtDate(tgl)) : '',
+      bodyHTML: `<div class="clay-card pad-sm" style="white-space:pre-line;line-height:1.7;font-size:14px;background:var(--bg)">${UI.esc(info)}</div>`,
+      actions: [{ label: 'Tutup', cls: 'primary', onClick: (m, c) => c() }]
+    });
+  }
+
+  document.addEventListener('touchstart', e => {
+    const badge = e.target.closest('.setoran-check-badge');
+    if (!badge) return;
+    didHold = false;
+    holdTimer = setTimeout(() => {
+      didHold = true;
+      openSetoranInfo(badge);
+    }, 350);
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => {
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  });
+
+  document.addEventListener('touchmove', () => {
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  });
+
+  document.addEventListener('click', e => {
+    const badge = e.target.closest('.setoran-check-badge');
+    if (!badge) return;
+    if (didHold) { didHold = false; return; }
+    openSetoranInfo(badge);
+  });
+
+  document.addEventListener('contextmenu', e => {
+    if (e.target.closest('.setoran-check-badge')) {
+      e.preventDefault();
+    }
+  });
+}

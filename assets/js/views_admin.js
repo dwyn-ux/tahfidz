@@ -2187,7 +2187,7 @@ const Admin = (() => {
           </label>
           <label style="display:flex;align-items:center;gap:8px">
             <button class="clay-toggle ${waTrigger('mingguan') ? 'on' : ''}" id="s-wa-mingguan"></button>
-            <span id="s-wa-mingguan-label" style="font-size:13px">${waTrigger('mingguan') ? 'Rekap Mingguan (Senin): Aktif' : 'Rekap Mingguan (Senin): Nonaktif'}</span>
+            <span id="s-wa-mingguan-label" style="font-size:13px">${waTrigger('mingguan') ? 'Rekap Mingguan (Sabtu): Aktif' : 'Rekap Mingguan (Sabtu): Nonaktif'}</span>
           </label>
           <label style="display:flex;align-items:center;gap:8px">
             <button class="clay-toggle ${waTrigger('bulanan') ? 'on' : ''}" id="s-wa-bulanan"></button>
@@ -2372,7 +2372,7 @@ const Admin = (() => {
         if (label) {
           if (key === 'setoran') label.textContent = on ? 'Saat Setoran: Aktif' : 'Saat Setoran: Nonaktif';
           else if (key === 'harian') label.textContent = on ? 'Rekap Harian: Aktif' : 'Rekap Harian: Nonaktif';
-          else if (key === 'mingguan') label.textContent = on ? 'Rekap Mingguan (Senin): Aktif' : 'Rekap Mingguan (Senin): Nonaktif';
+          else if (key === 'mingguan') label.textContent = on ? 'Rekap Mingguan (Sabtu): Aktif' : 'Rekap Mingguan (Sabtu): Nonaktif';
           else if (key === 'bulanan') label.textContent = on ? 'Rekap Bulanan (Tgl 1): Aktif' : 'Rekap Bulanan (Tgl 1): Nonaktif';
         }
       };
