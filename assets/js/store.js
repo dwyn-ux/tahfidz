@@ -284,7 +284,7 @@ const Store = (() => {
   // memperbarui nomornya sendiri lewat halaman Profil; field noHpWali pada
   // Santri hanya dipakai sebagai cadangan untuk data lama.
   function waNomorWali(santriId) {
-    const s = db.santri.find(x => x.id === SantriId);
+    const s = db.santri.find(x => x.id === santriId);
     if (!s) return '';
     const wali = (db.wali || []).find(w => w.id === s.waliId)
       || (db.wali || []).find(w => w.santriId === s.id);
@@ -294,7 +294,7 @@ const Store = (() => {
 
   // Kirim laporan ke no. WA wali dari santri (auto jika waAuto aktif). Fire-and-forget.
   function waSendWali(santriId, message) {
-    const s = db.santri.find(x => x.id === SantriId);
+    const s = db.santri.find(x => x.id === santriId);
     if (!s) { waLog({ to: null, status: 'skipped', detail: 'Santri tidak ditemukan', message }); return Promise.resolve(false); }
     if (!waAutoEnabled()) { waLog({ to: null, status: 'skipped', detail: 'WhatsApp Otomatis nonaktif', message }); return Promise.resolve(false); }
     const nomor = waNomorWali(santriId);
