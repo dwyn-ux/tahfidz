@@ -167,9 +167,11 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-WA-Key');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   const url = new URL(req.url, 'http://localhost');
-  const pathname = url.pathname.replace(/^\/wa-bridge/, '');
+  const rawPath = url.pathname.replace(/^\/wa-bridge/, '');
+  const pathname = rawPath.replace(/\/+/g, '/').replace(/\/$/, '') || '/';
 
   // Auth check for ALL endpoints
   const authOk = req.headers['x-wa-key'] === WA_KEY || url.searchParams.get('key') === WA_KEY;

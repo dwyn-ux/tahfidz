@@ -208,7 +208,7 @@ function waAutoEnabled(array $settings): bool {
  * yang bisa dibaca antarmuka.
  */
 function waBridgeCall(string $baseUrl, string $waKey, string $path, ?string $payload = null): array {
-    $url = $baseUrl . $path;
+    $url = rtrim($baseUrl, '/') . '/' . ltrim($path, '/');
     $headers = ['X-WA-Key: ' . $waKey, 'Accept: */*'];
     if ($payload !== null) $headers[] = 'Content-Type: application/json';
 

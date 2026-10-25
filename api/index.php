@@ -344,6 +344,9 @@ switch ($action) {
 
         if ($waOp === 'qr') {
             if (!$r['ok']) err($r['detail'] ?: ('Bridge menjawab HTTP ' . $r['status']), $r['status'] ?: 502);
+            if (isset($r['data']) && is_array($r['data'])) {
+                err('QR Code belum siap atau sedang diperbarui. Silakan coba beberapa detik lagi.', 503);
+            }
             header('Content-Type: image/png');
             header('Cache-Control: no-store');
             http_response_code(200);
