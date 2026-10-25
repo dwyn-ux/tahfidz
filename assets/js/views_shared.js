@@ -1066,6 +1066,11 @@ function exportLaporanExcel(filters) {
           if (items.length) return { status: 'submitted', types: items.map(it => it.type), records: items };
           const isWeekend = (new Date(day.tanggal + 'T12:00:00')).getDay() === 0 || (new Date(day.tanggal + 'T12:00:00')).getDay() === 6; const isDayLibur = isWeekend || db.kehadiran.some(k => k.santriId === s.id && k.tanggal === day.tanggal && k.status === 'Libur');
           if (isDayLibur) return { status: 'libur', types: [] };
+          const santriDayAbsensi = (db.kehadiran || []).filter(k => k.santriId === s.id && k.tanggal === day.tanggal);
+          const sakitRec = santriDayAbsensi.find(k => k.status === 'Sakit');
+          if (sakitRec) return { status: 'sakit', types: [], sesi: sakitRec.sesi };
+          const izinRec = santriDayAbsensi.find(k => k.status === 'Izin');
+          if (izinRec) return { status: 'izin', types: [], sesi: izinRec.sesi };
           return { status: 'missing', types: [] };
         });
         const absensi = Store.rekapKehadiranSantri(s.id, period.dari, period.sampai);
@@ -1101,6 +1106,22 @@ function exportLaporanExcel(filters) {
           if (cell.status === 'libur') {
             return '<td class="center" title="Halaqah Libur"><span class="badge purple" style="font-size:10px;padding:2px 6px">Libur</span></td>';
           }
+          if (cell.status === 'sakit') {
+            const sesiTxt = cell.sesi ? ` (${cell.sesi})` : '';
+            if (allowMakeup) {
+              const tanggal = recap.days[dayIndex].tanggal;
+              return `<td class="center" title="Absensi: Sakit${sesiTxt}"><span class="badge blue" style="font-size:10px;padding:2px 5px;margin-right:2px">Sakit</span><button class="clay-btn sm secondary" data-bayar-setoran data-santri-id="${UI.esc(row.s.id)}" data-tanggal="${UI.esc(tanggal)}" data-programs="${UI.esc(row.programs.join(','))}" style="padding:2px 5px;font-size:10px" title="Klik untuk catat bayar setoran susulan">Bayar</button></td>`;
+            }
+            return `<td class="center" title="Absensi: Sakit${sesiTxt}"><span class="badge blue" style="font-size:10px;padding:2px 6px">Sakit</span></td>`;
+          }
+          if (cell.status === 'izin') {
+            const sesiTxt = cell.sesi ? ` (${cell.sesi})` : '';
+            if (allowMakeup) {
+              const tanggal = recap.days[dayIndex].tanggal;
+              return `<td class="center" title="Absensi: Izin${sesiTxt}"><span class="badge warn" style="font-size:10px;padding:2px 5px;margin-right:2px">Izin</span><button class="clay-btn sm secondary" data-bayar-setoran data-santri-id="${UI.esc(row.s.id)}" data-tanggal="${UI.esc(tanggal)}" data-programs="${UI.esc(row.programs.join(','))}" style="padding:2px 5px;font-size:10px" title="Klik untuk catat bayar setoran susulan">Bayar</button></td>`;
+            }
+            return `<td class="center" title="Absensi: Izin${sesiTxt}"><span class="badge warn" style="font-size:10px;padding:2px 6px">Izin</span></td>`;
+          }
           if (allowMakeup) {
             const tanggal = recap.days[dayIndex].tanggal;
             const label = tanggal < Store.todayStr() ? 'Bayar' : 'Setor';
@@ -1135,7 +1156,7 @@ function exportLaporanExcel(filters) {
     }).join('');
     const jumlahHari = recap.days.length;
     return `<div class="mb">
-      <div class="muted" style="font-size:13px;margin:0 0 12px">Periode ${UI.esc(UI.fmtDate(recap.period.dari))} – ${UI.esc(UI.fmtDate(recap.period.sampai))} (${jumlahHari} hari). <span class="badge green">✓</span> sudah setoran; <span class="badge danger">Belum</span> belum setoran.${allowMakeup ? ' Klik <b>Bayar</b> untuk mencatat setoran pada tanggal yang terlewat.' : ''} Setoran dihitung dari Tahsin, Ziyadah Bacaan, Ziyadah Hafalan, dan Mutqin.</div>
+      <div class="muted" style="font-size:13px;margin:0 0 12px">Periode ${UI.esc(UI.fmtDate(recap.period.dari))} – ${UI.esc(UI.fmtDate(recap.period.sampai))} (${jumlahHari} hari). <span class="badge green">✓</span> sudah setoran; <span class="badge blue">Sakit</span> absen sakit; <span class="badge warn">Izin</span> izin; <span class="badge purple">Libur</span> libur; <span class="badge danger">Belum</span> belum setoran.${allowMakeup ? ' Klik <b>Bayar</b> untuk mencatat setoran pada tanggal yang terlewat.' : ''} Setoran dihitung dari Tahsin, Ziyadah Bacaan, Ziyadah Hafalan, dan Mutqin.</div>
       ${groups || '<div class="empty">Tidak ada halaqah yang sesuai dengan filter.</div>'}
     </div>`;
   }
@@ -1317,6 +1338,20 @@ function exportLaporanExcel(filters) {
             ctx.fillStyle = '#7e22ce';
             ctx.font = '600 13px Inter, Arial, sans-serif';
             ctx.fillText('Libur', centerX, y + 33);
+          } else if (cell.status === 'sakit') {
+            ctx.fillStyle = '#dbeafe';
+            canvasRoundedRect(ctx, centerX - 24, y + 16, 48, 24, 6);
+            ctx.fill();
+            ctx.fillStyle = '#1d4ed8';
+            ctx.font = '600 13px Inter, Arial, sans-serif';
+            ctx.fillText('Sakit', centerX, y + 33);
+          } else if (cell.status === 'izin') {
+            ctx.fillStyle = '#fef3c7';
+            canvasRoundedRect(ctx, centerX - 24, y + 16, 48, 24, 6);
+            ctx.fill();
+            ctx.fillStyle = '#854d0e';
+            ctx.font = '600 13px Inter, Arial, sans-serif';
+            ctx.fillText('Izin', centerX, y + 33);
           } else if (cell.status === 'future') {
             ctx.fillStyle = '#6b7280';
             ctx.font = '600 20px Inter, Arial, sans-serif';

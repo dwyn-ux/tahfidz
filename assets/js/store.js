@@ -1277,7 +1277,8 @@ const Store = (() => {
             const adaSetoran = db.ziyadahHafalan.some(z => z.santriId === s.id && z.tanggal === tgl)
               || db.ziyadahBacaan.some(z => z.santriId === s.id && z.tanggal === tgl)
               || db.tahsin.some(z => z.santriId === s.id && z.tanggal === tgl);
-            if (!adaSetoran) {
+            const isAbsenSakitIzin = (db.kehadiran || []).some(k => k.santriId === s.id && k.tanggal === tgl && (k.status === 'Sakit' || k.status === 'Izin' || k.status === 'Libur'));
+            if (!adaSetoran && !isAbsenSakitIzin) {
               const wUser = db.settings.notifWali && db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
               const halaqahSantri = halaqahForSantri(s);
               const ustadzPengampu = db.ustadz.filter(u => halaqahSantri.some(h => halaqahHasUstadz(h, u)));
