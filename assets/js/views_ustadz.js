@@ -27,7 +27,7 @@ const Ustadz = (() => {
 
   // Saat WA otomatis dimatikan, penyimpanan tidak perlu memunculkan toast
   // pengiriman apa pun. Ustadz cukup menerima konfirmasi "Tersimpan".
-  function formatPesanSetoranWA({ santri, awal, hingga, keterangan, tanggal }) {
+  function formatPesanSetoranWA({ santri, awal, hingga, jumlah, nilai, keterangan, tanggal }) {
     const d = Store.get();
     const lembaga = (d.settings && d.settings.namaLembaga ? d.settings.namaLembaga.trim().toUpperCase() : "PONDOK PESANTREN ASH-SHIDDIQ");
     const k = Store.kelasForSantri ? Store.kelasForSantri(santri) : (santri.kelas || '');
@@ -55,7 +55,9 @@ Waktu     : ${jamStr}
 *Laporan*
 Awal             : ${awal || '-'}
 Hingga           : ${hingga || '-'}
-Keterangan      : ${keterangan || '-'}
+Jumlah Hafalan : ${jumlah || '-'}
+Nilai : ${nilai !== undefined && nilai !== null && nilai !== '' ? nilai : '-'}
+Keterangan      :  ${keterangan || '-'}
 
 Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhirat Keluarga kelak. Amiin`;
   }
@@ -1103,6 +1105,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           if (wUser) Store.addNotif(wUser.id, 'wali', 'Nilai Tahsin baru: ' + s.nama);
           const haVal = +m.querySelector('#f-ha').value;
           const hkVal = +m.querySelector('#f-hk').value;
+          const totalHlm = (hkVal >= haVal) ? (hkVal - haVal + 1) : 1;
           const nilaiVal = +m.querySelector('#f-nilai').value;
           const catVal = m.querySelector('#f-cat').value.trim();
           const tglVal = m.querySelector('#f-tgl').value;
@@ -1110,7 +1113,9 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
             santri: s,
             awal: 'Halaman ' + haVal,
             hingga: 'Halaman ' + hkVal,
-            keterangan: 'Tahsin (Nilai: ' + nilaiVal + ')' + (catVal ? ' - ' + catVal : ''),
+            jumlah: totalHlm + ' hlm',
+            nilai: nilaiVal,
+            keterangan: catVal || 'Tahsin',
             tanggal: tglVal
           });
           waReport(santriId, msg);
@@ -1360,12 +1365,13 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       const hinggaSurah = 'Surat ' + (getSurah(sK) ? getSurah(sK).latin : sK) + ' Ayat ' + aK;
       const nilaiVal = +document.getElementById('f-nilai').value;
       const catVal = document.getElementById('f-cat').value.trim();
-      const ketText = 'Ziyadah Hafalan (' + formatHafalan(h) + (nilaiVal ? ', Nilai: ' + nilaiVal : '') + ')' + (catVal ? ' - ' + catVal : '');
       const msg = formatPesanSetoranWA({
         santri: s,
         awal: awalSurah,
         hingga: hinggaSurah,
-        keterangan: ketText,
+        jumlah: formatHafalan(h),
+        nilai: nilaiVal,
+        keterangan: catVal || '-',
         tanggal: Store.todayStr()
       });
       waReport(santriId, msg);
@@ -1436,12 +1442,13 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           const catVal = m.querySelector('#f-cat').value.trim();
           const awalSurah = 'Surat ' + (getSurah(sA) ? getSurah(sA).latin : sA) + ' Ayat ' + aaVal;
           const hinggaSurah = 'Surat ' + (getSurah(sK) ? getSurah(sK).latin : sK) + ' Ayat ' + akVal;
-          const ketText = 'Murajaah Mutqin (' + totalVal + ' Halaman' + (nilaiVal ? ', Nilai: ' + nilaiVal : '') + ')' + (catVal ? ' - ' + catVal : '');
           const msg = formatPesanSetoranWA({
             santri: s,
             awal: awalSurah,
             hingga: hinggaSurah,
-            keterangan: ketText,
+            jumlah: totalVal + ' hlm',
+            nilai: nilaiVal,
+            keterangan: catVal ? ('Murajaah Mutqin - ' + catVal) : 'Murajaah Mutqin',
             tanggal: Store.todayStr()
           });
           waReport(santriId, msg);
@@ -1847,31 +1854,35 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
 
           const w = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (w) Store.addNotif(w.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + level + ')');
-          let awalText = '-', hinggaText = '-', ketText = level;
+          let awalText = '-', hinggaText = '-', jmlText = '-', nilaiVal = 0, ketText = '-';
           if (level === 'Tahsin') {
             const ha = +m.querySelector('#f-ha').value;
             const hk = +m.querySelector('#f-hk').value;
-            const nilai = +m.querySelector('#f-nilai').value;
+            nilaiVal = +m.querySelector('#f-nilai').value;
             const cat = m.querySelector('#f-cat').value.trim();
             awalText = 'Halaman ' + ha;
             hinggaText = 'Halaman ' + hk;
-            ketText = 'Tahsin (Nilai: ' + nilai + ')' + (cat ? ' - ' + cat : '');
+            jmlText = ((hk >= ha) ? (hk - ha + 1) : 1) + ' hlm';
+            ketText = cat || 'Tahsin';
           } else if (level === 'Mutqin') {
             const sA = parseInt(m.querySelector('#f-sa').value) || 2;
             const sK = parseInt(m.querySelector('#f-sk').value) || 2;
             const aA = +m.querySelector('#f-aa').value;
             const aK = +m.querySelector('#f-ak').value;
             const totalHlm = +m.querySelector('#f-total').value;
-            const nilai = +m.querySelector('#f-nilai').value;
+            nilaiVal = +m.querySelector('#f-nilai').value;
             const cat = m.querySelector('#f-cat').value.trim();
             awalText = 'Surat ' + (getSurah(sA) ? getSurah(sA).latin : sA) + ' Ayat ' + aA;
             hinggaText = 'Surat ' + (getSurah(sK) ? getSurah(sK).latin : sK) + ' Ayat ' + aK;
-            ketText = 'Murajaah Mutqin (' + totalHlm + ' Halaman' + (nilai ? ', Nilai: ' + nilai : '') + ')' + (cat ? ' - ' + cat : '');
+            jmlText = totalHlm + ' hlm';
+            ketText = cat ? ('Murajaah Mutqin - ' + cat) : 'Murajaah Mutqin';
           }
           const msg = formatPesanSetoranWA({
             santri: s,
             awal: awalText,
             hingga: hinggaText,
+            jumlah: jmlText,
+            nilai: nilaiVal,
             keterangan: ketText,
             tanggal: m.querySelector('#f-tgl').value
           });
@@ -2003,12 +2014,13 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         const hinggaSurah = 'Surat ' + (getSurah(sK) ? getSurah(sK).latin : sK) + ' Ayat ' + aK;
         const nilaiVal = +modalContent.querySelector('#f-nilai').value;
         const catVal = modalContent.querySelector('#f-cat').value.trim();
-        const ketText = 'Ziyadah Hafalan (' + formatHafalan(h) + (nilaiVal ? ', Nilai: ' + nilaiVal : '') + ')' + (catVal ? ' - ' + catVal : '');
         const msg = formatPesanSetoranWA({
           santri: s,
           awal: awalSurah,
           hingga: hinggaSurah,
-          keterangan: ketText,
+          jumlah: formatHafalan(h),
+          nilai: nilaiVal,
+          keterangan: catVal || '-',
           tanggal: tanggalSetoran
         });
         waReport(santriId, msg);

@@ -196,20 +196,255 @@ function waFormatTanggal(string $iso): string {
     return $parts[2] . '/' . $parts[1] . '/' . $parts[0];
 }
 
-/** Susun pesan rekap. Formatnya sama dengan rekap yang tampil di aplikasi. */
-function waPesanRekap(array $santri, array $rekap, array $periode, string $namaLembaga): string {
-    $total = $rekap['total'];
-    $bagian = ['Hadir ' . $total['Hadir'], 'Izin ' . $total['Izin'], 'Sakit ' . $total['Sakit']];
-    if (!empty($total['Libur'])) $bagian[] = 'Libur ' . $total['Libur'];
-    $bagian[] = 'Alfa ' . $total['Alfa'];
+/** Format tingkat dan kelas santri. */
+function waSantriKelas(array $santri): string {
+    $tingkat = trim((string)($santri['tingkat'] ?? ''));
+    $kelas = trim((string)($santri['kelas'] ?? ''));
+    if ($tingkat !== '' && $kelas !== '') return "$tingkat - Kelas $kelas";
+    if ($kelas !== '') return "Kelas $kelas";
+    if ($tingkat !== '') return $tingkat;
+    return '-';
+}
 
-    $rentang = waFormatTanggal($periode['dari']);
-    if ($periode['dari'] !== $periode['sampai']) $rentang .= ' - ' . waFormatTanggal($periode['sampai']);
+function waNamaHari(int $n): string {
+    $hari = [1 => 'Senin', 2 => 'Selasa', 3 => 'Rabu', 4 => 'Kamis', 5 => 'Jumat', 6 => 'Sabtu', 7 => 'Minggu'];
+    return $hari[$n] ?? '';
+}
 
-    $pesan = '📋 ' . $periode['judul'] . ' ' . ($santri['nama'] ?? '-') . ' (' . $rentang . '): '
-        . implode(', ', $bagian) . '.';
-    if ($namaLembaga !== '') $pesan .= ' — ' . $namaLembaga;
-    return $pesan;
+function waNamaBulan(int $m): string {
+    $bulan = [
+        1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April', 5 => 'Mei', 6 => 'Juni',
+        7 => 'Juli', 8 => 'Agustus', 9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
+    ];
+    return $bulan[$m] ?? '';
+}
+
+function waTglIndo(string $iso, bool $denganHari = false): string {
+    $dt = DateTimeImmutable::createFromFormat('!Y-m-d', $iso);
+    if (!$dt) return $iso;
+    $d = (int)$dt->format('j');
+    $m = waNamaBulan((int)$dt->format('n'));
+    $y = $dt->format('Y');
+    if ($denganHari) {
+        $h = waNamaHari((int)$dt->format('N'));
+        return "$h, $d $m $y";
+    }
+    return "$d $m $y";
+}
+
+function waSurahLatin(int $n): string {
+    static $surahs = [
+        1 => 'Al-Fatihah', 2 => 'Al-Baqarah', 3 => "Ali 'Imran", 4 => 'An-Nisa', 5 => "Al-Ma'idah",
+        6 => "Al-An'am", 7 => "Al-A'raf", 8 => 'Al-Anfal', 9 => 'At-Tawbah', 10 => 'Yunus',
+        11 => 'Hud', 12 => 'Yusuf', 13 => "Ar-Ra'd", 14 => 'Ibrahim', 15 => 'Al-Hijr',
+        16 => 'An-Nahl', 17 => 'Al-Isra', 18 => 'Al-Kahf', 19 => 'Maryam', 20 => 'Ta-Ha',
+        21 => 'Al-Anbiya', 22 => 'Al-Hajj', 23 => "Al-Mu'minun", 24 => 'An-Nur', 25 => 'Al-Furqan',
+        26 => "Asy-Syu'ara", 27 => 'An-Naml', 28 => 'Al-Qasas', 29 => "Al-'Ankabut", 30 => 'Ar-Rum',
+        31 => 'Luqman', 32 => 'As-Sajdah', 33 => 'Al-Ahzab', 34 => 'Saba', 35 => 'Fatir',
+        36 => 'Ya-Sin', 37 => 'As-Saffat', 38 => 'Sad', 39 => 'Az-Zumar', 40 => 'Ghafir',
+        41 => 'Fussilat', 42 => 'Asy-Syura', 43 => 'Az-Zukhruf', 44 => 'Ad-Dukhan', 45 => 'Al-Jasiyah',
+        46 => 'Al-Ahqaf', 47 => 'Muhammad', 48 => 'Al-Fath', 49 => 'Al-Hujurat', 50 => 'Qaf',
+        51 => 'Az-Zariyat', 52 => 'At-Tur', 53 => 'An-Najm', 54 => 'Al-Qamar', 55 => 'Ar-Rahman',
+        56 => "Al-Waqi'ah", 57 => 'Al-Hadid', 58 => 'Al-Mujadilah', 59 => 'Al-Hasyr', 60 => 'Al-Mumtahanah',
+        61 => 'As-Saff', 62 => "Al-Jumu'ah", 63 => 'Al-Munafiqun', 64 => 'At-Taghabun', 65 => 'At-Talaq',
+        66 => 'At-Tahrim', 67 => 'Al-Mulk', 68 => 'Al-Qalam', 69 => 'Al-Haqqah', 70 => "Al-Ma'arij",
+        71 => 'Nuh', 72 => 'Al-Jinn', 73 => 'Al-Muzzammil', 74 => 'Al-Muddassir', 75 => 'Al-Qiyamah',
+        76 => 'Al-Insan', 77 => 'Al-Mursalat', 78 => "An-Naba'", 79 => "An-Nazi'at", 80 => "'Abasa",
+        81 => 'At-Takwir', 82 => 'Al-Infitar', 83 => 'Al-Mutaffifin', 84 => 'Al-Insyiqaq', 85 => 'Al-Buruj',
+        86 => 'At-Tariq', 87 => "Al-A'la", 88 => 'Al-Ghasyiyah', 89 => 'Al-Fajr', 90 => 'Al-Balad',
+        91 => 'Asy-Syams', 92 => 'Al-Lail', 93 => 'Ad-Duha', 94 => 'Asy-Syarh', 95 => 'At-Tin',
+        96 => "Al-'Alaq", 97 => 'Al-Qadr', 98 => 'Al-Bayyinah', 99 => 'Az-Zalzalah', 100 => "Al-'Adiyat",
+        101 => "Al-Qari'ah", 102 => 'At-Takasur', 103 => "Al-'Asr", 104 => 'Al-Humazah', 105 => 'Al-Fil',
+        106 => 'Quraisy', 107 => "Al-Ma'un", 108 => 'Al-Kausar', 109 => 'Al-Kafirun', 110 => 'An-Nasr',
+        111 => 'Al-Lahab', 112 => 'Al-Ikhlas', 113 => 'Al-Falaq', 114 => 'An-Nas'
+    ];
+    return $surahs[$n] ?? ('Surat ' . $n);
+}
+
+/** Susun pesan rekap harian. */
+function waFormatHarian(array $santri, array $rekap, array $periode, string $lembaga): string {
+    $nama = $santri['nama'] ?? '-';
+    $kelas = waSantriKelas($santri);
+    $tglStr = waTglIndo($periode['dari'], true);
+    $waktuStr = date('H:i') . ' WIB';
+
+    $perSesi = $rekap['perSesi'] ?? [];
+    $lines = [];
+    foreach (WA_SESI_REKAP as $sesi) {
+        $st = 'Alfa';
+        if (!empty($perSesi[$sesi]['Hadir'])) $st = 'Hadir';
+        elseif (!empty($perSesi[$sesi]['Izin'])) $st = 'Izin';
+        elseif (!empty($perSesi[$sesi]['Sakit'])) $st = 'Sakit';
+        elseif (!empty($perSesi[$sesi]['Libur'])) $st = 'Libur';
+        $sesiPad = str_pad($sesi, 13, ' ');
+        $lines[] = "• {$sesiPad} : {$st}";
+    }
+    $rincianSesi = implode("\n", $lines);
+
+    $tot = $rekap['total'] ?? [];
+    $h = $tot['Hadir'] ?? 0;
+    $i = $tot['Izin'] ?? 0;
+    $s = $tot['Sakit'] ?? 0;
+    $a = $tot['Alfa'] ?? 0;
+
+    return "*INFORMASI KEHADIRAN HARIAN SANTRI*\n"
+        . "*{$lembaga}*\n\n"
+        . "Nama     : {$nama}\n"
+        . "Kelas     : {$kelas}\n"
+        . "Hari/Tgl : {$tglStr}\n"
+        . "Waktu     : {$waktuStr}\n\n"
+        . "*Rincian Kehadiran Halaqah*\n"
+        . "{$rincianSesi}\n\n"
+        . "*Ringkasan*\n"
+        . "Hadir : {$h}  |  Izin : {$i}  |  Sakit : {$s}  |  Alfa : {$a}\n\n"
+        . "Demikian Laporan Kehadiran Harian kami sampaikan semoga ananda senantiasa istiqomah dalam menuntut ilmu. Amiin";
+}
+
+/** Susun pesan rekap mingguan. */
+function waFormatMingguan(array $santri, array $rekap, array $periode, string $lembaga, array $setoranRecords): string {
+    $nama = $santri['nama'] ?? '-';
+    $kelas = waSantriKelas($santri);
+    $dariStr = waTglIndo($periode['dari']);
+    $sampaiStr = waTglIndo($periode['sampai']);
+    $waktuStr = waNamaHari((int)date('N')) . ', ' . date('H:i') . ' WIB';
+
+    $tot = $rekap['total'] ?? [];
+    $h = $tot['Hadir'] ?? 0;
+    $is = ($tot['Izin'] ?? 0) + ($tot['Sakit'] ?? 0);
+    $a = $tot['Alfa'] ?? 0;
+    $aktifSesi = $h + $is + $a;
+    $pct = $aktifSesi > 0 ? round(($h / $aktifSesi) * 100) : 0;
+
+    $sId = (string)($santri['id'] ?? '');
+    $setoranPekan = array_values(array_filter($setoranRecords, function($z) use ($sId, $periode) {
+        if (($z['santriId'] ?? '') !== $sId) return false;
+        $tgl = (string)($z['tanggal'] ?? '');
+        return $tgl >= $periode['dari'] && $tgl <= $periode['sampai'];
+    }));
+
+    $jmlSetor = count($setoranPekan);
+    if ($jmlSetor > 0) {
+        $frekStr = $jmlSetor . ' Kali';
+        $totalNilai = 0;
+        $validNilai = 0;
+        $lastSetoran = end($setoranPekan);
+        foreach ($setoranPekan as $item) {
+            $val = (int)($item['nilai'] ?? 0);
+            if ($val > 0) { $totalNilai += $val; $validNilai++; }
+        }
+        $avgNilai = $validNilai > 0 ? (round($totalNilai / $validNilai) . ' (Baik)') : '-';
+
+        $sK = (int)($lastSetoran['sAkhir'] ?? 2);
+        $aK = (int)($lastSetoran['aAkhir'] ?? 1);
+        $posStr = 'Surat ' . waSurahLatin($sK) . ' Ayat ' . $aK;
+        $capaianStr = $jmlSetor . ' Setoran tercatat';
+    } else {
+        $frekStr = 'Belum ada setoran pekan ini';
+        $capaianStr = '-';
+        $posStr = '-';
+        $avgNilai = '-';
+    }
+
+    return "*INFORMASI REKAPITULASI MINGGUAN SANTRI*\n"
+        . "*{$lembaga}*\n\n"
+        . "Nama     : {$nama}\n"
+        . "Kelas     : {$kelas}\n"
+        . "Periode  : {$dariStr} – {$sampaiStr}\n"
+        . "Waktu     : {$waktuStr}\n\n"
+        . "*Laporan Kehadiran Halaqah*\n"
+        . "Hadir           : {$h} Sesi\n"
+        . "Izin / Sakit    : {$is} Sesi\n"
+        . "Alfa            : {$a} Sesi\n"
+        . "Kehadiran       : {$pct}%\n\n"
+        . "*Capaian Tahfidz Pekan Ini*\n"
+        . "Frekuensi Setor : {$frekStr}\n"
+        . "Capaian Pekan   : {$capaianStr}\n"
+        . "Posisi Terakhir : {$posStr}\n"
+        . "Rata-rata Nilai : {$avgNilai}\n\n"
+        . "Demikian Laporan Mingguan kami sampaikan sebagai bahan evaluasi bersama dalam mendampingi ananda. Amiin";
+}
+
+/** Susun pesan rekap bulanan. */
+function waFormatBulanan(array $santri, array $rekap, array $periode, string $lembaga, array $setoranRecords): string {
+    $nama = $santri['nama'] ?? '-';
+    $kelas = waSantriKelas($santri);
+    $dtAwal = DateTimeImmutable::createFromFormat('!Y-m-d', $periode['dari']);
+    $bulanStr = $dtAwal ? (waNamaBulan((int)$dtAwal->format('n')) . ' ' . $dtAwal->format('Y')) : $periode['dari'];
+
+    $tot = $rekap['total'] ?? [];
+    $h = $tot['Hadir'] ?? 0;
+    $is = ($tot['Izin'] ?? 0) + ($tot['Sakit'] ?? 0);
+    $a = $tot['Alfa'] ?? 0;
+    $totalSesi = $h + $is + $a + ($tot['Libur'] ?? 0);
+    $aktifSesi = $h + $is + $a;
+    $pct = $aktifSesi > 0 ? round(($h / $aktifSesi) * 100) : 0;
+
+    $sId = (string)($santri['id'] ?? '');
+    $setoranBulan = array_values(array_filter($setoranRecords, function($z) use ($sId, $periode) {
+        if (($z['santriId'] ?? '') !== $sId) return false;
+        $tgl = (string)($z['tanggal'] ?? '');
+        return $tgl >= $periode['dari'] && $tgl <= $periode['sampai'];
+    }));
+
+    $jmlSetor = count($setoranBulan);
+    if ($jmlSetor > 0) {
+        $totalNilai = 0;
+        $validNilai = 0;
+        $lastSetoran = end($setoranBulan);
+        foreach ($setoranBulan as $item) {
+            $val = (int)($item['nilai'] ?? 0);
+            if ($val > 0) { $totalNilai += $val; $validNilai++; }
+        }
+        $avgNilai = $validNilai > 0 ? (round($totalNilai / $validNilai) . ' (Amat Baik)') : '-';
+
+        $sK = (int)($lastSetoran['sAkhir'] ?? 2);
+        $aK = (int)($lastSetoran['aAkhir'] ?? 1);
+        $posStr = 'Surat ' . waSurahLatin($sK) . ' Ayat ' . $aK;
+        $hafalanBaruStr = $jmlSetor . ' Kali Setoran';
+    } else {
+        $hafalanBaruStr = '-';
+        $posStr = '-';
+        $avgNilai = '-';
+    }
+
+    $semuaSetoran = array_values(array_filter($setoranRecords, function($z) use ($sId, $periode) {
+        if (($z['santriId'] ?? '') !== $sId) return false;
+        return (string)($z['tanggal'] ?? '') <= $periode['sampai'];
+    }));
+    $totalAkumulasi = count($semuaSetoran) . ' Kali Setoran';
+
+    return "*INFORMASI EVALUASI BULANAN SANTRI*\n"
+        . "*{$lembaga}*\n\n"
+        . "Nama     : {$nama}\n"
+        . "Kelas     : {$kelas}\n"
+        . "Bulan    : {$bulanStr}\n\n"
+        . "*Laporan Kehadiran Halaqah*\n"
+        . "Total Sesi      : {$totalSesi} Sesi\n"
+        . "Hadir           : {$h} Sesi\n"
+        . "Izin / Sakit    : {$is} Sesi\n"
+        . "Alfa            : {$a} Sesi\n"
+        . "Persentase      : {$pct}%\n\n"
+        . "*Laporan Capaian Tahfidz*\n"
+        . "Setoran Bulan Ini : {$hafalanBaruStr}\n"
+        . "Surat Terakhir    : {$posStr}\n"
+        . "Total Akumulasi   : {$totalAkumulasi}\n"
+        . "Rata-rata Nilai   : {$avgNilai}\n\n"
+        . "Demikian Laporan Bulanan kami sampaikan semoga menjadi amal jariyah dan investasi akhirat keluarga kelak. Amiin";
+}
+
+/** Susun pesan rekap. Format disesuaikan dengan jenis pemicu (harian, mingguan, bulanan). */
+function waPesanRekap(array $santri, array $rekap, array $periode, string $namaLembaga, string $trigger = 'harian', array $setoranRecords = []): string {
+    $lembaga = trim($namaLembaga) !== '' ? strtoupper(trim($namaLembaga)) : 'PONDOK PESANTREN ASH-SHIDDIQ';
+    if ($trigger === 'harian') {
+        return waFormatHarian($santri, $rekap, $periode, $lembaga);
+    }
+    if ($trigger === 'mingguan') {
+        return waFormatMingguan($santri, $rekap, $periode, $lembaga, $setoranRecords);
+    }
+    if ($trigger === 'bulanan') {
+        return waFormatBulanan($santri, $rekap, $periode, $lembaga, $setoranRecords);
+    }
+    return waFormatHarian($santri, $rekap, $periode, $lembaga);
 }
 
 /**
@@ -294,6 +529,7 @@ function waJalankanReminder(?DateTimeImmutable $now = null): array {
     $waliRecords = getRecords('wali');
     $kehadiran = attendanceEffectiveRecords(getRecords('kehadiran'));
     $namaLembaga = (string)($settings['namaLembaga'] ?? '');
+    $setoranRecords = getRecords('ziyadahHafalan');
 
     foreach (['harian', 'mingguan', 'bulanan'] as $trigger) {
         if (empty($flags[$trigger])) continue;
@@ -340,7 +576,7 @@ function waJalankanReminder(?DateTimeImmutable $now = null): array {
                     if ($nomor === '') continue;
 
                     $rekap = waRekapSantri($kehadiran, (string)($row['id'] ?? ''), $periode['dari'], $periode['sampai']);
-                    $pesan = waPesanRekap($row, $rekap, $periode, $namaLembaga);
+                    $pesan = waPesanRekap($row, $rekap, $periode, $namaLembaga, $trigger, $setoranRecords);
 
                     $r = waBridgeCall($url, $key, '/send', json_encode(['to' => $nomor, 'message' => $pesan]));
                     if ($r['ok']) {
