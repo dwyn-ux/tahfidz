@@ -27,13 +27,53 @@ const Ustadz = (() => {
 
   // Saat WA otomatis dimatikan, penyimpanan tidak perlu memunculkan toast
   // pengiriman apa pun. Ustadz cukup menerima konfirmasi "Tersimpan".
+  function formatPesanSetoranWA({ santri, awal, hingga, keterangan, tanggal }) {
+    const d = Store.get();
+    const lembaga = (d.settings && d.settings.namaLembaga ? d.settings.namaLembaga.trim().toUpperCase() : "PONDOK PESANTREN ASH-SHIDDIQ");
+    const k = Store.kelasForSantri ? Store.kelasForSantri(santri) : (santri.kelas || '');
+    const t = Store.tingkatForSantri ? Store.tingkatForSantri(santri) : (santri.tingkat || '');
+    const kelas = (t && k) ? (t + ' - Kelas ' + k) : (k ? ('Kelas ' + k) : (t || '-'));
+
+    const now = new Date();
+    let tglStr;
+    try {
+      const tDate = tanggal ? new Date(tanggal + 'T12:00:00') : now;
+      tglStr = tDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    } catch (_) {
+      tglStr = tanggal || Store.todayStr();
+    }
+    const jamStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
+
+    return `*INFORMASI CAPAIAN TAHFIDZ AL_QUR'AN SANTRI*
+*${lembaga}*
+
+Nama     : ${santri.nama || '-'}
+Kelas     : ${kelas}
+Tanggal  : ${tglStr}
+Waktu     : ${jamStr}
+
+*Laporan*
+Awal             : ${awal || '-'}
+Hingga           : ${hingga || '-'}
+Keterangan      : ${keterangan || '-'}
+
+Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhirat Keluarga kelak. Amiin`;
+  }
+
   function waReport(santriId, message) {
-    const tr = Store.waAutoTriggerSettings();
-    if (!tr.setoran) return Promise.resolve(false);
-    if (!Store.waAutoEnabled()) return Promise.resolve(false);
-    return Store.waSendWali(santriId, message).then(ok => {
-      UI.toast(ok ? 'WA terkirim ke wali ✓' : 'WA gagal dikirim ke wali (cek Log WhatsApp di Admin)', ok ? 'success' : 'error');
-    });
+    try {
+      const tr = Store.waAutoTriggerSettings();
+      if (!tr.setoran) return Promise.resolve(false);
+      if (!Store.waAutoEnabled()) return Promise.resolve(false);
+      return Store.waSendWali(santriId, message).then(ok => {
+        UI.toast(ok ? 'WA terkirim ke wali ✓' : 'WA gagal dikirim ke wali (cek Log WhatsApp di Admin)', ok ? 'success' : 'error');
+      }).catch(err => {
+        console.warn('waReport error:', err);
+      });
+    } catch (e) {
+      console.warn('waReport catch:', e);
+      return Promise.resolve(false);
+    }
   }
 
   function myHalaqah() {
@@ -1061,7 +1101,19 @@ const Ustadz = (() => {
           db.tahsin.push({ id: Store.uid('ts'), santriId, ustadzId: ustadzIdFor(santriId, 'Tahsin'), tanggal: m.querySelector('#f-tgl').value, halAwal: +m.querySelector('#f-ha').value, halAkhir: +m.querySelector('#f-hk').value, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim() });
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (wUser) Store.addNotif(wUser.id, 'wali', 'Nilai Tahsin baru: ' + s.nama);
-          waReport(santriId, '📖 Laporan Tahsin ' + s.nama + ': halaman ' + m.querySelector('#f-ha').value + '-' + m.querySelector('#f-hk').value + ', nilai ' + m.querySelector('#f-nilai').value + '. — ' + db.settings.namaLembaga);
+          const haVal = +m.querySelector('#f-ha').value;
+          const hkVal = +m.querySelector('#f-hk').value;
+          const nilaiVal = +m.querySelector('#f-nilai').value;
+          const catVal = m.querySelector('#f-cat').value.trim();
+          const tglVal = m.querySelector('#f-tgl').value;
+          const msg = formatPesanSetoranWA({
+            santri: s,
+            awal: 'Halaman ' + haVal,
+            hingga: 'Halaman ' + hkVal,
+            keterangan: 'Tahsin (Nilai: ' + nilaiVal + ')' + (catVal ? ' - ' + catVal : ''),
+            tanggal: tglVal
+          });
+          waReport(santriId, msg);
           if (!await Store.save()) return; Store.log('Input tahsin ' + s.nama); c(); UI.toast('Tersimpan', 'success'); renderTahsin();
         } }
       ]
@@ -1304,7 +1356,19 @@ const Ustadz = (() => {
       });
       const wUser = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);
       if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
-      waReport(santriId, '📚 Setoran hafalan ' + s.nama + ' berhasil: ' + formatHafalan(h) + ' (' + getSurah(sA).latin + ':' + aA + ' - ' + getSurah(sK).latin + ':' + aK + '). Semangat terus! — ' + d.settings.namaLembaga);
+      const awalSurah = 'Surat ' + (getSurah(sA) ? getSurah(sA).latin : sA) + ' Ayat ' + aA;
+      const hinggaSurah = 'Surat ' + (getSurah(sK) ? getSurah(sK).latin : sK) + ' Ayat ' + aK;
+      const nilaiVal = +document.getElementById('f-nilai').value;
+      const catVal = document.getElementById('f-cat').value.trim();
+      const ketText = 'Ziyadah Hafalan (' + formatHafalan(h) + (nilaiVal ? ', Nilai: ' + nilaiVal : '') + ')' + (catVal ? ' - ' + catVal : '');
+      const msg = formatPesanSetoranWA({
+        santri: s,
+        awal: awalSurah,
+        hingga: hinggaSurah,
+        keterangan: ketText,
+        tanggal: Store.todayStr()
+      });
+      waReport(santriId, msg);
       if (!await Store.save()) return;
       Store.log('Setor ziyadah hafalan ' + s.nama);
       if (hSlide) clearInterval(hSlide);
@@ -1365,7 +1429,22 @@ const Ustadz = (() => {
           db.mutqin.push({ id: Store.uid('m'), santriId, ustadzId: ustadzIdFor(santriId, 'Mutqin'), tanggal: Store.todayStr(), sAwal: sA, aAwal: +m.querySelector('#m-aa').value, sAkhir: sK, aAkhir: +m.querySelector('#m-ak').value, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(), totalHafalan: +m.querySelector('#m-total').value, _created: Date.now() });
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (wUser) Store.addNotif(wUser.id, 'wali', 'Murajaah Mutqin: ' + s.nama);
-          waReport(santriId, '🌟 Murajaah Mutqin ' + s.nama + ': ' + getSurah(sA).latin + ':' + m.querySelector('#m-aa').value + ' - ' + getSurah(sK).latin + ':' + m.querySelector('#m-ak').value + '. Total ' + m.querySelector('#m-total').value + ' halaman. — ' + db.settings.namaLembaga);
+          const aaVal = +m.querySelector('#m-aa').value;
+          const akVal = +m.querySelector('#m-ak').value;
+          const totalVal = +m.querySelector('#m-total').value;
+          const nilaiVal = +m.querySelector('#f-nilai').value;
+          const catVal = m.querySelector('#f-cat').value.trim();
+          const awalSurah = 'Surat ' + (getSurah(sA) ? getSurah(sA).latin : sA) + ' Ayat ' + aaVal;
+          const hinggaSurah = 'Surat ' + (getSurah(sK) ? getSurah(sK).latin : sK) + ' Ayat ' + akVal;
+          const ketText = 'Murajaah Mutqin (' + totalVal + ' Halaman' + (nilaiVal ? ', Nilai: ' + nilaiVal : '') + ')' + (catVal ? ' - ' + catVal : '');
+          const msg = formatPesanSetoranWA({
+            santri: s,
+            awal: awalSurah,
+            hingga: hinggaSurah,
+            keterangan: ketText,
+            tanggal: Store.todayStr()
+          });
+          waReport(santriId, msg);
           if (!await Store.save()) return; Store.log('Input mutqin ' + s.nama); c(); UI.toast('Tersimpan', 'success'); renderMutqin();
         } }
       ]
@@ -1768,7 +1847,35 @@ const Ustadz = (() => {
 
           const w = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);
           if (w) Store.addNotif(w.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + level + ')');
-          waReport(santriId, '✅ Laporan setoran ' + s.nama + ' (' + level + ') tersimpan. Terima kasih. — ' + d.settings.namaLembaga);
+          let awalText = '-', hinggaText = '-', ketText = level;
+          if (level === 'Tahsin') {
+            const ha = +m.querySelector('#f-ha').value;
+            const hk = +m.querySelector('#f-hk').value;
+            const nilai = +m.querySelector('#f-nilai').value;
+            const cat = m.querySelector('#f-cat').value.trim();
+            awalText = 'Halaman ' + ha;
+            hinggaText = 'Halaman ' + hk;
+            ketText = 'Tahsin (Nilai: ' + nilai + ')' + (cat ? ' - ' + cat : '');
+          } else if (level === 'Mutqin') {
+            const sA = parseInt(m.querySelector('#f-sa').value) || 2;
+            const sK = parseInt(m.querySelector('#f-sk').value) || 2;
+            const aA = +m.querySelector('#f-aa').value;
+            const aK = +m.querySelector('#f-ak').value;
+            const totalHlm = +m.querySelector('#f-total').value;
+            const nilai = +m.querySelector('#f-nilai').value;
+            const cat = m.querySelector('#f-cat').value.trim();
+            awalText = 'Surat ' + (getSurah(sA) ? getSurah(sA).latin : sA) + ' Ayat ' + aA;
+            hinggaText = 'Surat ' + (getSurah(sK) ? getSurah(sK).latin : sK) + ' Ayat ' + aK;
+            ketText = 'Murajaah Mutqin (' + totalHlm + ' Halaman' + (nilai ? ', Nilai: ' + nilai : '') + ')' + (cat ? ' - ' + cat : '');
+          }
+          const msg = formatPesanSetoranWA({
+            santri: s,
+            awal: awalText,
+            hingga: hinggaText,
+            keterangan: ketText,
+            tanggal: m.querySelector('#f-tgl').value
+          });
+          waReport(santriId, msg);
           if (!await Store.save()) return;
           Store.log('Input umum: ' + s.nama + ' (' + level + ')');
           c();
@@ -1892,7 +1999,19 @@ const Ustadz = (() => {
         });
         const wUser = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);
         if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
-        waReport(santriId, '📚 Setoran hafalan ' + s.nama + ' berhasil: ' + formatHafalan(h) + ' (' + getSurah(sA).latin + ':' + aA + ' - ' + getSurah(sK).latin + ':' + aK + '). Semangat terus! — ' + d.settings.namaLembaga);
+        const awalSurah = 'Surat ' + (getSurah(sA) ? getSurah(sA).latin : sA) + ' Ayat ' + aA;
+        const hinggaSurah = 'Surat ' + (getSurah(sK) ? getSurah(sK).latin : sK) + ' Ayat ' + aK;
+        const nilaiVal = +modalContent.querySelector('#f-nilai').value;
+        const catVal = modalContent.querySelector('#f-cat').value.trim();
+        const ketText = 'Ziyadah Hafalan (' + formatHafalan(h) + (nilaiVal ? ', Nilai: ' + nilaiVal : '') + ')' + (catVal ? ' - ' + catVal : '');
+        const msg = formatPesanSetoranWA({
+          santri: s,
+          awal: awalSurah,
+          hingga: hinggaSurah,
+          keterangan: ketText,
+          tanggal: tanggalSetoran
+        });
+        waReport(santriId, msg);
         if (!await Store.save()) return;
         Store.log('Setor ziyadah hafalan ' + s.nama);
         if (hSlide) clearInterval(hSlide);
