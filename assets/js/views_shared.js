@@ -1064,14 +1064,23 @@ function exportLaporanExcel(filters) {
           const items = (setoran.get(s.id + '|' + day.tanggal) || []).filter(item => relevantTypes.includes(item.type));
           if (day.tanggal > today) return { status: 'future', types: [], records: [] };
           if (items.length) return { status: 'submitted', types: items.map(it => it.type), records: items };
-          const isWeekend = (new Date(day.tanggal + 'T12:00:00')).getDay() === 0 || (new Date(day.tanggal + 'T12:00:00')).getDay() === 6; const isDayLibur = isWeekend || db.kehadiran.some(k => k.santriId === s.id && k.tanggal === day.tanggal && k.status === 'Libur');
-          if (isDayLibur) return { status: 'libur', types: [] };
+          const isWeekend = (new Date(day.tanggal + 'T12:00:00')).getDay() === 0 || (new Date(day.tanggal + 'T12:00:00')).getDay() === 6;
+          const isLembagaLibur = Store.isLiburLembaga ? Store.isLiburLembaga(day.tanggal) : false;
           const santriDayAbsensi = (db.kehadiran || []).filter(k => k.santriId === s.id && k.tanggal === day.tanggal);
+          const kLiburCount = santriDayAbsensi.filter(k => k.status === 'Libur').length;
+          const kNonLiburCount = santriDayAbsensi.filter(k => k.status !== 'Libur').length;
+          const halaqahAu = (db.absensiUstadz || []).filter(a => a.tanggal === day.tanggal && (a.halaqah === h.nama || a.halaqahId === h.id));
+          const auLiburCount = halaqahAu.filter(a => a.status === 'Libur').length;
+          const auNonLiburCount = halaqahAu.filter(a => a.status !== 'Libur').length;
+          const isFullDayLibur = isWeekend || isLembagaLibur || (auLiburCount >= 3 && auNonLiburCount === 0) || (kLiburCount >= 3 && kNonLiburCount === 0);
+          const isDayLibur = isFullDayLibur;
+          if (isDayLibur) return { status: 'libur', types: [] };
+          const partialLiburRec = santriDayAbsensi.find(k => k.status === 'Libur') || halaqahAu.find(a => a.status === 'Libur');
           const sakitRec = santriDayAbsensi.find(k => k.status === 'Sakit');
           if (sakitRec) return { status: 'sakit', types: [], sesi: sakitRec.sesi };
           const izinRec = santriDayAbsensi.find(k => k.status === 'Izin');
           if (izinRec) return { status: 'izin', types: [], sesi: izinRec.sesi };
-          return { status: 'missing', types: [] };
+          return { status: 'missing', types: [], partialLiburSesi: partialLiburRec ? partialLiburRec.sesi : '' };
         });
         const absensi = Store.rekapKehadiranSantri(s.id, period.dari, period.sampai);
         return {
@@ -1125,9 +1134,11 @@ function exportLaporanExcel(filters) {
           if (allowMakeup) {
             const tanggal = recap.days[dayIndex].tanggal;
             const label = tanggal < Store.todayStr() ? 'Bayar' : 'Setor';
-            return `<td class="center"><button class="clay-btn sm secondary" data-bayar-setoran data-santri-id="${UI.esc(row.s.id)}" data-tanggal="${UI.esc(tanggal)}" data-programs="${UI.esc(row.programs.join(','))}" style="padding:3px 7px;font-size:11px">${label}</button></td>`;
+            const partialTxt = cell.partialLiburSesi ? ` (Sesi ${cell.partialLiburSesi} Libur)` : '';
+            return `<td class="center" title="${partialTxt ? 'Belum setoran' + partialTxt : ''}"><button class="clay-btn sm secondary" data-bayar-setoran data-santri-id="${UI.esc(row.s.id)}" data-tanggal="${UI.esc(tanggal)}" data-programs="${UI.esc(row.programs.join(','))}" style="padding:3px 7px;font-size:11px">${label}</button></td>`;
           }
-          return '<td class="center"><span class="badge danger">Belum</span></td>';
+          const partialTxt = cell.partialLiburSesi ? ` (Sesi ${cell.partialLiburSesi} Libur)` : '';
+          return `<td class="center" title="Belum setoran${partialTxt}"><span class="badge danger">Belum</span></td>`;
         }).join('');
         return `<tr>
           <td class="center">${index + 1}</td>
