@@ -69,41 +69,67 @@ const silentLogger = {
 };
 
 async function startWA() {
-  fs.mkdirSync(SESSION_DIR, { recursive: true });
-  const { state: authState, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
-  const { version } = await fetchLatestBaileysVersion();
+  try {
+    fs.mkdirSync(SESSION_DIR, { recursive: true });
+    const { state: authState, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
 
-  sock = makeWASocket({
-    version,
-    auth: authState,
-    printQRInTerminal: true,
-    markOnlineOnConnect: false,
-    syncFullHistory: false,
-    logger: silentLogger,
-    generateHighQualityLinkPreview: false,
-    browser: ['Chrome', 'chrome', '']
-  });
+    let version;
+    try {
+      const v = await fetchLatestBaileysVersion();
+      version = v.version;
+    } catch (e) {
+      console.warn('[WA] Gagal fetchLatestBaileysVersion, gunakan internal:', e.message);
+    }
 
-  sock.ev.on('creds.update', saveCreds);
+    sock = makeWASocket({
+      version,
+      auth: authState,
+      markOnlineOnConnect: false,
+      syncFullHistory: false,
+      logger: silentLogger,
+      generateHighQualityLinkPreview: false,
+      browser: ['Tahfidzku', 'Chrome', '1.0.0']
+    });
 
-  sock.ev.on('connection.update', async (u) => {
-    const { connection, lastDisconnect, qr } = u;
-    if (qr) {
-      state = { ...state, connected: false, phone: null, qr, status: 'scan' };
-    }
-    if (connection === 'close') {
-      const code = lastDisconnect?.error?.output?.statusCode;
-      state = { ...state, connected: false, status: code === DisconnectReason.loggedOut ? 'logged_out' : 'reconnecting' };
-      const shouldReconnect = code !== DisconnectReason.loggedOut;
-      console.log('[WA] connection closed, reconnecting:', shouldReconnect);
-      if (shouldReconnect) { sock = null; setTimeout(startWA, 5000); }
-    }
-    if (connection === 'open') {
-      state = { ...state, connected: true, phone: sock.user?.id || null, qr: null, status: 'connected' };
-      console.log('[WA] connected as', sock.user?.id);
-      flush();
-    }
-  });
+    sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('connection.update', async (u) => {
+      const { connection, lastDisconnect, qr } = u;
+      if (qr) {
+        state = { ...state, connected: false, phone: null, qr, status: 'scan', lastError: null };
+      }
+      if (connection === 'close') {
+        const code = lastDisconnect?.error?.output?.statusCode;
+        const errMsg = lastDisconnect?.error?.message || '';
+        console.log(`[WA] connection closed, code: ${code}, err: ${errMsg}`);
+
+        if (code === DisconnectReason.loggedOut) {
+          console.log('[WA] Sesi logout dari WhatsApp. Membersihkan session folder untuk QR baru...');
+          try {
+            fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+          } catch (_) {}
+          state = { connected: false, phone: null, qr: null, status: 'logged_out', lastError: 'Logged out dari HP. Menyiapkan sesi baru...' };
+          sock = null;
+          setTimeout(startWA, 3000);
+          return;
+        }
+
+        state = { ...state, connected: false, status: 'reconnecting', lastError: errMsg || null };
+        const shouldReconnect = code !== DisconnectReason.loggedOut;
+        console.log('[WA] reconnecting:', shouldReconnect);
+        if (shouldReconnect) { sock = null; setTimeout(startWA, 5000); }
+      }
+      if (connection === 'open') {
+        state = { ...state, connected: true, phone: sock.user?.id || null, qr: null, status: 'connected', lastError: null };
+        console.log('[WA] connected as', sock.user?.id);
+        flush();
+      }
+    });
+  } catch (err) {
+    console.error('[WA] startWA error:', err);
+    state = { ...state, connected: false, status: 'error', lastError: err.message };
+    setTimeout(startWA, 7000);
+  }
 }
 
 function enqueue(to, message) {
@@ -167,7 +193,32 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
       return res.end(png);
     }
-    return json(200, { connected: state.connected, qr: null });
+    const accept = String(req.headers['accept'] || '');
+    if (accept.includes('text/html')) {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      if (state.connected) {
+        return res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>WhatsApp Terhubung</title>
+<style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f3f4f6;}
+.card{background:#fff;padding:28px 36px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.08);text-align:center;max-width:380px;}
+</style></head><body><div class="card">
+<div style="font-size:40px;color:#10b981;margin-bottom:12px">✓</div>
+<h3 style="margin:0 0 8px;color:#111827">WhatsApp Terhubung</h3>
+<p style="margin:0;color:#6b7280;font-size:14px">Nomor: <b>${state.phone || '-'}</b></p>
+</div></body></html>`);
+      }
+      return res.end(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="3"><title>Menunggu QR WhatsApp</title>
+<style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f3f4f6;}
+.card{background:#fff;padding:24px 32px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.08);text-align:center;max-width:380px;}
+.spinner{width:36px;height:36px;border:3px solid #e5e7eb;border-top-color:#10b981;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style></head><body><div class="card">
+<div class="spinner"></div>
+<h3 style="margin:0 0 8px;color:#111827">Menghubungkan ke WhatsApp...</h3>
+<p style="margin:0;color:#6b7280;font-size:14px">Status: <b>${state.status}</b></p>
+${state.lastError ? `<p style="margin:8px 0 0;color:#ef4444;font-size:12px">${state.lastError}</p>` : '<p style="margin:8px 0 0;color:#9ca3af;font-size:12px">Halaman otomatis reload tiap 3 detik sampai QR muncul.</p>'}
+</div></body></html>`);
+    }
+    return json(200, { connected: state.connected, qr: null, status: state.status, lastError: state.lastError || null });
   }
 
   if (pathname === '/send') {
