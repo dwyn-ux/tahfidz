@@ -7,7 +7,7 @@ const Quran = (() => {
 
   const API = 'https://api.alquran.cloud/v1/surah';
   const EDITION = 'quran-uthmani,id.indonesian,en.sahih';
-  const CACHE_KEY = 'tahfidzku_quran_cache_v2';
+  const CACHE_KEY = 'tahfidzku_quran_cache_v3';
   const LAYOUT_KEY = 'tahfidzku_quran_layout_v1';
   let cache = {};
   try { cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}'); } catch (e) { cache = {}; }
@@ -56,25 +56,110 @@ const Quran = (() => {
     }
   }
 
-  async function fetchSurah(n) {
-    if (cache[n]) return cache[n];
-    const res = await fetch(`${API}/${n}/editions/${EDITION}`);
-    if (!res.ok) throw new Error('Gagal memuat surat');
-    const json = await res.json();
-    if (json.code !== 200) throw new Error('Data tidak tersedia');
-    const ar = json.data[0].ayahs;
-    const id = json.data[1].ayahs;
-    const en = json.data[2].ayahs;
-    const out = ar.map((a, i) => ({
-      n: a.numberInSurah,
-      page: a.page,
-      ar: a.text,
-      id: id[i] ? id[i].text : '',
-      en: en[i] ? en[i].text : ''
-    }));
+  function saveCacheSafe(n, out) {
     cache[n] = out;
-    try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)); } catch (e) {}
-    return out;
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+    } catch (e) {
+      // Jika kuota localStorage browser penuh, bersihkan cache lama dan simpan surat ini saja
+      try {
+        const miniCache = {};
+        miniCache[n] = out;
+        localStorage.setItem(CACHE_KEY, JSON.stringify(miniCache));
+      } catch (_) {}
+    }
+  }
+
+  async function fetchSurah(n) {
+    if (cache[n] && Array.isArray(cache[n]) && cache[n].length > 0) return cache[n];
+
+    // Sumber 1: api.quran.gading.dev (Sangat cepat, lengkap dengan nomor halaman Mushaf Madani standar)
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 7000);
+      const res = await fetch(`https://api.quran.gading.dev/surah/${n}`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.code === 200 && json.data && Array.isArray(json.data.verses)) {
+          const sMeta = getSurahMeta(n);
+          const out = json.data.verses.map(v => ({
+            n: v.number.inSurah,
+            page: v.meta ? v.meta.page : (sMeta ? sMeta.page : 1),
+            ar: v.text.arab,
+            id: v.translation ? v.translation.id : '',
+            en: v.translation ? v.translation.en : ''
+          }));
+          saveCacheSafe(n, out);
+          return out;
+        }
+      }
+    } catch (e) {
+      console.warn('Sumber 1 (Gading Quran API) gagal, mencoba sumber cadangan...', e);
+    }
+
+    // Sumber 2: equran.id (CDN lokal Indonesia Kemenag, sangat cepat dan stabil)
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 7000);
+      const res = await fetch(`https://equran.id/api/v2/surat/${n}`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.code === 200 && json.data && Array.isArray(json.data.ayat)) {
+          const sMeta = getSurahMeta(n);
+          const startPage = sMeta ? sMeta.page : 1;
+          const nextMeta = getSurahMeta(n + 1);
+          const endPage = nextMeta ? (nextMeta.page > startPage ? nextMeta.page - 1 : startPage) : 604;
+          const totalAyat = json.data.jumlahAyat || json.data.ayat.length;
+          const spanPages = Math.max(1, endPage - startPage + 1);
+
+          const out = json.data.ayat.map((a, i) => {
+            const pageOffset = Math.min(spanPages - 1, Math.floor((i / totalAyat) * spanPages));
+            return {
+              n: a.nomorAyat,
+              page: startPage + pageOffset,
+              ar: a.teksArab,
+              id: a.teksIndonesia || '',
+              en: a.teksLatin || ''
+            };
+          });
+          saveCacheSafe(n, out);
+          return out;
+        }
+      }
+    } catch (e) {
+      console.warn('Sumber 2 (EQuran API) gagal, mencoba sumber ketiga...', e);
+    }
+
+    // Sumber 3: api.alquran.cloud (Cadangan global)
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(`${API}/${n}/editions/${EDITION}`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.code === 200 && json.data) {
+          const ar = json.data[0].ayahs;
+          const id = json.data[1].ayahs;
+          const en = json.data[2].ayahs;
+          const out = ar.map((a, i) => ({
+            n: a.numberInSurah,
+            page: a.page,
+            ar: a.text,
+            id: id[i] ? id[i].text : '',
+            en: en[i] ? en[i].text : ''
+          }));
+          saveCacheSafe(n, out);
+          return out;
+        }
+      }
+    } catch (e) {
+      console.warn('Sumber 3 (Alquran Cloud) gagal...', e);
+    }
+
+    throw new Error('Gagal memuat surat. Silakan periksa koneksi internet Anda lalu coba lagi.');
   }
 
   function render() {
