@@ -2363,14 +2363,43 @@ const Admin = (() => {
           </label>
         </div>
         <div class="row mt" style="gap:8px;flex-wrap:wrap;align-items:center">
-          <button class="clay-btn ghost" id="btn-wa-status">Cek Status</button>
+          <button class="clay-btn ghost" id="btn-wa-status">Cek Status Bridge</button>
           <button class="clay-btn ghost" id="btn-wa-test">Tes Koneksi</button>
           <button class="clay-btn ghost" id="btn-wa-test-recap" style="border:1.5px solid #2563eb;color:#1d4ed8;font-weight:600;background:#eff6ff">Tes Kirim Rekap (Pilih Santri)</button>
-          <button class="clay-btn primary" id="btn-wa-recap">Kirim Rekap Sekarang</button>
-          <button class="clay-btn danger" id="btn-wa-stop" style="display:none;background:#EF4444;color:#fff;font-weight:600">Hentikan Pengiriman</button>
+          <button class="clay-btn primary" id="btn-wa-recap">Kirim Rekap Sekarang (Semua)</button>
         </div>
-        <div id="wa-queue-box" class="mt" style="display:none"></div>
         <div id="wa-status" class="mt" style="font-size:13px"></div>
+
+        <!-- Kartu Permanen: Progres & Pembatalan Antrian Pengiriman -->
+        <div class="clay-card pad-sm mt" id="wa-queue-card" style="background:#f8fafc;border:1px solid var(--border)">
+          <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div>
+              <div style="font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px">
+                <span>Status Antrian Pengiriman:</span>
+                <span id="wa-queue-badge" class="badge ok" style="font-size:11px">Antrian Kosong (0 Pesan)</span>
+              </div>
+              <div id="wa-queue-desc" class="muted" style="font-size:12px;margin-top:3px">
+                Tidak ada pesan dalam antrian pengiriman.
+              </div>
+            </div>
+            <div class="row" style="gap:8px;align-items:center">
+              <button class="clay-btn sm ghost" id="btn-wa-refresh-queue" type="button">Perbarui Antrian</button>
+              <button class="clay-btn sm danger" id="btn-wa-stop" type="button" style="background:#EF4444;color:#fff;font-weight:600">
+                Batalkan Pengiriman
+              </button>
+            </div>
+          </div>
+          <!-- Bar Progres Pengiriman -->
+          <div id="wa-queue-progress-bar-wrap" style="display:none;margin-top:10px">
+            <div style="background:#e2e8f0;border-radius:999px;height:9px;overflow:hidden;width:100%">
+              <div id="wa-queue-progress-bar" style="background:#2563eb;height:100%;width:0%;transition:width .3s ease"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;margin-top:5px" class="muted">
+              <span id="wa-queue-progress-status">Mengirim pesan dengan jeda anti-banned...</span>
+              <span id="wa-queue-progress-count" style="font-weight:600">0 / 0</span>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="clay-card mb">
         <div class="row" style="align-items:center">
@@ -2674,39 +2703,58 @@ const Admin = (() => {
     // jadwal. Pakai endpoint yang sama dengan cron, jadi penanda "sudah
     // terkirim" tetap konsisten dan tidak ada pesan dobel.
     let queuePollTimer = null;
+    let maxQueueSeen = 0;
 
     async function checkQueueProgress() {
-      const q = await Store.waQueueStatus();
-      const qBox = document.getElementById('wa-queue-box');
+      const qBadge = document.getElementById('wa-queue-badge');
+      const qDesc = document.getElementById('wa-queue-desc');
       const stopBtn = document.getElementById('btn-wa-stop');
-      if (!qBox || !stopBtn) return;
+      const pBarWrap = document.getElementById('wa-queue-progress-bar-wrap');
+      const pBar = document.getElementById('wa-queue-progress-bar');
+      const pStatus = document.getElementById('wa-queue-progress-status');
+      const pCount = document.getElementById('wa-queue-progress-count');
 
-      if (q && (q.pending > 0 || q.sending)) {
-        stopBtn.style.display = 'inline-flex';
-        qBox.style.display = 'block';
-        qBox.innerHTML = `
-          <div class="clay-card pad-sm" style="background:#fff7ed;border:1px solid #fed7aa;margin-top:10px">
-            <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-              <div>
-                <div style="font-weight:bold;color:#c2410c;display:flex;align-items:center;gap:6px">
-                  <span class="badge warn" style="font-size:11px">Sedang Mengirim Pesan...</span>
-                  Sisa Antrian: <b>${q.pending} pesan</b>
-                </div>
-                <div class="muted" style="font-size:12px;margin-top:3px">
-                  Pesan dikirim berurutan dengan jeda aman anti-banned. Anda dapat membatalkan sisa pesan kapan saja.
-                </div>
-              </div>
-              <button class="clay-btn sm danger" type="button" id="btn-wa-stop-inline" style="background:#EF4444;color:#fff;font-weight:600">
-                Hentikan Sekarang
-              </button>
-            </div>
-          </div>`;
-        const inlineStop = document.getElementById('btn-wa-stop-inline');
-        if (inlineStop) inlineStop.onclick = handleStopQueue;
+      if (!qBadge) return;
+
+      const q = await Store.waQueueStatus();
+      const pending = (q && q.pending) ? Number(q.pending) : 0;
+      const sending = Boolean(q && q.sending);
+
+      if (pending > 0 || sending) {
+        if (pending > maxQueueSeen) maxQueueSeen = pending;
+        const total = Math.max(maxQueueSeen, pending);
+        const sent = Math.max(0, total - pending);
+        const pct = total > 0 ? Math.round((sent / total) * 100) : 0;
+
+        qBadge.className = 'badge warn';
+        qBadge.textContent = `Sedang Mengirim (${pending} pesan tersisa)`;
+        if (qDesc) qDesc.textContent = 'Pesan dikirim berurutan dengan jeda aman anti-banned. Anda dapat membatalkan sisa pesan kapan saja.';
+
+        if (stopBtn) {
+          stopBtn.disabled = false;
+          stopBtn.style.opacity = '1';
+          stopBtn.textContent = 'Batalkan Pengiriman (' + pending + ')';
+        }
+
+        if (pBarWrap) pBarWrap.style.display = 'block';
+        if (pBar) pBar.style.width = pct + '%';
+        if (pStatus) pStatus.textContent = `Mengirim pesan... ${pct}% selesai`;
+        if (pCount) pCount.textContent = `${sent} / ${total} pesan`;
       } else {
-        stopBtn.style.display = 'none';
-        qBox.style.display = 'none';
-        if (queuePollTimer && (!q || (!q.pending && !q.sending))) {
+        maxQueueSeen = 0;
+        qBadge.className = 'badge ok';
+        qBadge.textContent = 'Antrian Kosong (0 Pesan)';
+        if (qDesc) qDesc.textContent = 'Tidak ada pesan dalam antrian pengiriman.';
+
+        if (stopBtn) {
+          stopBtn.disabled = false;
+          stopBtn.style.opacity = '0.7';
+          stopBtn.textContent = 'Batalkan Pengiriman';
+        }
+
+        if (pBarWrap) pBarWrap.style.display = 'none';
+
+        if (queuePollTimer) {
           clearInterval(queuePollTimer);
           queuePollTimer = null;
         }
@@ -2719,28 +2767,41 @@ const Admin = (() => {
       queuePollTimer = setInterval(async () => {
         await checkQueueProgress();
         renderWaLog();
-      }, 2500);
+      }, 2000);
     }
 
     async function handleStopQueue() {
       const stopBtn = document.getElementById('btn-wa-stop');
-      if (stopBtn) { stopBtn.disabled = true; stopBtn.textContent = 'Menghentikan...'; }
+      if (stopBtn) { stopBtn.disabled = true; stopBtn.textContent = 'Membatalkan...'; }
       try {
         const res = await Store.waStopQueue();
         const cancelled = (res && res.data && res.data.cancelled) ?? (res && res.cancelled) ?? 0;
-        UI.toast(`Pengiriman dihentikan. ${cancelled} pesan dibatalkan!`, 'warn');
-        waStatusEl.innerHTML = `<span style="color:var(--danger);font-weight:600">Pengiriman dihentikan. ${cancelled} pesan dalam antrian dibatalkan.</span>`;
-        checkQueueProgress();
+        if (cancelled > 0) {
+          UI.toast(`Pengiriman dihentikan. ${cancelled} pesan dibatalkan!`, 'warn');
+          waStatusEl.innerHTML = `<span style="color:var(--danger);font-weight:600">Pengiriman dihentikan. ${cancelled} pesan dalam antrian dibatalkan.</span>`;
+        } else {
+          UI.toast('Antrian pengiriman kosong / sudah selesai.', 'info');
+          waStatusEl.innerHTML = '<span class="muted">Antrian pengiriman kosong / sudah dibatalkan.</span>';
+        }
+        maxQueueSeen = 0;
+        await checkQueueProgress();
         renderWaLog();
       } catch (err) {
-        UI.toast('Gagal menghentikan antrian: ' + err.message, 'error');
+        UI.toast('Gagal membatalkan antrian: ' + err.message, 'error');
       } finally {
-        if (stopBtn) { stopBtn.disabled = false; stopBtn.textContent = 'Hentikan Pengiriman'; }
+        if (stopBtn) { stopBtn.disabled = false; stopBtn.textContent = 'Batalkan Pengiriman'; }
       }
     }
 
     const waStopBtn = document.getElementById('btn-wa-stop');
     if (waStopBtn) waStopBtn.onclick = handleStopQueue;
+
+    const waRefreshQueueBtn = document.getElementById('btn-wa-refresh-queue');
+    if (waRefreshQueueBtn) waRefreshQueueBtn.onclick = () => {
+      checkQueueProgress();
+      renderWaLog();
+      UI.toast('Status antrian diperbarui.', 'info');
+    };
 
     const waTestRecapBtn = document.getElementById('btn-wa-test-recap');
     if (waTestRecapBtn) waTestRecapBtn.onclick = () => openWaTestRecapModal();
@@ -3170,7 +3231,13 @@ const Admin = (() => {
     const waRecapBtn = document.getElementById('btn-wa-recap');
     if (waRecapBtn) waRecapBtn.onclick = async () => {
       if (waBelumTersimpan()) { waMintaSimpan(); return; }
-      waStatusEl.innerHTML = '<span class="muted">Mengirim rekap...</span>';
+      waStatusEl.innerHTML = '<span class="muted">Menyiapkan dan mengirim rekap ke antrian...</span>';
+      const qBadge = document.getElementById('wa-queue-badge');
+      const qDesc = document.getElementById('wa-queue-desc');
+      if (qBadge) { qBadge.className = 'badge warn'; qBadge.textContent = 'Sedang Memproses...'; }
+      if (qDesc) { qDesc.textContent = 'Menyiapkan rekap dan memasukkan pesan ke antrian bridge...'; }
+      startQueuePolling();
+
       const res = await Store.waAutoReminder();
       if (!res || !res.ok) {
         waStatusEl.innerHTML = '<span style="color:var(--danger)">' + UI.esc((res && res.detail) || 'Gagal menjalankan rekap.') + '</span>';
@@ -3178,8 +3245,8 @@ const Admin = (() => {
         waStatusEl.innerHTML = '<span class="muted">' + UI.esc(res.detail || 'Tidak ada rekap baru yang perlu dikirim.') + '</span>';
       } else {
         waStatusEl.innerHTML = '<span style="color:var(--success)">✓ ' + res.terkirim + ' pesan masuk antrian bridge.</span>';
-        startQueuePolling();
       }
+      checkQueueProgress();
       renderWaLog();
     };
 
