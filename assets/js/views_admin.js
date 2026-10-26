@@ -2364,7 +2364,8 @@ const Admin = (() => {
         </div>
         <div class="row mt" style="gap:8px;flex-wrap:wrap;align-items:center">
           <button class="clay-btn ghost" id="btn-wa-status">Cek Status</button>
-          <button class="clay-btn ghost" id="btn-wa-test">Kirim Tes</button>
+          <button class="clay-btn ghost" id="btn-wa-test">Tes Koneksi</button>
+          <button class="clay-btn ghost" id="btn-wa-test-recap" style="border:1.5px solid #2563eb;color:#1d4ed8;font-weight:600;background:#eff6ff">🧪 Tes Kirim Rekap (Pilih Santri)</button>
           <button class="clay-btn primary" id="btn-wa-recap">Kirim Rekap Sekarang</button>
           <button class="clay-btn danger" id="btn-wa-stop" style="display:none;background:#EF4444;color:#fff;font-weight:600">⏹ Hentikan Pengiriman</button>
         </div>
@@ -2740,6 +2741,431 @@ const Admin = (() => {
 
     const waStopBtn = document.getElementById('btn-wa-stop');
     if (waStopBtn) waStopBtn.onclick = handleStopQueue;
+
+    const waTestRecapBtn = document.getElementById('btn-wa-test-recap');
+    if (waTestRecapBtn) waTestRecapBtn.onclick = () => openWaTestRecapModal();
+
+    function openWaTestRecapModal() {
+      if (waBelumTersimpan()) { waMintaSimpan(); return; }
+
+      const rawSantri = (Store.santri() || []).filter(s => (s.status || '') !== 'Nonaktif');
+      if (!rawSantri.length) {
+        UI.toast('Belum ada data santri aktif.', 'warn');
+        return;
+      }
+
+      const santriList = [...rawSantri].sort((a, b) => (a.nama || '').localeCompare(b.nama || ''));
+
+      let trigger = 'harian';
+      let preset = 'yesterday';
+      let targetMode = 'admin';
+      let customDari = '';
+      let customSampai = '';
+      const selectedIds = new Set();
+      if (santriList[0]) selectedIds.add(santriList[0].id);
+      let activePreviewId = santriList[0]?.id || '';
+      let filterText = '';
+      let previewReqId = 0;
+
+      const defaultAdminPhone = (Store.getSettings() && Store.getSettings().waTestPhone) || '';
+
+      const bodyHTML = `
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <!-- 1. Pilihan Jenis Rekap & Periode -->
+          <div class="clay-card pad-sm" style="background:var(--bg,#f8fafc);border:1px solid var(--border)">
+            <div class="row" style="gap:12px;flex-wrap:wrap;align-items:flex-end">
+              <div style="flex:1;min-width:200px">
+                <label class="field-label" style="font-weight:600;font-size:12px;margin-bottom:6px;display:block">1. Jenis Laporan Rekap</label>
+                <div style="display:flex;gap:6px">
+                  <button type="button" class="clay-btn sm test-wa-trigger-btn active" data-trigger="harian" style="flex:1;justify-content:center;background:#2563eb;color:#fff;font-weight:600">☀️ Harian</button>
+                  <button type="button" class="clay-btn sm ghost test-wa-trigger-btn" data-trigger="mingguan" style="flex:1;justify-content:center">📅 Mingguan</button>
+                  <button type="button" class="clay-btn sm ghost test-wa-trigger-btn" data-trigger="bulanan" style="flex:1;justify-content:center">🗓️ Bulanan</button>
+                </div>
+              </div>
+
+              <div style="flex:1;min-width:200px">
+                <label class="field-label" style="font-weight:600;font-size:12px;margin-bottom:6px;display:block">2. Periode Laporan</label>
+                <select id="test-wa-preset-select" class="field-input" style="width:100%;padding:6px 10px;font-size:13px">
+                  <option value="yesterday">Kemarin (Rekomendasi)</option>
+                  <option value="today">Hari Ini</option>
+                  <option value="custom">📅 Pilih Tanggal Khusus...</option>
+                </select>
+              </div>
+            </div>
+
+            <div id="test-wa-custom-dates" class="row mt-sm" style="display:none;gap:10px;align-items:center;background:#fff;padding:8px 12px;border-radius:8px;border:1px dashed var(--border)">
+              <div style="flex:1">
+                <span style="font-size:11px;color:var(--text-soft)">Tanggal Awal:</span>
+                <input type="date" id="test-wa-custom-dari" class="field-input" style="width:100%;padding:4px 8px;font-size:12px">
+              </div>
+              <div style="flex:1">
+                <span style="font-size:11px;color:var(--text-soft)">Tanggal Akhir:</span>
+                <input type="date" id="test-wa-custom-sampai" class="field-input" style="width:100%;padding:4px 8px;font-size:12px">
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Tujuan Pengiriman -->
+          <div class="clay-card pad-sm" style="background:#fefce8;border:1px solid #fef08a">
+            <label class="field-label" style="font-weight:600;font-size:12px;color:#854d0e;margin-bottom:6px;display:block">3. Tujuan Pengiriman Uji Coba</label>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px">
+                <input type="radio" name="test-wa-target-mode" value="admin" checked style="margin-top:3px">
+                <div>
+                  <b style="color:#713f12">Kirim ke Nomor Tes Admin (Direkomendasikan untuk uji coba)</b>
+                  <div class="muted" style="font-size:11.5px">Seluruh rekap santri terpilih akan dikirimkan ke nomor ini agar admin bisa mengecek langsung tampilan pesan di WhatsApp.</div>
+                  <div id="test-wa-phone-input-wrap" style="margin-top:6px">
+                    <input type="tel" id="test-wa-admin-phone" class="field-input" placeholder="Nomor WhatsApp Admin (contoh: 08123456789)" value="${UI.esc(defaultAdminPhone)}" style="max-width:320px;padding:6px 10px;font-size:13px">
+                  </div>
+                </div>
+              </label>
+              <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px">
+                <input type="radio" name="test-wa-target-mode" value="wali" style="margin-top:3px">
+                <div>
+                  <b style="color:#713f12">Kirim Langsung ke Nomor HP Wali Santri (Asli)</b>
+                  <div class="muted" style="font-size:11.5px">Pesan akan dikirim langsung ke masing-masing wali santri yang dipilih di bawah.</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- 3. Dua Kolom: Pilih Santri & Pratinjau Pesan -->
+          <div class="row" style="gap:14px;flex-wrap:wrap;align-items:stretch">
+            <!-- Kolom Kiri: Pilih Santri -->
+            <div style="flex:1;min-width:280px;display:flex;flex-direction:column">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <label class="field-label" style="font-weight:600;font-size:12px;margin:0">4. Pilih Santri (<span id="test-wa-selected-badge">1 dipilih</span>)</label>
+                <div style="display:flex;gap:4px">
+                  <button type="button" class="clay-btn sm ghost" id="test-wa-btn-all" style="padding:2px 8px;font-size:11px">Pilih Semua</button>
+                  <button type="button" class="clay-btn sm ghost" id="test-wa-btn-none" style="padding:2px 8px;font-size:11px">Kosongkan</button>
+                </div>
+              </div>
+              <input type="text" id="test-wa-search" class="field-input" placeholder="🔍 Cari nama atau kelas santri..." style="width:100%;padding:6px 10px;font-size:12.5px;margin-bottom:8px">
+              
+              <div id="test-wa-santri-container" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:4px;background:#fff;display:flex;flex-direction:column;gap:3px">
+                <!-- Diisi via renderSantriList() -->
+              </div>
+            </div>
+
+            <!-- Kolom Kanan: Pratinjau Teks WhatsApp -->
+            <div style="flex:1;min-width:280px;display:flex;flex-direction:column">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                <label class="field-label" style="font-weight:600;font-size:12px;margin:0">📱 Pratinjau Pesan WhatsApp</label>
+                <span id="test-wa-preview-chip" class="badge ok" style="font-size:11px">-</span>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px;min-height:260px">
+                <div style="font-size:11px;color:#166534;margin-bottom:6px;display:flex;justify-content:space-between;border-bottom:1px dashed #bbf7d0;padding-bottom:4px;flex-wrap:wrap;gap:4px">
+                  <span id="test-wa-preview-dest-info">Tujuan: Nomor Admin</span>
+                  <span id="test-wa-preview-periode-info">Periode: -</span>
+                </div>
+                <pre id="test-wa-preview-box" style="white-space:pre-wrap;font-family:monospace;font-size:11.5px;color:#1e293b;line-height:1.45;margin:0;flex:1;overflow-y:auto;max-height:240px">Memuat pratinjau pesan...</pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const { modal, close } = UI.openModal({
+        cls: 'modal-lg',
+        title: '🧪 Uji Coba Pengiriman Rekap WhatsApp',
+        sub: 'Uji coba format rekap (Harian, Mingguan, Bulanan) untuk santri tertentu dan periksa tampilannya sebelum dikirim resmi.',
+        bodyHTML,
+        actions: [
+          { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
+          {
+            label: '🚀 Kirim Pesan Uji Coba',
+            cls: 'primary',
+            onClick: async (m, c) => {
+              if (!selectedIds.size) {
+                UI.toast('Pilih minimal satu santri untuk diuji coba.', 'warn');
+                return;
+              }
+              let overridePhone = '';
+              if (targetMode === 'admin') {
+                const adminPhoneInput = m.querySelector('#test-wa-admin-phone');
+                overridePhone = adminPhoneInput ? adminPhoneInput.value.trim() : '';
+                if (!overridePhone) {
+                  UI.toast('Masukkan nomor WhatsApp tujuan uji coba.', 'warn');
+                  return;
+                }
+              }
+
+              const btnSend = m.querySelector('.modal-actions .clay-btn.primary');
+              if (btnSend) { btnSend.disabled = true; btnSend.textContent = 'Mengirim Uji Coba...'; }
+
+              try {
+                const payload = {
+                  trigger,
+                  preset,
+                  santriIds: Array.from(selectedIds),
+                  overridePhone: targetMode === 'admin' ? overridePhone : '',
+                  dari: preset === 'custom' ? customDari : null,
+                  sampai: preset === 'custom' ? customSampai : null
+                };
+
+                const res = await Store.waSendTestRecap(payload);
+                if (!res || !res.ok) {
+                  UI.toast('Gagal mengirim pesan uji coba: ' + ((res && res.detail) || 'Error'), 'error');
+                  return;
+                }
+
+                UI.toast(`✓ ${res.terkirim} pesan uji coba masuk antrian bridge!`, 'success');
+                c();
+                startQueuePolling();
+                renderWaLog();
+              } catch (err) {
+                UI.toast('Terjadi kesalahan: ' + err.message, 'error');
+              } finally {
+                if (btnSend && btnSend.isConnected) {
+                  btnSend.disabled = false;
+                  btnSend.textContent = '🚀 Kirim Pesan Uji Coba';
+                }
+              }
+            }
+          }
+        ]
+      });
+
+      // Element references inside modal
+      const santriContainer = modal.querySelector('#test-wa-santri-container');
+      const selectedBadge = modal.querySelector('#test-wa-selected-badge');
+      const previewBox = modal.querySelector('#test-wa-preview-box');
+      const previewChip = modal.querySelector('#test-wa-preview-chip');
+      const previewDestInfo = modal.querySelector('#test-wa-preview-dest-info');
+      const previewPeriodeInfo = modal.querySelector('#test-wa-preview-periode-info');
+      const presetSelect = modal.querySelector('#test-wa-preset-select');
+      const customDatesWrap = modal.querySelector('#test-wa-custom-dates');
+      const customDariInput = modal.querySelector('#test-wa-custom-dari');
+      const customSampaiInput = modal.querySelector('#test-wa-custom-sampai');
+      const searchInput = modal.querySelector('#test-wa-search');
+      const btnAll = modal.querySelector('#test-wa-btn-all');
+      const btnNone = modal.querySelector('#test-wa-btn-none');
+      const phoneInputWrap = modal.querySelector('#test-wa-phone-input-wrap');
+      const adminPhoneInput = modal.querySelector('#test-wa-admin-phone');
+
+      const todayIso = new Date().toISOString().split('T')[0];
+      if (customDariInput) customDariInput.value = todayIso;
+      if (customSampaiInput) customSampaiInput.value = todayIso;
+      customDari = todayIso;
+      customSampai = todayIso;
+
+      function updateSelectedBadge() {
+        if (selectedBadge) {
+          selectedBadge.textContent = `${selectedIds.size} dipilih`;
+        }
+      }
+
+      function renderSantriList() {
+        if (!santriContainer) return;
+        const q = (filterText || '').toLowerCase().trim();
+        const filtered = santriList.filter(s => {
+          if (!q) return true;
+          const nama = (s.nama || '').toLowerCase();
+          const kelas = (Store.educationLabel(s) || '').toLowerCase();
+          return nama.includes(q) || kelas.includes(q);
+        });
+
+        if (!filtered.length) {
+          santriContainer.innerHTML = '<div class="pad-sm muted" style="text-align:center;font-size:12px">Santri tidak ditemukan.</div>';
+          return;
+        }
+
+        santriContainer.innerHTML = filtered.map(s => {
+          const isSelected = selectedIds.has(s.id);
+          const isActive = s.id === activePreviewId;
+          const noHp = Store.waNomorWali(s.id);
+          const kelasLbl = Store.educationLabel(s);
+          const bgStyle = isActive ? 'background:#eff6ff;border:1px solid #93c5fd;' : (isSelected ? 'background:#f8fafc;' : 'background:#fff;');
+
+          return `
+            <div class="test-wa-santri-item" data-id="${UI.esc(s.id)}" style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border-radius:6px;gap:8px;cursor:pointer;border-left:3px solid ${isActive ? '#2563eb' : 'transparent'};${bgStyle}">
+              <div style="display:flex;align-items:center;gap:8px;min-width:0;flex:1">
+                <input type="checkbox" class="test-wa-santri-check" data-id="${UI.esc(s.id)}" ${isSelected ? 'checked' : ''} style="cursor:pointer">
+                <div style="min-width:0;flex:1">
+                  <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${UI.esc(s.nama)}</div>
+                  <div class="muted" style="font-size:11px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                    <span>${UI.esc(kelasLbl)}</span>
+                    ${noHp ? `<span style="color:#0284c7">📱 ${UI.esc(noHp)}</span>` : '<span style="color:#d97706">⚠️ Tanpa No. HP</span>'}
+                  </div>
+                </div>
+              </div>
+              <button type="button" class="clay-btn sm ghost test-wa-btn-preview" data-id="${UI.esc(s.id)}" style="padding:2px 6px;font-size:10.5px;flex-shrink:0">
+                ${isActive ? '👁️ Aktif' : 'Pratinjau'}
+              </button>
+            </div>
+          `;
+        }).join('');
+
+        santriContainer.querySelectorAll('.test-wa-santri-check').forEach(chk => {
+          chk.onchange = (e) => {
+            const sid = e.target.getAttribute('data-id');
+            if (e.target.checked) selectedIds.add(sid);
+            else selectedIds.delete(sid);
+            updateSelectedBadge();
+          };
+        });
+
+        santriContainer.querySelectorAll('.test-wa-santri-item').forEach(item => {
+          item.onclick = (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            const sid = item.getAttribute('data-id');
+            if (sid) {
+              activePreviewId = sid;
+              renderSantriList();
+              fetchPreview();
+            }
+          };
+        });
+      }
+
+      async function fetchPreview() {
+        const reqId = ++previewReqId;
+        if (previewBox) previewBox.innerHTML = '<span class="muted">⏳ Memuat dan menghitung data rekap...</span>';
+
+        const activeSantri = santriList.find(s => s.id === activePreviewId) || santriList[0];
+        const santriPhone = activeSantri ? Store.waNomorWali(activeSantri.id) : '';
+        const adminPhone = adminPhoneInput ? adminPhoneInput.value.trim() : '';
+
+        if (previewDestInfo) {
+          previewDestInfo.textContent = targetMode === 'admin'
+            ? `Tujuan Tes: Admin (${adminPhone || 'Belum diisi'})`
+            : `Tujuan Asli: Wali (${santriPhone || '⚠️ Tanpa No. HP'})`;
+        }
+
+        try {
+          const res = await Store.waPreviewTest({
+            trigger,
+            preset,
+            santriId: activePreviewId,
+            dari: preset === 'custom' ? customDari : null,
+            sampai: preset === 'custom' ? customSampai : null
+          });
+
+          if (reqId !== previewReqId) return;
+
+          if (!res || !res.ok) {
+            if (previewBox) previewBox.textContent = 'Gagal memuat pratinjau: ' + ((res && res.detail) || 'Error');
+            return;
+          }
+
+          if (previewBox) previewBox.textContent = res.pesan || '(Pesan kosong)';
+          if (previewChip) previewChip.textContent = `${res.santri?.nama || '-'} (${res.santri?.kelas || '-'})`;
+          if (previewPeriodeInfo) {
+            const p = res.periode || {};
+            previewPeriodeInfo.textContent = p.dari === p.sampai ? `Tgl: ${p.dari}` : `${p.dari} s/d ${p.sampai}`;
+          }
+        } catch (e) {
+          if (reqId === previewReqId && previewBox) {
+            previewBox.textContent = 'Gagal memuat: ' + e.message;
+          }
+        }
+      }
+
+      function updatePresetDropdown() {
+        if (!presetSelect) return;
+        if (trigger === 'harian') {
+          presetSelect.innerHTML = `
+            <option value="yesterday">Kemarin (Rekomendasi)</option>
+            <option value="today">Hari Ini</option>
+            <option value="custom">📅 Pilih Tanggal Khusus...</option>
+          `;
+          preset = 'yesterday';
+        } else if (trigger === 'mingguan') {
+          presetSelect.innerHTML = `
+            <option value="this_week">Pekan Ini (Senin – Jumat)</option>
+            <option value="last_week">Pekan Lalu (Senin – Jumat)</option>
+            <option value="custom">📅 Pilih Rentang Khusus...</option>
+          `;
+          preset = 'this_week';
+        } else if (trigger === 'bulanan') {
+          presetSelect.innerHTML = `
+            <option value="this_month">Bulan Ini</option>
+            <option value="last_month">Bulan Lalu (Rekomendasi)</option>
+            <option value="custom">📅 Pilih Rentang Khusus...</option>
+          `;
+          preset = 'this_month';
+        }
+        if (customDatesWrap) customDatesWrap.style.display = 'none';
+      }
+
+      modal.querySelectorAll('.test-wa-trigger-btn').forEach(btn => {
+        btn.onclick = () => {
+          modal.querySelectorAll('.test-wa-trigger-btn').forEach(b => {
+            b.classList.remove('active');
+            b.classList.add('ghost');
+            b.style.background = '';
+            b.style.color = '';
+            b.style.fontWeight = '';
+          });
+          btn.classList.add('active');
+          btn.classList.remove('ghost');
+          btn.style.background = '#2563eb';
+          btn.style.color = '#fff';
+          btn.style.fontWeight = '600';
+
+          trigger = btn.getAttribute('data-trigger') || 'harian';
+          updatePresetDropdown();
+          fetchPreview();
+        };
+      });
+
+      if (presetSelect) {
+        presetSelect.onchange = () => {
+          preset = presetSelect.value;
+          if (customDatesWrap) {
+            customDatesWrap.style.display = preset === 'custom' ? 'flex' : 'none';
+          }
+          fetchPreview();
+        };
+      }
+
+      if (customDariInput) customDariInput.onchange = () => { customDari = customDariInput.value; fetchPreview(); };
+      if (customSampaiInput) customSampaiInput.onchange = () => { customSampai = customSampaiInput.value; fetchPreview(); };
+
+      modal.querySelectorAll('input[name="test-wa-target-mode"]').forEach(r => {
+        r.onchange = () => {
+          targetMode = r.value;
+          if (phoneInputWrap) phoneInputWrap.style.display = targetMode === 'admin' ? 'block' : 'none';
+          fetchPreview();
+        };
+      });
+
+      if (adminPhoneInput) {
+        adminPhoneInput.oninput = () => fetchPreview();
+      }
+
+      if (searchInput) {
+        searchInput.oninput = () => {
+          filterText = searchInput.value;
+          renderSantriList();
+        };
+      }
+
+      if (btnAll) {
+        btnAll.onclick = () => {
+          const q = (filterText || '').toLowerCase().trim();
+          santriList.forEach(s => {
+            if (!q || (s.nama || '').toLowerCase().includes(q) || (Store.educationLabel(s) || '').toLowerCase().includes(q)) {
+              selectedIds.add(s.id);
+            }
+          });
+          renderSantriList();
+          updateSelectedBadge();
+        };
+      }
+
+      if (btnNone) {
+        btnNone.onclick = () => {
+          selectedIds.clear();
+          renderSantriList();
+          updateSelectedBadge();
+        };
+      }
+
+      updateSelectedBadge();
+      renderSantriList();
+      fetchPreview();
+    }
 
     const waRecapBtn = document.getElementById('btn-wa-recap');
     if (waRecapBtn) waRecapBtn.onclick = async () => {

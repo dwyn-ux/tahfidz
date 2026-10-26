@@ -347,6 +347,21 @@ const Store = (() => {
     return api('wa&op=stop');
   }
 
+  function waPreviewTest(payload) {
+    return api('wa_preview_test', { method: 'POST', body: payload || {} }).catch(e => ({
+      ok: false,
+      detail: (e && e.message) || 'Gagal memuat pratinjau'
+    }));
+  }
+
+  function waSendTestRecap(payload) {
+    return api('wa_send_test_recap', { method: 'POST', body: payload || {} }).catch(e => ({
+      ok: false,
+      terkirim: 0,
+      detail: (e && e.message) || 'Gagal mengirim pesan uji coba'
+    }));
+  }
+
   // Satu pesan rekap absensi untuk satu santri pada rentang tanggal tertentu.
   // Dipakai untuk pratinjau di aplikasi; pesan yang benar-benar dikirim
   // disusun di server agar sama persis dengan yang dilihat wali.
@@ -1348,7 +1363,7 @@ const Store = (() => {
     simpanTingkat, hapusTingkat, simpanKelas, hapusKelas, tingkatAda, kelasDipakaiDiTalim, jumlahSantriKelas, naturalKelasSort,
     uploadKitab, talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
     waSend, waLog, waReady, waAutoEnabled, waSendWali, waNomorWali, waStatus, waQrDataUrl, waLogServer,
-    waAutoTriggerSettings, waAutoHour, waAutoReminder, waQueueStatus, waStopQueue, waAbsensiMessage,
+    waAutoTriggerSettings, waAutoHour, waAutoReminder, waQueueStatus, waStopQueue, waPreviewTest, waSendTestRecap, waAbsensiMessage,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,
     setoranRentang, avgNilaiRentang, padaRentang, juzHafalanDisplay,
     absensiUstadzOf, absensiUstadzRow, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,

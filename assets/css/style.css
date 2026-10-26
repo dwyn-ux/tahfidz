@@ -284,6 +284,11 @@ label.field-label { display: block; font-size: 13px; font-weight: 600; margin: 1
 .setoran-quran-popup { max-height: 62vh; overflow: auto; padding-right: 4px; }
 
 /* Modal Kitab Viewer */
+.modal.modal-lg {
+  max-width: 860px;
+  width: 95vw;
+}
+
 .modal.modal-kitab {
   max-width: 1050px;
   width: 95vw;

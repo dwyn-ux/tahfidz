@@ -622,3 +622,206 @@ function waJalankanReminder(?DateTimeImmutable $now = null): array {
     }
     return $hasil;
 }
+
+/**
+ * Dapatkan periode untuk rekap uji coba / tes.
+ */
+function waResolveTestPeriode(string $trigger, ?string $preset = null, ?string $customDari = null, ?string $customSampai = null): array {
+    $today = date('Y-m-d');
+    $kemarin = waTambahHari($today, -1);
+
+    if ($customDari && $customSampai) {
+        return [
+            'dari' => $customDari,
+            'sampai' => $customSampai,
+            'judul' => 'Rekap absensi ' . $trigger,
+            'kunci' => $customDari
+        ];
+    }
+
+    if ($trigger === 'harian') {
+        $tgl = ($preset === 'today') ? $today : $kemarin;
+        return [
+            'dari' => $tgl,
+            'sampai' => $tgl,
+            'judul' => 'Rekap absensi harian',
+            'kunci' => $tgl
+        ];
+    }
+
+    if ($trigger === 'mingguan') {
+        $offset = ($preset === 'this_week') ? 0 : -7;
+        $senin = waTambahHari(waAwalMinggu($today), $offset);
+        return [
+            'dari' => $senin,
+            'sampai' => waTambahHari($senin, 4), // Senin - Jumat
+            'judul' => 'Rekap absensi mingguan',
+            'kunci' => $senin
+        ];
+    }
+
+    if ($trigger === 'bulanan') {
+        if ($preset === 'this_month') {
+            $dt = new DateTimeImmutable('now');
+            $awal = $dt->modify('first day of this month')->format('Y-m-d');
+            $akhir = $dt->modify('last day of this month')->format('Y-m-d');
+            return [
+                'dari' => $awal,
+                'sampai' => $akhir,
+                'judul' => 'Rekap absensi bulanan',
+                'kunci' => $awal
+            ];
+        } else {
+            [$awal, $akhir] = waBulanLalu($today);
+            return [
+                'dari' => $awal,
+                'sampai' => $akhir,
+                'judul' => 'Rekap absensi bulanan',
+                'kunci' => $awal
+            ];
+        }
+    }
+
+    return waPeriode($trigger, $today) ?: ['dari' => $today, 'sampai' => $today, 'judul' => 'Rekap', 'kunci' => $today];
+}
+
+/**
+ * Pratinjau pesan rekap (harian, mingguan, bulanan) untuk satu santri tertentu.
+ */
+function waPreviewRekap(array $input): array {
+    $trigger = (string)($input['trigger'] ?? 'harian');
+    if (!in_array($trigger, ['harian', 'mingguan', 'bulanan'], true)) {
+        $trigger = 'harian';
+    }
+    $santriId = (string)($input['santriId'] ?? '');
+    $preset = (string)($input['preset'] ?? '');
+    $customDari = !empty($input['dari']) ? (string)$input['dari'] : null;
+    $customSampai = !empty($input['sampai']) ? (string)$input['sampai'] : null;
+
+    $periode = waResolveTestPeriode($trigger, $preset, $customDari, $customSampai);
+
+    $santriList = getRecords('santri');
+    $santri = null;
+    if ($santriId !== '') {
+        foreach ($santriList as $s) {
+            if ((string)($s['id'] ?? '') === $santriId) {
+                $santri = $s;
+                break;
+            }
+        }
+    }
+    if (!$santri && count($santriList) > 0) {
+        $santri = $santriList[0];
+    }
+    if (!$santri) {
+        return ['ok' => false, 'detail' => 'Data santri tidak ditemukan.'];
+    }
+
+    $settings = getSettings();
+    $namaLembaga = (string)($settings['namaLembaga'] ?? '');
+    $waliRecords = getRecords('wali');
+    $kehadiran = attendanceEffectiveRecords(getRecords('kehadiran'));
+    $setoranRecords = getRecords('ziyadahHafalan');
+
+    $nomorWali = waNomorWali($santri, $waliRecords);
+    $rekap = waRekapSantri($kehadiran, (string)($santri['id'] ?? ''), $periode['dari'], $periode['sampai']);
+    $pesan = waPesanRekap($santri, $rekap, $periode, $namaLembaga, $trigger, $setoranRecords);
+
+    return [
+        'ok' => true,
+        'trigger' => $trigger,
+        'periode' => $periode,
+        'santri' => [
+            'id' => $santri['id'] ?? '',
+            'nama' => $santri['nama'] ?? '',
+            'kelas' => waSantriKelas($santri),
+            'nomorWali' => $nomorWali
+        ],
+        'pesan' => $pesan
+    ];
+}
+
+/**
+ * Kirim pesan uji coba rekap (harian, mingguan, bulanan) untuk daftar santri yang dipilih.
+ * Tidak mencatat ke waAutoLog agar jadwal otomatis resmi tidak terpengaruh.
+ */
+function waKirimTestRekap(array $input): array {
+    $trigger = (string)($input['trigger'] ?? 'harian');
+    if (!in_array($trigger, ['harian', 'mingguan', 'bulanan'], true)) {
+        $trigger = 'harian';
+    }
+    $santriIds = (array)($input['santriIds'] ?? []);
+    if (empty($santriIds)) {
+        return ['ok' => false, 'detail' => 'Pilih minimal satu santri untuk diuji.'];
+    }
+
+    $preset = (string)($input['preset'] ?? '');
+    $customDari = !empty($input['dari']) ? (string)$input['dari'] : null;
+    $customSampai = !empty($input['sampai']) ? (string)$input['sampai'] : null;
+    $overridePhone = trim((string)($input['overridePhone'] ?? ''));
+
+    $periode = waResolveTestPeriode($trigger, $preset, $customDari, $customSampai);
+
+    $settings = getSettings();
+    $url = rtrim((string)($settings['waBridgeUrl'] ?? ''), '/');
+    $key = (string)($settings['waBridgeKey'] ?? '');
+    if ($url === '' || $key === '') {
+        return ['ok' => false, 'detail' => 'WA bridge belum diatur (Settings → WhatsApp).'];
+    }
+
+    $santriList = getRecords('santri');
+    $santriMap = [];
+    foreach ($santriList as $s) {
+        $santriMap[(string)($s['id'] ?? '')] = $s;
+    }
+
+    $waliRecords = getRecords('wali');
+    $kehadiran = attendanceEffectiveRecords(getRecords('kehadiran'));
+    $namaLembaga = (string)($settings['namaLembaga'] ?? '');
+    $setoranRecords = getRecords('ziyadahHafalan');
+
+    $terkirim = 0;
+    $gagal = 0;
+    $detailList = [];
+
+    foreach ($santriIds as $sId) {
+        $sId = (string)$sId;
+        if (!isset($santriMap[$sId])) continue;
+        $santri = $santriMap[$sId];
+
+        $targetPhone = $overridePhone !== '' ? $overridePhone : waNomorWali($santri, $waliRecords);
+        if ($targetPhone === '') {
+            $gagal++;
+            $detailList[] = ($santri['nama'] ?? $sId) . ': nomor wali tidak ada';
+            continue;
+        }
+
+        $rekap = waRekapSantri($kehadiran, $sId, $periode['dari'], $periode['sampai']);
+        $pesan = waPesanRekap($santri, $rekap, $periode, $namaLembaga, $trigger, $setoranRecords);
+
+        if ($overridePhone !== '') {
+            $pesan = "🧪 *[PESAN UJI COBA REKAP " . strtoupper($trigger) . "]*\n"
+                   . "Santri: " . ($santri['nama'] ?? '-') . " (" . waSantriKelas($santri) . ")\n"
+                   . "Nomor Asli Wali: " . (waNomorWali($santri, $waliRecords) ?: '(tidak ada)') . "\n\n"
+                   . $pesan;
+        }
+
+        $r = waBridgeCall($url, $key, '/send', json_encode(['to' => $targetPhone, 'message' => $pesan]));
+        if ($r['ok']) {
+            $terkirim++;
+            waCatatLog($targetPhone, 'queued', 'Tes Rekap ' . ucfirst($trigger) . ' untuk ' . ($santri['nama'] ?? $sId), $pesan);
+        } else {
+            $gagal++;
+            $detailList[] = ($santri['nama'] ?? $sId) . ': ' . ($r['detail'] ?: 'HTTP ' . $r['status']);
+            waCatatLog($targetPhone, 'error', 'Gagal tes ' . ($santri['nama'] ?? $sId) . ': ' . ($r['detail'] ?: ('HTTP ' . $r['status'])), $pesan);
+        }
+    }
+
+    return [
+        'ok' => $terkirim > 0 || $gagal === 0,
+        'terkirim' => $terkirim,
+        'gagal' => $gagal,
+        'periode' => $periode,
+        'detail' => $detailList ? implode(', ', $detailList) : ($terkirim . ' pesan masuk antrian bridge.')
+    ];
+}

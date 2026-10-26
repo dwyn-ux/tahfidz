@@ -389,6 +389,31 @@ switch ($action) {
         send($waReminder);
         break;
 
+    case 'wa_preview_test':
+        $waUser = requireAuth();
+        if (!in_array($waUser['role'] ?? '', ['admin', 'ustadz'], true)) {
+            err('Method not allowed', 403);
+        }
+        NormalizedStore::ensureUpgrade();
+        require_once __DIR__ . '/wa_service.php';
+        $input = json_decode(file_get_contents('php://input'), true) ?: $_GET;
+        $res = waPreviewRekap($input);
+        send($res);
+        break;
+
+    case 'wa_send_test_recap':
+        $waUser = requireAuth();
+        if (!in_array($waUser['role'] ?? '', ['admin', 'ustadz'], true)) {
+            err('Method not allowed', 403);
+        }
+        NormalizedStore::ensureUpgrade();
+        require_once __DIR__ . '/wa_service.php';
+        $input = json_decode(file_get_contents('php://input'), true);
+        if (!is_array($input)) err('Invalid payload', 400);
+        $res = waKirimTestRekap($input);
+        send($res);
+        break;
+
     /* ---------------- UPLOAD KITAB (admin) ---------------- */
     case 'upload_kitab':
         $u = requireAuth();
