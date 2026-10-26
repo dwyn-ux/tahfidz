@@ -800,7 +800,7 @@ function waKirimTestRekap(array $input): array {
         $pesan = waPesanRekap($santri, $rekap, $periode, $namaLembaga, $trigger, $setoranRecords);
 
         if ($overridePhone !== '') {
-            $pesan = "🧪 *[PESAN UJI COBA REKAP " . strtoupper($trigger) . "]*\n"
+            $pesan = "*[PESAN UJI COBA REKAP " . strtoupper($trigger) . "]*\n"
                    . "Santri: " . ($santri['nama'] ?? '-') . " (" . waSantriKelas($santri) . ")\n"
                    . "Nomor Asli Wali: " . (waNomorWali($santri, $waliRecords) ?: '(tidak ada)') . "\n\n"
                    . $pesan;

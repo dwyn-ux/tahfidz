@@ -2365,9 +2365,9 @@ const Admin = (() => {
         <div class="row mt" style="gap:8px;flex-wrap:wrap;align-items:center">
           <button class="clay-btn ghost" id="btn-wa-status">Cek Status</button>
           <button class="clay-btn ghost" id="btn-wa-test">Tes Koneksi</button>
-          <button class="clay-btn ghost" id="btn-wa-test-recap" style="border:1.5px solid #2563eb;color:#1d4ed8;font-weight:600;background:#eff6ff">🧪 Tes Kirim Rekap (Pilih Santri)</button>
+          <button class="clay-btn ghost" id="btn-wa-test-recap" style="border:1.5px solid #2563eb;color:#1d4ed8;font-weight:600;background:#eff6ff">Tes Kirim Rekap (Pilih Santri)</button>
           <button class="clay-btn primary" id="btn-wa-recap">Kirim Rekap Sekarang</button>
-          <button class="clay-btn danger" id="btn-wa-stop" style="display:none;background:#EF4444;color:#fff;font-weight:600">⏹ Hentikan Pengiriman</button>
+          <button class="clay-btn danger" id="btn-wa-stop" style="display:none;background:#EF4444;color:#fff;font-weight:600">Hentikan Pengiriman</button>
         </div>
         <div id="wa-queue-box" class="mt" style="display:none"></div>
         <div id="wa-status" class="mt" style="font-size:13px"></div>
@@ -2662,7 +2662,7 @@ const Admin = (() => {
       if (!nohp) return;
       if (waBelumTersimpan()) { waMintaSimpan(); return; }
       waStatusEl.innerHTML = '<span class="muted">Mengirim...</span>';
-      const msg = '🔔 Tes WhatsApp Bridge Tahfidzku. Pesan laporan capaian akan terkirim otomatis ke wali.';
+      const msg = 'Tes WhatsApp Bridge Tahfidzku. Pesan laporan capaian akan terkirim otomatis ke wali.';
       Store.waSend(nohp, msg).then(ok => {
         waStatusEl.innerHTML = ok
           ? '<span style="color:var(--success)">✓ Pesan masuk antrian bridge.</span>'
@@ -2689,7 +2689,7 @@ const Admin = (() => {
             <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
               <div>
                 <div style="font-weight:bold;color:#c2410c;display:flex;align-items:center;gap:6px">
-                  <span class="badge warn" style="font-size:11px">⏳ Sedang Mengirim Pesan...</span>
+                  <span class="badge warn" style="font-size:11px">Sedang Mengirim Pesan...</span>
                   Sisa Antrian: <b>${q.pending} pesan</b>
                 </div>
                 <div class="muted" style="font-size:12px;margin-top:3px">
@@ -2697,7 +2697,7 @@ const Admin = (() => {
                 </div>
               </div>
               <button class="clay-btn sm danger" type="button" id="btn-wa-stop-inline" style="background:#EF4444;color:#fff;font-weight:600">
-                ⏹ Hentikan Sekarang
+                Hentikan Sekarang
               </button>
             </div>
           </div>`;
@@ -2729,13 +2729,13 @@ const Admin = (() => {
         const res = await Store.waStopQueue();
         const cancelled = (res && res.data && res.data.cancelled) ?? (res && res.cancelled) ?? 0;
         UI.toast(`Pengiriman dihentikan. ${cancelled} pesan dibatalkan!`, 'warn');
-        waStatusEl.innerHTML = `<span style="color:var(--danger);font-weight:600">⏹ Pengiriman dihentikan. ${cancelled} pesan dalam antrian dibatalkan.</span>`;
+        waStatusEl.innerHTML = `<span style="color:var(--danger);font-weight:600">Pengiriman dihentikan. ${cancelled} pesan dalam antrian dibatalkan.</span>`;
         checkQueueProgress();
         renderWaLog();
       } catch (err) {
         UI.toast('Gagal menghentikan antrian: ' + err.message, 'error');
       } finally {
-        if (stopBtn) { stopBtn.disabled = false; stopBtn.textContent = '⏹ Hentikan Pengiriman'; }
+        if (stopBtn) { stopBtn.disabled = false; stopBtn.textContent = 'Hentikan Pengiriman'; }
       }
     }
 
@@ -2777,9 +2777,9 @@ const Admin = (() => {
               <div style="flex:1;min-width:200px">
                 <label class="field-label" style="font-weight:600;font-size:12px;margin-bottom:6px;display:block">1. Jenis Laporan Rekap</label>
                 <div style="display:flex;gap:6px">
-                  <button type="button" class="clay-btn sm test-wa-trigger-btn active" data-trigger="harian" style="flex:1;justify-content:center;background:#2563eb;color:#fff;font-weight:600">☀️ Harian</button>
-                  <button type="button" class="clay-btn sm ghost test-wa-trigger-btn" data-trigger="mingguan" style="flex:1;justify-content:center">📅 Mingguan</button>
-                  <button type="button" class="clay-btn sm ghost test-wa-trigger-btn" data-trigger="bulanan" style="flex:1;justify-content:center">🗓️ Bulanan</button>
+                  <button type="button" class="clay-btn sm test-wa-trigger-btn active" data-trigger="harian" style="flex:1;justify-content:center;background:#2563eb;color:#fff;font-weight:600">Harian</button>
+                  <button type="button" class="clay-btn sm ghost test-wa-trigger-btn" data-trigger="mingguan" style="flex:1;justify-content:center">Mingguan</button>
+                  <button type="button" class="clay-btn sm ghost test-wa-trigger-btn" data-trigger="bulanan" style="flex:1;justify-content:center">Bulanan</button>
                 </div>
               </div>
 
@@ -2788,7 +2788,7 @@ const Admin = (() => {
                 <select id="test-wa-preset-select" class="field-input" style="width:100%;padding:6px 10px;font-size:13px">
                   <option value="yesterday">Kemarin (Rekomendasi)</option>
                   <option value="today">Hari Ini</option>
-                  <option value="custom">📅 Pilih Tanggal Khusus...</option>
+                  <option value="custom">Pilih Tanggal Khusus...</option>
                 </select>
               </div>
             </div>
@@ -2840,7 +2840,7 @@ const Admin = (() => {
                   <button type="button" class="clay-btn sm ghost" id="test-wa-btn-none" style="padding:2px 8px;font-size:11px">Kosongkan</button>
                 </div>
               </div>
-              <input type="text" id="test-wa-search" class="field-input" placeholder="🔍 Cari nama atau kelas santri..." style="width:100%;padding:6px 10px;font-size:12.5px;margin-bottom:8px">
+              <input type="text" id="test-wa-search" class="field-input" placeholder="Cari nama atau kelas santri..." style="width:100%;padding:6px 10px;font-size:12.5px;margin-bottom:8px">
               
               <div id="test-wa-santri-container" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:4px;background:#fff;display:flex;flex-direction:column;gap:3px">
                 <!-- Diisi via renderSantriList() -->
@@ -2850,7 +2850,7 @@ const Admin = (() => {
             <!-- Kolom Kanan: Pratinjau Teks WhatsApp -->
             <div style="flex:1;min-width:280px;display:flex;flex-direction:column">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                <label class="field-label" style="font-weight:600;font-size:12px;margin:0">📱 Pratinjau Pesan WhatsApp</label>
+                <label class="field-label" style="font-weight:600;font-size:12px;margin:0">Pratinjau Pesan WhatsApp</label>
                 <span id="test-wa-preview-chip" class="badge ok" style="font-size:11px">-</span>
               </div>
               <div style="flex:1;display:flex;flex-direction:column;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px;min-height:260px">
@@ -2867,13 +2867,13 @@ const Admin = (() => {
 
       const { modal, close } = UI.openModal({
         cls: 'modal-lg',
-        title: '🧪 Uji Coba Pengiriman Rekap WhatsApp',
+        title: 'Uji Coba Pengiriman Rekap WhatsApp',
         sub: 'Uji coba format rekap (Harian, Mingguan, Bulanan) untuk santri tertentu dan periksa tampilannya sebelum dikirim resmi.',
         bodyHTML,
         actions: [
           { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
           {
-            label: '🚀 Kirim Pesan Uji Coba',
+            label: 'Kirim Pesan Uji Coba',
             cls: 'primary',
             onClick: async (m, c) => {
               if (!selectedIds.size) {
@@ -2918,7 +2918,7 @@ const Admin = (() => {
               } finally {
                 if (btnSend && btnSend.isConnected) {
                   btnSend.disabled = false;
-                  btnSend.textContent = '🚀 Kirim Pesan Uji Coba';
+                  btnSend.textContent = 'Kirim Pesan Uji Coba';
                 }
               }
             }
@@ -2985,12 +2985,12 @@ const Admin = (() => {
                   <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${UI.esc(s.nama)}</div>
                   <div class="muted" style="font-size:11px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
                     <span>${UI.esc(kelasLbl)}</span>
-                    ${noHp ? `<span style="color:#0284c7">📱 ${UI.esc(noHp)}</span>` : '<span style="color:#d97706">⚠️ Tanpa No. HP</span>'}
+                    ${noHp ? `<span style="color:#0284c7">${UI.esc(noHp)}</span>` : '<span style="color:#d97706">Tanpa No. HP</span>'}
                   </div>
                 </div>
               </div>
               <button type="button" class="clay-btn sm ghost test-wa-btn-preview" data-id="${UI.esc(s.id)}" style="padding:2px 6px;font-size:10.5px;flex-shrink:0">
-                ${isActive ? '👁️ Aktif' : 'Pratinjau'}
+                ${isActive ? 'Aktif' : 'Pratinjau'}
               </button>
             </div>
           `;
@@ -3020,7 +3020,7 @@ const Admin = (() => {
 
       async function fetchPreview() {
         const reqId = ++previewReqId;
-        if (previewBox) previewBox.innerHTML = '<span class="muted">⏳ Memuat dan menghitung data rekap...</span>';
+        if (previewBox) previewBox.innerHTML = '<span class="muted">Memuat dan menghitung data rekap...</span>';
 
         const activeSantri = santriList.find(s => s.id === activePreviewId) || santriList[0];
         const santriPhone = activeSantri ? Store.waNomorWali(activeSantri.id) : '';
@@ -3029,7 +3029,7 @@ const Admin = (() => {
         if (previewDestInfo) {
           previewDestInfo.textContent = targetMode === 'admin'
             ? `Tujuan Tes: Admin (${adminPhone || 'Belum diisi'})`
-            : `Tujuan Asli: Wali (${santriPhone || '⚠️ Tanpa No. HP'})`;
+            : `Tujuan Asli: Wali (${santriPhone || 'Tanpa No. HP'})`;
         }
 
         try {
@@ -3067,21 +3067,21 @@ const Admin = (() => {
           presetSelect.innerHTML = `
             <option value="yesterday">Kemarin (Rekomendasi)</option>
             <option value="today">Hari Ini</option>
-            <option value="custom">📅 Pilih Tanggal Khusus...</option>
+            <option value="custom">Pilih Tanggal Khusus...</option>
           `;
           preset = 'yesterday';
         } else if (trigger === 'mingguan') {
           presetSelect.innerHTML = `
             <option value="this_week">Pekan Ini (Senin – Jumat)</option>
             <option value="last_week">Pekan Lalu (Senin – Jumat)</option>
-            <option value="custom">📅 Pilih Rentang Khusus...</option>
+            <option value="custom">Pilih Rentang Khusus...</option>
           `;
           preset = 'this_week';
         } else if (trigger === 'bulanan') {
           presetSelect.innerHTML = `
             <option value="this_month">Bulan Ini</option>
             <option value="last_month">Bulan Lalu (Rekomendasi)</option>
-            <option value="custom">📅 Pilih Rentang Khusus...</option>
+            <option value="custom">Pilih Rentang Khusus...</option>
           `;
           preset = 'this_month';
         }
