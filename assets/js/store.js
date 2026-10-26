@@ -61,6 +61,7 @@ const Store = (() => {
         notifAbsensiWali: true, notifAbsensiPeriode: 'harian',
         waBridgeUrl: '', waBridgeKey: '', waAuto: false, liburLembaga: [],
         waAutoTrigger: { setoran: true, harian: false, mingguan: false, bulanan: false },
+        waReportContent: { kehadiran: true, rincianSesi: true, hafalan: true, nilai: true, catatan: true },
         waAutoJam: '07:00'
       },
       users: [], santri: [], wali: [], ustadz: [], halaqah: [],
@@ -316,6 +317,22 @@ const Store = (() => {
       harian: aktif('harian'),
       mingguan: aktif('mingguan'),
       bulanan: aktif('bulanan')
+    };
+  }
+
+  function waReportContentSettings() {
+    const raw = (db.settings && db.settings.waReportContent) || {};
+    const aktif = (key, def = true) => {
+      const val = raw[key];
+      if (val === undefined || val === null) return def;
+      return val === true || val === 1 || val === '1' || val === 'true';
+    };
+    return {
+      kehadiran: aktif('kehadiran', true),
+      rincianSesi: aktif('rincianSesi', true),
+      hafalan: aktif('hafalan', true),
+      nilai: aktif('nilai', true),
+      catatan: aktif('catatan', true)
     };
   }
 
@@ -626,6 +643,9 @@ const Store = (() => {
     settings.talimMalam.bab = String(settings.talimMalam.bab || '');
     if (!Array.isArray(settings.liburLembaga)) settings.liburLembaga = [];
     settings.liburLembaga = settings.liburLembaga.filter(item => item && item.tanggal);
+    if (!settings.waReportContent || typeof settings.waReportContent !== 'object' || Array.isArray(settings.waReportContent)) {
+      settings.waReportContent = { kehadiran: true, rincianSesi: true, hafalan: true, nilai: true, catatan: true };
+    }
     return settings;
   }
 
@@ -1369,7 +1389,7 @@ const Store = (() => {
     simpanTingkat, hapusTingkat, simpanKelas, hapusKelas, tingkatAda, kelasDipakaiDiTalim, jumlahSantriKelas, naturalKelasSort,
     uploadKitab, talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
     waSend, waLog, waReady, waAutoEnabled, waSendWali, waNomorWali, waStatus, waQrDataUrl, waLogServer,
-    waAutoTriggerSettings, waAutoHour, waAutoReminder, waQueueStatus, waStopQueue, waPreviewTest, waSendTestRecap, waAbsensiMessage,
+    waAutoTriggerSettings, waReportContentSettings, waAutoHour, waAutoReminder, waQueueStatus, waStopQueue, waPreviewTest, waSendTestRecap, waAbsensiMessage,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, kehadiranRentang, dedupeKehadiran,
     setoranRentang, avgNilaiRentang, padaRentang, juzHafalanDisplay,
     absensiUstadzOf, absensiUstadzRow, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,

@@ -44,6 +44,25 @@ const Ustadz = (() => {
     }
     const jamStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace('.', ':') + ' WIB';
 
+    const flags = (typeof Store.waReportContentSettings === 'function')
+      ? Store.waReportContentSettings()
+      : ((d.settings && d.settings.waReportContent) || { kehadiran: true, rincianSesi: true, hafalan: true, nilai: true, catatan: true });
+
+    const lines = [];
+    if (flags.hafalan !== false) {
+      lines.push(`Awal             : ${awal || '-'}`);
+      lines.push(`Hingga           : ${hingga || '-'}`);
+      lines.push(`Jumlah Hafalan : ${jumlah || '-'}`);
+    }
+    if (flags.nilai !== false) {
+      lines.push(`Nilai : ${nilai !== undefined && nilai !== null && nilai !== '' ? nilai : '-'}`);
+    }
+    if (flags.catatan !== false) {
+      lines.push(`Keterangan      :  ${keterangan || '-'}`);
+    }
+
+    const laporanBlock = lines.length ? `\n*Laporan*\n${lines.join('\n')}\n` : '';
+
     return `*INFORMASI CAPAIAN TAHFIDZ AL_QUR'AN SANTRI*
 *${lembaga}*
 
@@ -51,14 +70,7 @@ Nama     : ${santri.nama || '-'}
 Kelas     : ${kelas}
 Tanggal  : ${tglStr}
 Waktu     : ${jamStr}
-
-*Laporan*
-Awal             : ${awal || '-'}
-Hingga           : ${hingga || '-'}
-Jumlah Hafalan : ${jumlah || '-'}
-Nilai : ${nilai !== undefined && nilai !== null && nilai !== '' ? nilai : '-'}
-Keterangan      :  ${keterangan || '-'}
-
+${laporanBlock}
 Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhirat Keluarga kelak. Amiin`;
   }
 
@@ -2190,5 +2202,5 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     };
   }
 
-  return { nav, dashboard, absensi, talim, pembelajaran, riwayat, laporan, notif, sesiSaatIni };
+  return { nav, dashboard, absensi, talim, pembelajaran, riwayat, laporan, notif, sesiSaatIni, formatPesanSetoranWA };
 })();

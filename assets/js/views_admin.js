@@ -2206,6 +2206,12 @@ const Admin = (() => {
       }
       return raw === true || raw === 1 || raw === '1' || raw === 'true';
     };
+    const waContent = (key) => {
+      const c = s.waReportContent;
+      if (!c || typeof c !== 'object' || !Object.keys(c).length) return true;
+      const raw = c[key];
+      return raw === undefined || raw === null ? true : (raw === true || raw === 1 || raw === '1' || raw === 'true');
+    };
     document.getElementById('view-content').innerHTML = `
       <div class="pill-tabs" id="set-tab-bar">
         <button class="pill active" data-set-tab="lembaga">Lembaga</button>
@@ -2342,6 +2348,34 @@ const Admin = (() => {
           </label>
         </div>
         <div style="max-width:160px;margin-top:10px">${UI.field('Jam Kirim (HH:MM)', `<input class="clay-input" id="s-wa-jam" type="time" value="${UI.esc(s.waAutoJam || '07:00')}">`)}</div>
+      </div>
+      <div class="clay-card mb">
+        <div class="section-title"> Informasi Laporan ke Wali (Komponen Pesan WA)</div>
+        <div class="muted" style="font-size:12px;margin-bottom:12px">
+          Pilih informasi apa saja yang ingin dilaporkan ke WhatsApp wali santri. Bagian yang dinonaktifkan akan otomatis disembunyikan dari isi pesan laporan (harian, mingguan, bulanan, maupun saat setoran).
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:10px">
+          <label style="display:flex;align-items:center;gap:8px">
+            <button class="clay-toggle ${waContent('kehadiran') ? 'on' : ''}" id="s-wa-c-kehadiran"></button>
+            <span id="s-wa-c-kehadiran-label" style="font-size:13px">${waContent('kehadiran') ? 'Kehadiran / Absensi: Aktif' : 'Kehadiran / Absensi: Nonaktif'}</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px">
+            <button class="clay-toggle ${waContent('rincianSesi') ? 'on' : ''}" id="s-wa-c-rincianSesi"></button>
+            <span id="s-wa-c-rincianSesi-label" style="font-size:13px">${waContent('rincianSesi') ? 'Rincian Sesi Kehadiran: Aktif' : 'Rincian Sesi Kehadiran: Nonaktif'}</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px">
+            <button class="clay-toggle ${waContent('hafalan') ? 'on' : ''}" id="s-wa-c-hafalan"></button>
+            <span id="s-wa-c-hafalan-label" style="font-size:13px">${waContent('hafalan') ? 'Capaian &amp; Hafalan: Aktif' : 'Capaian &amp; Hafalan: Nonaktif'}</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px">
+            <button class="clay-toggle ${waContent('nilai') ? 'on' : ''}" id="s-wa-c-nilai"></button>
+            <span id="s-wa-c-nilai-label" style="font-size:13px">${waContent('nilai') ? 'Nilai Setoran: Aktif' : 'Nilai Setoran: Nonaktif'}</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px">
+            <button class="clay-toggle ${waContent('catatan') ? 'on' : ''}" id="s-wa-c-catatan"></button>
+            <span id="s-wa-c-catatan-label" style="font-size:13px">${waContent('catatan') ? 'Catatan Ustadz: Aktif' : 'Catatan Ustadz: Nonaktif'}</span>
+          </label>
+        </div>
       </div>
       <div class="clay-card mb">
         <div class="section-title"> Koneksi WA Bridge</div>
@@ -2557,6 +2591,23 @@ const Admin = (() => {
       };
     });
 
+    const contentLabels = {
+      kehadiran: 'Kehadiran / Absensi',
+      rincianSesi: 'Rincian Sesi Kehadiran',
+      hafalan: 'Capaian & Hafalan',
+      nilai: 'Nilai Setoran',
+      catatan: 'Catatan Ustadz'
+    };
+    ['kehadiran', 'rincianSesi', 'hafalan', 'nilai', 'catatan'].forEach(key => {
+      const el = document.getElementById('s-wa-c-' + key);
+      if (el) el.onclick = function() {
+        this.classList.toggle('on');
+        const on = this.classList.contains('on');
+        const label = document.getElementById('s-wa-c-' + key + '-label');
+        if (label) label.textContent = `${contentLabels[key]}: ${on ? 'Aktif' : 'Nonaktif'}`;
+      };
+    });
+
     /* Tab: semua panel tetap berada di DOM supaya nilai yang belum disimpan
        tidak hilang saat berpindah tab, dan satu tombol Simpan tetap bisa
        membaca seluruh field. */
@@ -2622,6 +2673,11 @@ const Admin = (() => {
       ['setoran', 'harian', 'mingguan', 'bulanan'].forEach(key => {
         const el = document.getElementById('s-wa-' + key);
         if (el) db.settings.waAutoTrigger[key] = el.classList.contains('on');
+      });
+      if (!db.settings.waReportContent || typeof db.settings.waReportContent !== 'object') db.settings.waReportContent = {};
+      ['kehadiran', 'rincianSesi', 'hafalan', 'nilai', 'catatan'].forEach(key => {
+        const el = document.getElementById('s-wa-c-' + key);
+        if (el) db.settings.waReportContent[key] = el.classList.contains('on');
       });
       const jamWa = document.getElementById('s-wa-jam');
       if (jamWa) db.settings.waAutoJam = jamWa.value || '07:00';
@@ -2820,6 +2876,7 @@ const Admin = (() => {
         let targetMode = 'admin';
         let customDari = '';
         let customSampai = '';
+        let contentFlags = Object.assign({}, Store.waReportContentSettings());
         const selectedIds = new Set();
         if (santriList[0]) selectedIds.add(santriList[0].id);
         let activePreviewId = santriList[0]?.id || '';
@@ -2864,7 +2921,7 @@ const Admin = (() => {
             </div>
           </div>
 
-          <!-- 2. Tujuan Pengiriman -->
+          <!-- 3. Tujuan Pengiriman -->
           <div class="clay-card pad-sm" style="background:#fefce8;border:1px solid #fef08a">
             <label class="field-label" style="font-weight:600;font-size:12px;color:#854d0e;margin-bottom:6px;display:block">3. Tujuan Pengiriman Uji Coba</label>
             <div style="display:flex;flex-direction:column;gap:8px">
@@ -2888,12 +2945,34 @@ const Admin = (() => {
             </div>
           </div>
 
-          <!-- 3. Dua Kolom: Pilih Santri & Pratinjau Pesan -->
+          <!-- 4. Komponen Isi Pesan (Toggle untuk Uji Coba) -->
+          <div class="clay-card pad-sm" style="background:#f1f5f9;border:1px solid #cbd5e1">
+            <label class="field-label" style="font-weight:600;font-size:12px;color:#334155;margin-bottom:6px;display:block">4. Komponen Informasi yang Diuji (Toggle)</label>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px">
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="checkbox" id="test-wa-c-kehadiran" ${contentFlags.kehadiran ? 'checked' : ''}> Kehadiran
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="checkbox" id="test-wa-c-rincianSesi" ${contentFlags.rincianSesi ? 'checked' : ''}> Rincian Sesi
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="checkbox" id="test-wa-c-hafalan" ${contentFlags.hafalan ? 'checked' : ''}> Capaian &amp; Hafalan
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="checkbox" id="test-wa-c-nilai" ${contentFlags.nilai ? 'checked' : ''}> Nilai
+              </label>
+              <label style="display:flex;align-items:center;gap:5px;cursor:pointer">
+                <input type="checkbox" id="test-wa-c-catatan" ${contentFlags.catatan ? 'checked' : ''}> Catatan Ustadz
+              </label>
+            </div>
+          </div>
+
+          <!-- 5. Dua Kolom: Pilih Santri & Pratinjau Pesan -->
           <div class="row" style="gap:14px;flex-wrap:wrap;align-items:stretch">
             <!-- Kolom Kiri: Pilih Santri -->
             <div style="flex:1;min-width:280px;display:flex;flex-direction:column">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-                <label class="field-label" style="font-weight:600;font-size:12px;margin:0">4. Pilih Santri (<span id="test-wa-selected-badge">1 dipilih</span>)</label>
+                <label class="field-label" style="font-weight:600;font-size:12px;margin:0">5. Pilih Santri (<span id="test-wa-selected-badge">1 dipilih</span>)</label>
                 <div style="display:flex;gap:4px">
                   <button type="button" class="clay-btn sm ghost" id="test-wa-btn-all" style="padding:2px 8px;font-size:11px">Pilih Semua</button>
                   <button type="button" class="clay-btn sm ghost" id="test-wa-btn-none" style="padding:2px 8px;font-size:11px">Kosongkan</button>
@@ -2959,7 +3038,8 @@ const Admin = (() => {
                   santriIds: Array.from(selectedIds),
                   overridePhone: targetMode === 'admin' ? overridePhone : '',
                   dari: preset === 'custom' ? customDari : null,
-                  sampai: preset === 'custom' ? customSampai : null
+                  sampai: preset === 'custom' ? customSampai : null,
+                  contentFlags
                 };
 
                 const res = await Store.waSendTestRecap(payload);
@@ -3097,7 +3177,8 @@ const Admin = (() => {
             preset,
             santriId: activePreviewId,
             dari: preset === 'custom' ? customDari : null,
-            sampai: preset === 'custom' ? customSampai : null
+            sampai: preset === 'custom' ? customSampai : null,
+            contentFlags
           });
 
           if (reqId !== previewReqId) return;
@@ -3199,6 +3280,14 @@ const Admin = (() => {
           renderSantriList();
         };
       }
+
+      ['kehadiran', 'rincianSesi', 'hafalan', 'nilai', 'catatan'].forEach(key => {
+        const cb = modal.querySelector('#test-wa-c-' + key);
+        if (cb) cb.onchange = () => {
+          contentFlags[key] = cb.checked;
+          fetchPreview();
+        };
+      });
 
       if (btnAll) {
         btnAll.onclick = () => {
