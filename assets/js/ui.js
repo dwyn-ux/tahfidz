@@ -22,9 +22,9 @@ const UI = (() => {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
   function safeUrl(s) {
-    const v = String(s == null ? '' : s);
+    const v = String(s == null ? '' : s).trim();
     if (!v) return '';
-    return /^(https?:|data:image\/|\/|\.\/|\.\.\/)/i.test(v) ? v : '';
+    return /^(https?:|data:image\/|\/|\.\/|\.\.\/|uploads\/)/i.test(v) ? v : '';
   }
   function fmtDate(iso) {
     if (!iso) return '-';
@@ -111,31 +111,82 @@ const UI = (() => {
   }
 
   function openKitabViewer(opts) {
-    const url = opts.url || '';
+    const rawUrl = opts.url || '';
+    let finalUrl = safeUrl(rawUrl);
+    if (!finalUrl && rawUrl && !rawUrl.includes(':')) {
+      finalUrl = rawUrl;
+    }
     const title = opts.title || 'Kitab';
     const sub = opts.sub || '';
-    const safePdfUrl = safeUrl(url);
-    const bodyHTML = `
-      <div style="display:flex;flex-direction:column;height:100%;gap:10px">
-        <div class="row" style="justify-content:space-between;align-items:center;background:var(--bg);padding:8px 12px;border-radius:10px;font-size:13px;flex-wrap:wrap;gap:8px">
-          <span class="muted">📖 Gunakan navigasi halaman & fitur zoom pada pembaca PDF untuk mempermudah mengajar.</span>
-          <a href="${esc(safePdfUrl)}" target="_blank" rel="noopener noreferrer" class="clay-btn sm ghost" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">
-            Buka di Tab Baru ↗
-          </a>
+
+    // Popup Fullscreen (layar penuh) dengan tombol ✕ di pojok kanan atas
+    const overlay = el(`
+      <div class="kitab-fullscreen-overlay" role="dialog" aria-modal="true" style="position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,0.88);backdrop-filter:blur(6px);display:flex;flex-direction:column;animation:fadeIn .2s ease">
+        <div class="kitab-fullscreen-header" style="background:var(--card);padding:10px 18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);box-shadow:0 3px 12px rgba(0,0,0,0.08);flex-shrink:0;gap:12px">
+          <div class="row center" style="gap:10px;min-width:0;flex:1">
+            <span style="font-size:24px;flex-shrink:0">📖</span>
+            <div style="min-width:0">
+              <div style="font-weight:700;font-size:16px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(title)}</div>
+              ${sub ? `<div class="muted" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sub)}</div>` : ''}
+            </div>
+          </div>
+          <div class="row center" style="gap:10px;flex-shrink:0">
+            <a href="${esc(finalUrl)}" target="_blank" rel="noopener noreferrer" class="clay-btn sm ghost" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:13px">
+              ⤢ Tab Baru
+            </a>
+            <button class="clay-btn sm ghost btn-kitab-close" type="button" aria-label="Tutup Kitab" style="font-size:20px;font-weight:bold;width:38px;height:38px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;color:var(--text);border:1px solid var(--border);background:var(--bg);cursor:pointer" title="Tutup Kitab (Esc)">
+              ✕
+            </button>
+          </div>
         </div>
-        <div class="kitab-iframe-container" style="flex:1;min-height:65vh;position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#fff">
-          <iframe src="${esc(safePdfUrl)}" style="width:100%;height:100%;border:none;display:block" title="${esc(title)}"></iframe>
+        <div class="kitab-fullscreen-body" style="flex:1;width:100%;height:100%;position:relative;background:#323639;overflow:hidden">
+          <object data="${esc(finalUrl)}#toolbar=1&navpanes=1" type="application/pdf" style="width:100%;height:100%;border:none;display:block">
+            <iframe src="${esc(finalUrl)}" style="width:100%;height:100%;border:none;display:block" title="${esc(title)}">
+              <div style="padding:40px 20px;text-align:center;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%">
+                <div style="font-size:40px;margin-bottom:12px">📖</div>
+                <div style="font-size:18px;font-weight:600;margin-bottom:8px">Pembaca PDF Digital</div>
+                <div style="font-size:14px;color:#cbd5e1;max-width:420px;margin-bottom:20px;line-height:1.6">
+                  Perangkat Anda memerlukan penampil PDF langsung atau dapat dibuka di tab baru.
+                </div>
+                <a href="${esc(finalUrl)}" target="_blank" class="clay-btn primary" style="text-decoration:none;font-size:15px;padding:12px 24px">
+                  Buka File Kitab PDF ↗
+                </a>
+              </div>
+            </iframe>
+          </object>
         </div>
-      </div>`;
-    return openModal({
-      title: '📖 ' + title,
-      sub,
-      cls: 'modal-kitab',
-      bodyHTML,
-      actions: [
-        { label: 'Tutup', cls: 'ghost', onClick: (m, close) => close() }
-      ]
-    });
+      </div>`);
+
+    document.body.appendChild(overlay);
+
+    const modalId = 'kitab_' + Date.now();
+    window.history.pushState(Object.assign({}, window.history.state || {}, { tahfidzModal: modalId }), '', window.location.href);
+
+    let closed = false;
+    function closeViewer(fromHistory = false) {
+      if (closed) return;
+      closed = true;
+      window.removeEventListener('keydown', onKeyDown);
+      overlay.style.opacity = '0';
+      overlay.style.transition = 'opacity .18s ease';
+      setTimeout(() => overlay.remove(), 180);
+      const index = modalStack.findIndex(item => item.id === modalId);
+      if (index !== -1) modalStack.splice(index, 1);
+      if (!fromHistory && window.history.state?.tahfidzModal === modalId) {
+        ignoreNextModalPop = true;
+        window.history.back();
+      }
+    }
+
+    function onKeyDown(e) {
+      if (e.key === 'Escape') closeViewer();
+    }
+    window.addEventListener('keydown', onKeyDown);
+
+    overlay.querySelector('.btn-kitab-close').onclick = () => closeViewer();
+    modalStack.push({ id: modalId, close: () => closeViewer(true) });
+
+    return { close: closeViewer };
   }
 
   function confirmDialog(title, msg, onYes) {
