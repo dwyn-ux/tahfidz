@@ -539,7 +539,7 @@ if (typeof document !== 'undefined' && !document._setoranDetailBound) {
       const setoran = dari && sampai ? Store.setoranRentang(s.id, dari, sampai) : null;
       return {
         no: i + 1, s, hafalan: h, nilai: Store.avgNilai(s.id),
-        hadirSubuh, hadirAshar, hadirMaghrib, hadirIsya, hadirTalim,
+        hadirSubuh, hadirAshar, hadirMaghrib, hadirIsya,
         hadir: totalHadir, totalK, pct,
         setoranAwal: setoran ? setoran.awal : null,
         setoranAkhir: setoran ? setoran.akhir : null,
