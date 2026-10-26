@@ -377,6 +377,46 @@ switch ($action) {
         send($waReminder);
         break;
 
+    /* ---------------- UPLOAD KITAB (admin) ---------------- */
+    case 'upload_kitab':
+        $u = requireAuth();
+        if ($u['role'] !== 'admin') {
+            err('Forbidden: Hanya admin yang dapat mengunggah kitab.', 403);
+        }
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            err('Method not allowed', 405);
+        }
+        if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+            $code = $_FILES['file']['error'] ?? 'missing';
+            err('Gagal mengunggah file (kode error: ' . $code . ')', 400);
+        }
+        $file = $_FILES['file'];
+        if ($file['size'] > 50 * 1024 * 1024) {
+            err('Ukuran file maksimal 50 MB.', 400);
+        }
+        $origName = $file['name'];
+        $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+        if ($ext !== 'pdf') {
+            err('Hanya file PDF yang diperbolehkan.', 400);
+        }
+        $uploadDir = dirname(__DIR__) . '/uploads/kitab';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+        $safeBase = preg_replace('/[^a-zA-Z0-9_\-]/', '_', pathinfo($origName, PATHINFO_FILENAME));
+        $uniqueName = 'kitab_' . time() . '_' . substr(md5(uniqid()), 0, 6) . '_' . substr($safeBase, 0, 30) . '.pdf';
+        $targetPath = $uploadDir . '/' . $uniqueName;
+        if (!move_uploaded_file($file['tmp_name'], $targetPath)) {
+            err('Gagal memindahkan file yang diunggah ke server.', 500);
+        }
+        send([
+            'ok' => true,
+            'url' => 'uploads/kitab/' . $uniqueName,
+            'fileName' => $origName,
+            'fileSize' => $file['size']
+        ]);
+        break;
+
     default:
         err('Unknown action', 404);
 }

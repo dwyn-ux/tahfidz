@@ -15,6 +15,12 @@ api_test/
 *.log
 .vscode/
 
+# Uploads
+uploads/*
+!uploads/kitab/
+uploads/kitab/*
+!uploads/kitab/.gitkeep
+
 powershell.cmd
 powershell.bat
 

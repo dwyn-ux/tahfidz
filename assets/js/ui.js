@@ -47,7 +47,7 @@ const UI = (() => {
   function openModal(opts) {
     const root = document.getElementById('modal-root');
     const overlay = el(`<div class="modal-overlay"></div>`);
-    const modal = el(`<div class="modal"></div>`);
+    const modal = el(`<div class="modal ${opts.cls || ''}"></div>`);
     modal.innerHTML = `
       <h3>${esc(opts.title || '')}</h3>
       ${opts.sub ? `<div class="modal-sub">${esc(opts.sub)}</div>` : ''}
@@ -110,6 +110,34 @@ const UI = (() => {
     return { modal, close };
   }
 
+  function openKitabViewer(opts) {
+    const url = opts.url || '';
+    const title = opts.title || 'Kitab';
+    const sub = opts.sub || '';
+    const safePdfUrl = safeUrl(url);
+    const bodyHTML = `
+      <div style="display:flex;flex-direction:column;height:100%;gap:10px">
+        <div class="row" style="justify-content:space-between;align-items:center;background:var(--bg);padding:8px 12px;border-radius:10px;font-size:13px;flex-wrap:wrap;gap:8px">
+          <span class="muted">📖 Gunakan navigasi halaman & fitur zoom pada pembaca PDF untuk mempermudah mengajar.</span>
+          <a href="${esc(safePdfUrl)}" target="_blank" rel="noopener noreferrer" class="clay-btn sm ghost" style="text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+            Buka di Tab Baru ↗
+          </a>
+        </div>
+        <div class="kitab-iframe-container" style="flex:1;min-height:65vh;position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#fff">
+          <iframe src="${esc(safePdfUrl)}" style="width:100%;height:100%;border:none;display:block" title="${esc(title)}"></iframe>
+        </div>
+      </div>`;
+    return openModal({
+      title: '📖 ' + title,
+      sub,
+      cls: 'modal-kitab',
+      bodyHTML,
+      actions: [
+        { label: 'Tutup', cls: 'ghost', onClick: (m, close) => close() }
+      ]
+    });
+  }
+
   function confirmDialog(title, msg, onYes) {
     openModal({
       title, sub: msg,
@@ -139,5 +167,5 @@ const UI = (() => {
     return `<datalist id="dl-surah">${SURAHS.map(s => `<option value="${s.n}. ${s.latin}">${s.n}. ${s.latin} (${s.arab})</option>`).join('')}</datalist>`;
   }
 
-  return { el, esc, safeUrl, fmtDate, fmtDateTime, toast, openModal, confirmDialog, field, optionsFromList, surahOptions };
+  return { el, esc, safeUrl, fmtDate, fmtDateTime, toast, openModal, confirmDialog, openKitabViewer, field, optionsFromList, surahOptions };
 })();

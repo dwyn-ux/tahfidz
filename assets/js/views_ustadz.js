@@ -454,7 +454,8 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
 
   function absensi(initialSesi = '') {
     const c = ctx(); _scope = c.scope;
-    const isTalim = initialSesi === 'Ta’lim Malam';
+    const isTalimSession = (s) => (s === 'Ta’lim Malam' || s === "Ta'lim Malam");
+    let isTalim = isTalimSession(initialSesi);
     // Tanpa sesi dari pemanggil: pilih sesi dari jam sekarang, sehingga tombol
     // Absensi di dashboard langsung membuka sesi yang sedang berjalan.
     // Sesi yang dipilih sistem ini hanya nilai awal — ustadz tetap bebas
@@ -509,7 +510,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     function rosterForFilter() {
       // Mode ta'lim: filter santri berdasarkan kelas (tingkat + kelas pendidikan)
       // yang sedang dicentang, bisa lebih dari satu kelas.
-      if (isTalim) {
+      if (isTalimSession(sesiAktif)) {
         if (!kelasFilters.size) return allSantri; // kosong = semua santri
         return allSantri.filter(s => kelasFilters.has(Store.talimClassKey(Store.tingkatForSantri(s), Store.kelasForSantri(s))));
       }
@@ -535,8 +536,28 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       const self = selfRecord();
       const isLibur = self && self.status === 'Libur';
 
+      const isTalimNow = isTalimSession(sesiAktif);
+      let countHadir = 0, countIzin = 0, countSakit = 0, countAlfa = 0, countLibur = 0;
+      santri.forEach(s => {
+        const cur = pendingStatus[s.id] || existing[s.id] || '';
+        if (cur === 'Hadir') countHadir++;
+        else if (cur === 'Izin') countIzin++;
+        else if (cur === 'Sakit') countSakit++;
+        else if (cur === 'Libur') countLibur++;
+        else countAlfa++;
+      });
+
       const rows = santri.map(s => {
         const cur = pendingStatus[s.id] || existing[s.id] || '';
+        let badgeHtml = '';
+        if (cur) {
+          badgeHtml = `<span class="badge ${statusBadgeClass(cur)}">${UI.esc(cur)}</span>`;
+        } else if (isTalimNow) {
+          badgeHtml = `<span class="badge danger" style="opacity:0.85;background:#fee2e2;color:#b91c1c;border:1px dashed #f87171" title="Otomatis tercatat Alfa jika tidak dicentang Hadir">Alfa (Otomatis)</span>`;
+        } else {
+          badgeHtml = `<span class="muted">Belum dipilih</span>`;
+        }
+
         return `<tr data-id="${s.id}">
           <td><b>${UI.esc(s.nama)}</b></td>
           <td>
@@ -548,9 +569,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
               <button class="clay-btn sm ${cur === 'Libur' ? '' : 'ghost'}" data-st="Libur" style="${cur === 'Libur' ? 'background:#a855f7;color:#fff' : ''}" ${isEditing ? '' : 'disabled'}> Libur</button>
             </div>
           </td>
-          <td>${cur
-            ? `<span class="badge ${statusBadgeClass(cur)}">${UI.esc(cur)}</span>`
-            : '<span class="muted">Belum dipilih</span>'}</td>
+          <td>${badgeHtml}</td>
         </tr>`;
       }).join('');
 
@@ -653,8 +672,28 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
               <input class="clay-input" id="abs-search" type="search" placeholder="Nama atau NIS santri">
             </div>
           </div>
+          ${isTalimNow ? `
+          <div class="clay-card pad-sm" style="background:var(--bg);margin-top:12px;margin-bottom:12px">
+            <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+              <div class="row center" style="gap:6px;flex-wrap:wrap;font-size:13px">
+                <span class="muted">Ringkasan:</span>
+                <span class="badge green">✓ ${countHadir} Hadir</span>
+                <span class="badge" style="background:#FACC15;color:#000">${countIzin} Izin</span>
+                <span class="badge secondary">${countSakit} Sakit</span>
+                <span class="badge danger">${countAlfa} Alfa</span>
+                <span class="muted" style="font-size:12px">(Total ${santri.length} Santri)</span>
+              </div>
+              <div class="row" style="gap:6px">
+                <button class="clay-btn sm ghost" type="button" id="btn-talim-all-hadir" ${isEditing ? '' : 'disabled'}>✓ Centang Semua Hadir</button>
+                <button class="clay-btn sm ghost" type="button" id="btn-talim-clear-hadir" ${isEditing ? '' : 'disabled'}>✕ Kosongkan Centang</button>
+              </div>
+            </div>
+            <div class="muted" style="font-size:12px;margin-top:6px">
+              💡 <b>Alur Ceklis Ta'lim:</b> Santri yang dicentang berstatus <b>Hadir</b>. Santri yang tidak dicentang otomatis disimpan sebagai <b>Alfa</b>.
+            </div>
+          </div>` : ''}
           <div class="table-wrap mt"><table class="clay-table">
-            <thead><tr><th>Santri</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Santri</th><th>Status</th><th>Keterangan</th></tr></thead>
             <tbody id="abs-body">${rows || `<tr><td colspan="3"><div class="empty">Santri tidak ditemukan.</div></td></tr>`}</tbody>
           </table></div>
         </div>`;
@@ -726,17 +765,43 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       Shared.bindSearchInput(searchInput, () => { searchTerm = searchInput.value; applySearch(); });
       applySearch();
 
+      const btnAllHadir = document.getElementById('btn-talim-all-hadir');
+      if (btnAllHadir) {
+        btnAllHadir.onclick = () => {
+          if (!isEditing) return;
+          roster.forEach(s => {
+            if (pendingStatus[s.id] !== 'Izin' && pendingStatus[s.id] !== 'Sakit') {
+              pendingStatus[s.id] = 'Hadir';
+            }
+          });
+          renderAbsensi();
+        };
+      }
+      const btnClearHadir = document.getElementById('btn-talim-clear-hadir');
+      if (btnClearHadir) {
+        btnClearHadir.onclick = () => {
+          if (!isEditing) return;
+          roster.forEach(s => {
+            if (pendingStatus[s.id] === 'Hadir') {
+              delete pendingStatus[s.id];
+            }
+          });
+          renderAbsensi();
+        };
+      }
+
       document.querySelectorAll('#abs-body tr[data-id]').forEach(tr => {
         const id = tr.dataset.id;
         tr.querySelectorAll('button[data-st]').forEach(btn => {
           btn.onclick = () => {
             if (!isEditing) return;
-            pendingStatus[id] = btn.dataset.st;
-            tr.querySelectorAll('button[data-st]').forEach(b => paintStatusButton(b, ''));
-            paintStatusButton(btn, btn.dataset.st);
-            const badge = tr.querySelector('td:last-child span');
-            badge.className = 'badge ' + statusBadgeClass(btn.dataset.st);
-            badge.textContent = btn.dataset.st;
+            const targetSt = btn.dataset.st;
+            if (isTalimNow && targetSt === 'Hadir' && (pendingStatus[id] === 'Hadir' || (!pendingStatus[id] && existing[id] === 'Hadir'))) {
+              pendingStatus[id] = 'Alfa';
+            } else {
+              pendingStatus[id] = targetSt;
+            }
+            renderAbsensi();
           };
         });
       });
@@ -782,12 +847,13 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       if (saveButton) saveButton.onclick = async () => {
         const db = Store.get();
         const t = Store.todayStr();
-        // Pencarian hanya menyaring tampilan. Hanya santri yang statusnya
-        // dipilih yang mendapatkan catatan; tidak ada lagi default Hadir.
         const allState = {};
         roster.forEach(s => {
           const previous = sessionRecords.find(k => k.santriId === s.id);
-          const status = pendingStatus[s.id] || (previous ? previous.status : '');
+          let status = pendingStatus[s.id] || (previous ? previous.status : '');
+          if (isTalimNow && !status) {
+            status = 'Alfa';
+          }
           if (status) allState[s.id] = status;
         });
         // Hanya baris milik ustadz ini yang diganti, supaya catatan ustadz
@@ -814,7 +880,17 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           });
         });
         if (!await Store.save()) return;
-        Store.log('Input absensi ' + sesiAktif); UI.toast('Absensi ' + sesiAktif + ' tersimpan', 'success');
+        Store.log('Input absensi ' + sesiAktif);
+        if (isTalimNow) {
+          const stats = Object.values(allState);
+          const h = stats.filter(x => x === 'Hadir').length;
+          const i = stats.filter(x => x === 'Izin').length;
+          const sk = stats.filter(x => x === 'Sakit').length;
+          const a = stats.filter(x => x === 'Alfa').length;
+          UI.toast(`Absensi ${sesiAktif} tersimpan: ${h} Hadir, ${i} Izin, ${sk} Sakit, ${a} Alfa`, 'success');
+        } else {
+          UI.toast('Absensi ' + sesiAktif + ' tersimpan', 'success');
+        }
         editing = null;
         pendingStatus = {};
         renderAbsensi();
@@ -856,7 +932,36 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       <td>${UI.esc(j.pembahasan)}</td><td>${UI.esc(j.halaman)}</td>
       <td><button class="clay-btn sm ghost" type="button" data-continue-talim="${UI.esc(j.id)}">Lanjutkan</button></td>
     </tr>`).join('');
+    const allMapel = Store.talimMapel();
+    const myAssignments = Store.talimAssignmentsForUstadz(myUstadz);
+    const myMapelIds = new Set(myAssignments.map(a => a.mapel.id));
+    const mapelWithKitab = allMapel.filter(m => m.kitabUrl || m.kitabNama);
+    const kitabCardsHTML = mapelWithKitab.length ? mapelWithKitab.map(m => {
+      const isMine = myMapelIds.has(m.id);
+      const sizeStr = m.kitabSize ? ` · ${(m.kitabSize / (1024 * 1024)).toFixed(1)} MB` : '';
+      return `
+        <div class="clay-card pad-sm" style="flex:1 1 240px;max-width:340px;background:var(--bg)">
+          <div class="row" style="justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-size:12px;color:var(--text-soft);font-weight:600">${UI.esc(m.nama)}${isMine ? ' · <span class="badge green" style="font-size:10px;padding:2px 5px">Diajar</span>' : ''}</div>
+              <div style="font-weight:bold;margin-top:2px;font-size:14px">📖 ${UI.esc(m.kitabNama || m.nama)}</div>
+              <div class="muted" style="font-size:11px;margin-top:2px">Format PDF${sizeStr}</div>
+            </div>
+            ${m.kitabUrl ? `<button class="clay-btn sm primary" type="button" data-buka-kitab="${UI.esc(m.id)}">📖 Baca</button>` : ''}
+          </div>
+        </div>`;
+    }).join('') : '<div class="muted" style="font-size:13px">Belum ada file kitab yang diunggah oleh admin di menu Ta’lim.</div>';
+
     document.getElementById('view-content').innerHTML = `
+      <div class="clay-card mb">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+          <div>
+            <div class="section-title" style="margin:0">📖 Kitab Pegangan Ta’lim</div>
+            <div class="muted" style="font-size:12px;margin-top:2px">Akses dan baca materi kitab langsung dari web untuk mempermudah saat mengajar.</div>
+          </div>
+        </div>
+        <div class="row" style="gap:10px;flex-wrap:wrap">${kitabCardsHTML}</div>
+      </div>
       <div class="clay-card">
         <div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap">
           <div><div class="section-title" style="margin:0">Jurnal Kemajuan Ta’lim Malam</div><div class="muted" style="font-size:13px">Gunakan tombol Lanjutkan pada histori untuk memakai data jurnal sebelumnya.</div></div>
@@ -871,6 +976,18 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       btn.onclick = () => {
         const journal = journals.find(j => j.id === btn.dataset.continueTalim);
         if (journal) talimForm(journal);
+      };
+    });
+    document.querySelectorAll('[data-buka-kitab]').forEach(btn => {
+      btn.onclick = () => {
+        const item = Store.findTalimMapel(btn.dataset.bukaKitab);
+        if (item && item.kitabUrl) {
+          UI.openKitabViewer({
+            title: item.kitabNama || item.nama,
+            sub: 'Mapel: ' + item.nama,
+            url: item.kitabUrl
+          });
+        }
       };
     });
   }
@@ -898,7 +1015,11 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         : `<input class="clay-input" value="${UI.esc(currentUstadz?.nama || 'Ustadz')}" disabled>`)}
       ${UI.field('Mapel', `<select class="clay-select" id="f-talim-mapel"></select>`)}
       ${UI.field('Tingkat & Kelas', `<select class="clay-select" id="f-talim-kelas"></select><div class="muted" id="f-talim-assignment-info" style="font-size:12px;margin-top:4px"></div>`)}
-      ${UI.field('Judul Kitab', `<input class="clay-input" id="f-talim-kitab" placeholder="Contoh: Riyadhus Shalihin" value="${UI.esc(source.judulKitab || malamDefaults.judulKitab)}">`)}
+      ${UI.field('Judul Kitab', `
+        <div class="row" style="gap:8px">
+          <input class="clay-input" id="f-talim-kitab" placeholder="Contoh: Riyadhus Shalihin" value="${UI.esc(source.judulKitab || malamDefaults.judulKitab)}" style="flex:1">
+          <button class="clay-btn sm secondary" type="button" id="btn-talim-buka-kitab-form" style="display:none;white-space:nowrap">📖 Buka Kitab</button>
+        </div>`)}
       ${UI.field('Bab', `<input class="clay-input" id="f-talim-bab" placeholder="Contoh: Bab Keikhlasan" value="${UI.esc(source.bab || malamDefaults.bab)}">`)}
       ${UI.field('Pembahasan', `<textarea class="clay-textarea" id="f-talim-bahas" placeholder="Ringkasan materi yang dibahas">${UI.esc(source.pembahasan || '')}</textarea>`)}
       ${UI.field('Halaman', `<input class="clay-input" id="f-talim-halaman" placeholder="Contoh: 12–15" value="${UI.esc(source.halaman || '')}">`)}`;
@@ -960,6 +1081,28 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       info.textContent = disabled
         ? 'Belum ada penugasan Ta’lim untuk ustadz ini. Minta admin mengatur mapel dan kelas di Settings → Ta’lim.'
         : 'Pilihan hanya menampilkan mapel dan kelas yang ditugaskan admin.';
+
+      const currentMapelObj = Store.findTalimMapel(mapelSelect.value);
+      const btnBukaKitab = modal.modal.querySelector('#btn-talim-buka-kitab-form');
+      const kitabInput = modal.modal.querySelector('#f-talim-kitab');
+      if (currentMapelObj && currentMapelObj.kitabUrl) {
+        if (btnBukaKitab) {
+          btnBukaKitab.style.display = 'inline-flex';
+          btnBukaKitab.textContent = '📖 Buka Kitab (' + (currentMapelObj.kitabNama || currentMapelObj.nama) + ')';
+          btnBukaKitab.onclick = () => {
+            UI.openKitabViewer({
+              title: currentMapelObj.kitabNama || currentMapelObj.nama,
+              sub: 'Mapel: ' + currentMapelObj.nama,
+              url: currentMapelObj.kitabUrl
+            });
+          };
+        }
+        if (!sourceJournal && currentMapelObj.kitabNama && (!kitabInput.value || kitabInput.value === malamDefaults.judulKitab)) {
+          kitabInput.value = currentMapelObj.kitabNama;
+        }
+      } else if (btnBukaKitab) {
+        btnBukaKitab.style.display = 'none';
+      }
     };
     if (isAdmin) modal.modal.querySelector('#f-talim-ustadz').onchange = renderTalimChoices;
     modal.modal.querySelector('#f-talim-mapel').onchange = renderTalimChoices;

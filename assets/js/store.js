@@ -590,7 +590,13 @@ const Store = (() => {
     }
     if (!Array.isArray(settings.talimMapel)) settings.talimMapel = [];
     settings.talimMapel = settings.talimMapel.filter(item => item && item.id && item.nama)
-      .map(item => ({ id: item.id, nama: String(item.nama) }));
+      .map(item => ({
+        id: item.id,
+        nama: String(item.nama),
+        kitabNama: item.kitabNama ? String(item.kitabNama) : '',
+        kitabUrl: item.kitabUrl ? String(item.kitabUrl) : '',
+        kitabSize: Number(item.kitabSize) || 0
+      }));
     if (!settings.talimMalam || typeof settings.talimMalam !== 'object' || Array.isArray(settings.talimMalam)) settings.talimMalam = {};
     settings.talimMalam.ustadzIds = Array.isArray(settings.talimMalam.ustadzIds) ? settings.talimMalam.ustadzIds.filter(Boolean) : [];
     settings.talimMalam.judulKitab = String(settings.talimMalam.judulKitab || '');
@@ -730,6 +736,27 @@ const Store = (() => {
 
   function educationLabel(santri) {
     return kelasLabel(tingkatForSantri(santri), kelasForSantri(santri));
+  }
+
+  async function uploadKitab(file) {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const fd = new FormData();
+    fd.append('file', file);
+    const headers = {};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    const res = await fetch(API_BASE + '?action=upload_kitab', {
+      method: 'POST',
+      headers,
+      body: fd
+    });
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+    if (!res.ok) {
+      const msg = (data && data.error) ? data.error : ('Gagal upload (HTTP ' + res.status + ')');
+      throw new Error(msg);
+    }
+    return data;
   }
 
   function talimMapel() {
@@ -1311,7 +1338,7 @@ const Store = (() => {
     activeProgramsForSantri, halaqahForSantriProgram, halaqahForSantri, santriHasProgram, santriHasHalaqah, programsForSantriHalaqah, configureSantriPrograms, programSummaryForSantri, halaqahSummaryForSantri,
     tingkatOptions, kelasOptions, tingkatForSantri, kelasForSantri, normalizeSantriEducation, kelasLabel, educationLabel,
     simpanTingkat, hapusTingkat, simpanKelas, hapusKelas, tingkatAda, kelasDipakaiDiTalim, jumlahSantriKelas, naturalKelasSort,
-    talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
+    uploadKitab, talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
     waSend, waLog, waReady, waAutoEnabled, waSendWali, waNomorWali, waStatus, waQrDataUrl, waLogServer,
     waAutoTriggerSettings, waAutoHour, waAutoReminder, waAbsensiMessage,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,

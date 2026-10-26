@@ -1875,14 +1875,15 @@ const Admin = (() => {
   function talimPanelHtml() {
     return `
       <div class="clay-card mb">
-        <div class="section-title">Mata Pelajaran Ta’lim</div>
-        <div class="muted" style="font-size:12px;margin-bottom:10px">Tambahkan mapel yang tersedia di Ta’lim. Satu mapel dapat diajar oleh beberapa ustadz.</div>
-        <div class="row">
-          <input class="clay-input" id="talim-mapel-nama" placeholder="Contoh: Fiqih">
-          <button class="clay-btn secondary" id="btn-talim-add-mapel" type="button">+ Tambah Mapel</button>
+        <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+          <div>
+            <div class="section-title" style="margin:0">Mata Pelajaran & Kitab Ta’lim</div>
+            <div class="muted" style="font-size:12px;margin-top:2px">Kelola mata pelajaran dan upload file PDF kitab pegangan santri & ustadz.</div>
+          </div>
+          <button class="clay-btn primary" id="btn-talim-modal-add" type="button">+ Tambah Mapel & Kitab</button>
         </div>
         <div class="table-wrap mt"><table class="clay-table">
-          <thead><tr><th>Mapel</th><th>Jumlah Ustadz</th><th>Aksi</th></tr></thead>
+          <thead><tr><th>Mapel</th><th>Kitab Pegangan</th><th>Pengajar</th><th>Aksi</th></tr></thead>
           <tbody id="talim-mapel-list"></tbody>
         </table></div>
       </div>
@@ -1949,9 +1950,25 @@ const Admin = (() => {
 
     const mapelRows = mapel.map(item => {
       const pengajar = currentDb.ustadz.filter(u => Store.talimAssignmentsForUstadz(u).some(a => a.mapel.id === item.id)).length;
-      return `<tr><td><b>${UI.esc(item.nama)}</b></td><td>${pengajar} ustadz</td><td><button class="clay-btn sm danger" type="button" data-del-talim-mapel="${UI.esc(item.id)}">Hapus</button></td></tr>`;
+      const sizeBadge = item.kitabSize ? ` <span class="badge blue" style="font-size:11px">${(item.kitabSize / (1024 * 1024)).toFixed(1)} MB</span>` : '';
+      const kitabDisplay = item.kitabUrl ? `
+        <div class="row center" style="gap:6px;flex-wrap:wrap">
+          <b>📖 ${UI.esc(item.kitabNama || 'Kitab PDF')}</b>${sizeBadge}
+          <button class="clay-btn sm ghost" type="button" data-read-kitab="${UI.esc(item.id)}">📖 Baca</button>
+        </div>` : `<span class="muted" style="font-size:12px">Belum ada file kitab</span>`;
+      return `<tr>
+        <td><b>${UI.esc(item.nama)}</b></td>
+        <td>${kitabDisplay}</td>
+        <td>${pengajar} ustadz</td>
+        <td>
+          <div class="row" style="gap:4px">
+            <button class="clay-btn sm ghost" type="button" data-edit-talim-mapel="${UI.esc(item.id)}">✏ Edit</button>
+            <button class="clay-btn sm danger ghost" type="button" data-del-talim-mapel="${UI.esc(item.id)}">Hapus</button>
+          </div>
+        </td>
+      </tr>`;
     }).join('');
-    document.getElementById('talim-mapel-list').innerHTML = mapelRows || '<tr><td colspan="3"><div class="empty">Belum ada mapel.</div></td></tr>';
+    document.getElementById('talim-mapel-list').innerHTML = mapelRows || '<tr><td colspan="4"><div class="empty">Belum ada mapel.</div></td></tr>';
 
     const assignmentRows = ustadz.flatMap(u => Store.talimAssignmentsForUstadz(u).map(item => `<tr>
       <td>${UI.esc(u.nama)}</td><td>${UI.esc(item.mapel.nama)}</td><td>${UI.esc(item.kelasKeys.map(Store.talimClassLabel).join(', ') || '-')}</td>
@@ -1986,22 +2003,126 @@ const Admin = (() => {
       });
     });
   };
-  document.getElementById('btn-talim-add-mapel').onclick = () => {
-    const input = document.getElementById('talim-mapel-nama');
-    const nama = input.value.trim();
-    if (!nama) { UI.toast('Nama mapel wajib diisi', 'error'); return; }
-    const data = Store.get();
-    data.settings.talimMapel = Array.isArray(data.settings.talimMapel) ? data.settings.talimMapel : [];
-    if (data.settings.talimMapel.some(item => item.nama.toLowerCase() === nama.toLowerCase())) {
-      UI.toast('Mapel sudah ada', 'error'); return;
+  function openMapelKitabModal(mapelItem = null) {
+    const isEdit = !!mapelItem;
+    const body = `
+      ${UI.field('Nama Mapel', `<input class="clay-input" id="m-mapel-nama" placeholder="Contoh: Fiqih" value="${UI.esc(mapelItem?.nama || '')}">`)}
+      ${UI.field('Nama Kitab Pegangan', `<input class="clay-input" id="m-kitab-nama" placeholder="Contoh: Safinatun Najah" value="${UI.esc(mapelItem?.kitabNama || '')}">`)}
+      <div style="margin-top:12px">
+        <label class="field-label">File PDF Kitab</label>
+        ${mapelItem?.kitabUrl ? `
+          <div class="clay-card pad-sm" style="margin-bottom:8px;background:var(--bg)">
+            <div class="row" style="justify-content:space-between;align-items:center">
+              <div>
+                <b>📖 ${UI.esc(mapelItem.kitabNama || 'Kitab PDF')}</b>
+                <div class="muted" style="font-size:11px">${mapelItem.kitabSize ? (mapelItem.kitabSize / (1024 * 1024)).toFixed(1) + ' MB' : 'File tersimpan'}</div>
+              </div>
+              <button class="clay-btn sm ghost" type="button" id="btn-preview-existing-kitab">📖 Baca Kitab</button>
+            </div>
+          </div>` : ''}
+        <input class="clay-input" type="file" id="m-kitab-file" accept=".pdf">
+        <div class="muted" style="font-size:11px;margin-top:4px">Upload file PDF (maksimal 50 MB) untuk diakses langsung oleh ustadz saat mengajar. ${isEdit && mapelItem?.kitabUrl ? 'Biarkan kosong jika tidak ingin mengganti file.' : ''}</div>
+      </div>`;
+
+    const m = UI.openModal({
+      title: isEdit ? 'Edit Mapel & Kitab Ta’lim' : 'Tambah Mapel & Kitab Ta’lim',
+      bodyHTML: body,
+      actions: [
+        { label: 'Batal', cls: 'ghost', onClick: (modal, close) => close() },
+        { label: isEdit ? 'Simpan Perubahan' : 'Tambah Mapel', cls: 'primary', onClick: async (modal, close) => {
+          const namaInput = modal.querySelector('#m-mapel-nama').value.trim();
+          const kitabNamaInput = modal.querySelector('#m-kitab-nama').value.trim();
+          const fileInput = modal.querySelector('#m-kitab-file');
+          const file = fileInput?.files?.[0];
+
+          if (!namaInput) { UI.toast('Nama mapel wajib diisi', 'error'); return; }
+
+          const data = Store.get();
+          data.settings.talimMapel = Array.isArray(data.settings.talimMapel) ? data.settings.talimMapel : [];
+
+          const dup = data.settings.talimMapel.some(item => item.id !== mapelItem?.id && item.nama.toLowerCase() === namaInput.toLowerCase());
+          if (dup) { UI.toast('Nama mapel sudah digunakan', 'error'); return; }
+
+          let kitabUrl = mapelItem?.kitabUrl || '';
+          let kitabSize = mapelItem?.kitabSize || 0;
+
+          if (file) {
+            UI.toast('Mengunggah file kitab...', 'info');
+            try {
+              const uploadRes = await Store.uploadKitab(file);
+              kitabUrl = uploadRes.url;
+              kitabSize = uploadRes.fileSize || file.size;
+            } catch (err) {
+              UI.toast('Gagal mengunggah file: ' + err.message, 'error');
+              return;
+            }
+          }
+
+          const targetKitabNama = kitabNamaInput || (file ? file.name.replace(/\.[^/.]+$/, '') : (mapelItem?.kitabNama || ''));
+
+          if (isEdit) {
+            const idx = data.settings.talimMapel.findIndex(item => item.id === mapelItem.id);
+            if (idx !== -1) {
+              data.settings.talimMapel[idx].nama = namaInput;
+              data.settings.talimMapel[idx].kitabNama = targetKitabNama;
+              data.settings.talimMapel[idx].kitabUrl = kitabUrl;
+              data.settings.talimMapel[idx].kitabSize = kitabSize;
+            }
+          } else {
+            data.settings.talimMapel.push({
+              id: Store.uid('mapel'),
+              nama: namaInput,
+              kitabNama: targetKitabNama,
+              kitabUrl,
+              kitabSize
+            });
+          }
+
+          if (await Store.save()) {
+            UI.toast(isEdit ? 'Mapel & Kitab diperbarui' : 'Mapel & Kitab ditambahkan', 'success');
+            close();
+            renderTalimSettings({ mapelId: mapelItem?.id });
+          }
+        }}
+      ]
+    });
+
+    if (mapelItem?.kitabUrl) {
+      const prevBtn = m.modal.querySelector('#btn-preview-existing-kitab');
+      if (prevBtn) {
+        prevBtn.onclick = () => {
+          UI.openKitabViewer({
+            title: mapelItem.kitabNama || mapelItem.nama,
+            sub: 'Mapel: ' + mapelItem.nama,
+            url: mapelItem.kitabUrl
+          });
+        };
+      }
     }
-    const newMapel = { id: Store.uid('mapel'), nama };
-    data.settings.talimMapel.push(newMapel);
-    input.value = '';
-    Store.save();
-    renderTalimSettings({ mapelId: newMapel.id });
-    UI.toast('Mapel ditambahkan', 'success');
-  };
+  }
+
+  const btnModalAdd = document.getElementById('btn-talim-modal-add');
+  if (btnModalAdd) btnModalAdd.onclick = () => openMapelKitabModal();
+
+  document.querySelectorAll('[data-read-kitab]').forEach(btn => {
+    btn.onclick = () => {
+      const item = Store.findTalimMapel(btn.dataset.readKitab);
+      if (item && item.kitabUrl) {
+        UI.openKitabViewer({
+          title: item.kitabNama || item.nama,
+          sub: 'Mapel: ' + item.nama,
+          url: item.kitabUrl
+        });
+      }
+    };
+  });
+
+  document.querySelectorAll('[data-edit-talim-mapel]').forEach(btn => {
+    btn.onclick = () => {
+      const item = Store.findTalimMapel(btn.dataset.editTalimMapel);
+      if (item) openMapelKitabModal(item);
+    };
+  });
   document.getElementById('btn-talim-save-assignment').onclick = () => {
     const ustadzId = document.getElementById('talim-ustadz').value;
     const mapelId = document.getElementById('talim-mapel').value;

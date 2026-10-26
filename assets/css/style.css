@@ -281,6 +281,27 @@ label.field-label { display: block; font-size: 13px; font-weight: 600; margin: 1
 .setoran-quran-btn { margin-top: 4px; }
 .setoran-quran-popup { max-height: 62vh; overflow: auto; padding-right: 4px; }
 
+/* Modal Kitab Viewer */
+.modal.modal-kitab {
+  max-width: 1050px;
+  width: 95vw;
+  height: 92vh;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px;
+}
+.modal.modal-kitab .modal-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding-right: 0;
+}
+.modal.modal-kitab .modal-actions {
+  margin-top: 10px;
+}
+
 /* ---------- Toast ---------- */
 .toast {
   background: var(--card); border-radius: var(--radius-md); box-shadow: var(--shadow-clay);
