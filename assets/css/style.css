@@ -122,6 +122,8 @@ h1, h2, h3, h4, .brand { font-family: 'Poppins', sans-serif; }
 .clay-btn.primary { background: var(--primary); color: #fff; }
 .clay-btn.secondary { background: var(--secondary); color: #fff; }
 .clay-btn.danger { background: var(--danger); color: #fff; }
+.clay-btn.danger.ghost { background: #fef2f2 !important; color: var(--danger) !important; border: 1px solid #fca5a5 !important; }
+.clay-btn.danger.ghost:hover { background: #fee2e2 !important; color: #b91c1c !important; }
 .clay-btn.ghost { background: var(--bg); }
 .clay-btn.sm { padding: 8px 14px; font-size: 13px; }
 
