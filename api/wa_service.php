@@ -322,26 +322,48 @@ function waFormatMingguan(array $santri, array $rekap, array $periode, string $l
         return $tgl >= $periode['dari'] && $tgl <= $periode['sampai'];
     }));
 
+    usort($setoranPekan, function($a, $b) {
+        $tA = (string)($a['tanggal'] ?? '');
+        $tB = (string)($b['tanggal'] ?? '');
+        if ($tA !== $tB) return strcmp($tA, $tB);
+        $cA = (int)($a['_created'] ?? 0);
+        $cB = (int)($b['_created'] ?? 0);
+        if ($cA !== $cB) return $cA <=> $cB;
+        return strcmp((string)($a['id'] ?? ''), (string)($b['id'] ?? ''));
+    });
+
     $jmlSetor = count($setoranPekan);
     if ($jmlSetor > 0) {
         $frekStr = $jmlSetor . ' Kali';
         $totalNilai = 0;
         $validNilai = 0;
+        $firstSetoran = $setoranPekan[0];
         $lastSetoran = end($setoranPekan);
         foreach ($setoranPekan as $item) {
             $val = (int)($item['nilai'] ?? 0);
             if ($val > 0) { $totalNilai += $val; $validNilai++; }
         }
-        $avgNilai = $validNilai > 0 ? (round($totalNilai / $validNilai) . ' (Baik)') : '-';
+        if ($validNilai > 0) {
+            $avg = round($totalNilai / $validNilai);
+            $ket = $avg >= 90 ? 'Amat Baik' : ($avg >= 80 ? 'Baik' : ($avg >= 70 ? 'Cukup' : 'Perlu Ditingkatkan'));
+            $avgNilai = $avg . ' (' . $ket . ')';
+        } else {
+            $avgNilai = '-';
+        }
+
+        $sA = (int)($firstSetoran['sAwal'] ?? 2);
+        $aA = (int)($firstSetoran['aAwal'] ?? 1);
+        $posAwalStr = 'Surat ' . waSurahLatin($sA) . ' Ayat ' . $aA;
 
         $sK = (int)($lastSetoran['sAkhir'] ?? 2);
         $aK = (int)($lastSetoran['aAkhir'] ?? 1);
-        $posStr = 'Surat ' . waSurahLatin($sK) . ' Ayat ' . $aK;
+        $posAkhirStr = 'Surat ' . waSurahLatin($sK) . ' Ayat ' . $aK;
         $capaianStr = $jmlSetor . ' Setoran tercatat';
     } else {
         $frekStr = 'Belum ada setoran pekan ini';
         $capaianStr = '-';
-        $posStr = '-';
+        $posAwalStr = '-';
+        $posAkhirStr = '-';
         $avgNilai = '-';
     }
 
@@ -359,7 +381,8 @@ function waFormatMingguan(array $santri, array $rekap, array $periode, string $l
         . "*Capaian Tahfidz Pekan Ini*\n"
         . "Frekuensi Setor : {$frekStr}\n"
         . "Capaian Pekan   : {$capaianStr}\n"
-        . "Posisi Terakhir : {$posStr}\n"
+        . "Posisi Awal : {$posAwalStr}\n"
+        . "Posisi Terakhir : {$posAkhirStr}\n"
         . "Rata-rata Nilai : {$avgNilai}\n\n"
         . "Demikian Laporan Mingguan kami sampaikan sebagai bahan evaluasi bersama dalam mendampingi ananda. Amiin";
 }
@@ -386,24 +409,46 @@ function waFormatBulanan(array $santri, array $rekap, array $periode, string $le
         return $tgl >= $periode['dari'] && $tgl <= $periode['sampai'];
     }));
 
+    usort($setoranBulan, function($a, $b) {
+        $tA = (string)($a['tanggal'] ?? '');
+        $tB = (string)($b['tanggal'] ?? '');
+        if ($tA !== $tB) return strcmp($tA, $tB);
+        $cA = (int)($a['_created'] ?? 0);
+        $cB = (int)($b['_created'] ?? 0);
+        if ($cA !== $cB) return $cA <=> $cB;
+        return strcmp((string)($a['id'] ?? ''), (string)($b['id'] ?? ''));
+    });
+
     $jmlSetor = count($setoranBulan);
     if ($jmlSetor > 0) {
         $totalNilai = 0;
         $validNilai = 0;
+        $firstSetoran = $setoranBulan[0];
         $lastSetoran = end($setoranBulan);
         foreach ($setoranBulan as $item) {
             $val = (int)($item['nilai'] ?? 0);
             if ($val > 0) { $totalNilai += $val; $validNilai++; }
         }
-        $avgNilai = $validNilai > 0 ? (round($totalNilai / $validNilai) . ' (Amat Baik)') : '-';
+        if ($validNilai > 0) {
+            $avg = round($totalNilai / $validNilai);
+            $ket = $avg >= 90 ? 'Amat Baik' : ($avg >= 80 ? 'Baik' : ($avg >= 70 ? 'Cukup' : 'Perlu Ditingkatkan'));
+            $avgNilai = $avg . ' (' . $ket . ')';
+        } else {
+            $avgNilai = '-';
+        }
+
+        $sA = (int)($firstSetoran['sAwal'] ?? 2);
+        $aA = (int)($firstSetoran['aAwal'] ?? 1);
+        $posAwalStr = 'Surat ' . waSurahLatin($sA) . ' Ayat ' . $aA;
 
         $sK = (int)($lastSetoran['sAkhir'] ?? 2);
         $aK = (int)($lastSetoran['aAkhir'] ?? 1);
-        $posStr = 'Surat ' . waSurahLatin($sK) . ' Ayat ' . $aK;
+        $posAkhirStr = 'Surat ' . waSurahLatin($sK) . ' Ayat ' . $aK;
         $hafalanBaruStr = $jmlSetor . ' Kali Setoran';
     } else {
         $hafalanBaruStr = '-';
-        $posStr = '-';
+        $posAwalStr = '-';
+        $posAkhirStr = '-';
         $avgNilai = '-';
     }
 
@@ -426,7 +471,8 @@ function waFormatBulanan(array $santri, array $rekap, array $periode, string $le
         . "Persentase      : {$pct}%\n\n"
         . "*Laporan Capaian Tahfidz*\n"
         . "Setoran Bulan Ini : {$hafalanBaruStr}\n"
-        . "Surat Terakhir    : {$posStr}\n"
+        . "Posisi Awal       : {$posAwalStr}\n"
+        . "Posisi Terakhir   : {$posAkhirStr}\n"
         . "Total Akumulasi   : {$totalAkumulasi}\n"
         . "Rata-rata Nilai   : {$avgNilai}\n\n"
         . "Demikian Laporan Bulanan kami sampaikan semoga menjadi amal jariyah dan investasi akhirat keluarga kelak. Amiin";
