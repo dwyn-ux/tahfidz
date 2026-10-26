@@ -1124,7 +1124,7 @@ const Store = (() => {
   async function terapkanLiburLembaga(tanggal) {
     const t = tanggal || todayStr();
     const info = getLiburLembagaInfo(t);
-    const SESI_ALL = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
+    const SESI_ALL = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
     const sesiArr = (info && info.sesi !== 'semua' && Array.isArray(info.sesi)) ? info.sesi : SESI_ALL;
     const alasan = (info && info.keterangan) ? info.keterangan : 'Libur Lembaga';
 
@@ -1186,7 +1186,7 @@ const Store = (() => {
      status "Alfa": absensi ustadz hanya punya Hadir/Izin/Sakit, dan catatan
      absensi bisa kosong ketika ustadz belum mencatat. Dengan begitu angka alfa
      selalu konsisten dengan "total hari x sesi - jumlah catatan". */
-  const SESI_REKAP = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta\u2019lim Malam'];
+  const SESI_REKAP = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
 
   // Daftar tanggal inklusif. String YYYY-MM-DD bisa dibandingkan leksikografis
   // sama dengan urutan kronologis.

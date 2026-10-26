@@ -143,15 +143,13 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         subuh: k.filter(k => k.sesi === 'Subuh' && k.status === 'Hadir').length,
         ashar: k.filter(k => k.sesi === 'Ashar' && k.status === 'Hadir').length,
         maghrib: k.filter(k => k.sesi === 'Maghrib' && k.status === 'Hadir').length,
-        isya: k.filter(k => k.sesi === 'Isya' && k.status === 'Hadir').length,
-        talim: k.filter(k => k.sesi === 'Ta’lim Malam' && k.status === 'Hadir').length
+        isya: k.filter(k => k.sesi === 'Isya' && k.status === 'Hadir').length
       };
     });
     const totalSubuh = kehadiranBulan.reduce((a, b) => a + b.subuh, 0);
     const totalAshar = kehadiranBulan.reduce((a, b) => a + b.ashar, 0);
     const totalMaghrib = kehadiranBulan.reduce((a, b) => a + b.maghrib, 0);
     const totalIsya = kehadiranBulan.reduce((a, b) => a + b.isya, 0);
-    const totalTalim = kehadiranBulan.reduce((a, b) => a + b.talim, 0);
 
     document.getElementById('view-content').innerHTML = `
       <div class="grid kpi">
@@ -165,7 +163,6 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         ${Shared.statCard(Shared.ICONS.sun, totalAshar, 'Kehadiran Ashar (Bulan Ini)', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.sunset, totalMaghrib, 'Kehadiran Maghrib (Bulan Ini)', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.moon, totalIsya, 'Kehadiran Isya (Bulan Ini)', '#22C55E')}
-        ${Shared.statCard(Shared.ICONS.book, totalTalim, 'Kehadiran Ta’lim Malam (Bulan Ini)', '#22C55E')}
       </div>
       <div class="grid cols-2 mt">
         <div class="clay-card">
@@ -194,7 +191,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
   }
 
   /* ---------------- Absensi (multi-sesi) ---------------- */
-  const SESI = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
+  const SESI = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
   const STATUS_USTADZ = ['Hadir', 'Izin', 'Sakit', 'Libur'];
 
   // Batas ATAS tiap sesi: sesi tetap berlaku sampai menit ini (eksklusif).
@@ -205,10 +202,9 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
   const BATAS_SESI_OTOMATIS = [
     { batasMenit: 12 * 60, sesi: 'Subuh' },
     { batasMenit: 18 * 60, sesi: 'Ashar' },
-    { batasMenit: 19 * 60 + 30, sesi: 'Maghrib' },
-    { batasMenit: 20 * 60, sesi: 'Isya' }
+    { batasMenit: 19 * 60 + 30, sesi: 'Maghrib' }
   ];
-  const SESI_SETELAH_BATAS = 'Ta’lim Malam';
+  const SESI_SETELAH_BATAS = 'Isya';
 
   // Sesi yang aktif menurut jam sekarang; halaman absensi tetap membuka sesi
   // ini walaupun catatannya sudah tersimpan, supaya koreksi siang hari mudah.
@@ -965,12 +961,12 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       <div class="clay-card">
         <div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap">
           <div><div class="section-title" style="margin:0">Jurnal Kemajuan Ta’lim Malam</div><div class="muted" style="font-size:13px">Gunakan tombol Lanjutkan pada histori untuk memakai data jurnal sebelumnya.</div></div>
-          <div class="row"><button class="clay-btn ghost" id="btn-talim-absen">Absensi Ta’lim Malam</button><button class="clay-btn primary" id="btn-talim-add">+ Isi Jurnal</button></div>
+          <div class="row"><button class="clay-btn primary" id="btn-talim-add">+ Isi Jurnal</button></div>
         </div>
         <div class="table-wrap mt"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Ustadz</th><th>Mapel</th><th>Tingkat & Kelas</th><th>Judul Kitab</th><th>Bab</th><th>Pembahasan</th><th>Halaman</th><th>Aksi</th></tr></thead>
           <tbody>${rows || '<tr><td colspan="9"><div class="empty">Belum ada jurnal ta’lim malam.</div></td></tr>'}</tbody></table></div>
       </div>`;
-    document.getElementById('btn-talim-absen').onclick = () => App.navigate('ustadz_talim_absensi');
+    const btnTalimAbs = document.getElementById('btn-talim-absen'); if (btnTalimAbs) btnTalimAbs.onclick = () => UI.toast('Absensi Ta’lim tersendiri akan segera hadir', 'info');
     document.getElementById('btn-talim-add').onclick = () => talimForm();
     document.querySelectorAll('[data-continue-talim]').forEach(btn => {
       btn.onclick = () => {

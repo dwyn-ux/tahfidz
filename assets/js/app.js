@@ -22,7 +22,7 @@ const App = (() => {
     ustadz_dashboard: () => Ustadz.dashboard(),
     ustadz_absensi: () => Ustadz.absensi(),
     ustadz_talim: () => Ustadz.talim(),
-    ustadz_talim_absensi: () => Ustadz.absensi('Ta’lim Malam'),
+    ustadz_talim_absensi: () => Ustadz.talim(),
     ustadz_pembelajaran: () => Ustadz.pembelajaran(),
     ustadz_riwayat: () => Ustadz.riwayat(),
     ustadz_laporan: () => Ustadz.laporan(),

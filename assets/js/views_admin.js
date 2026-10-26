@@ -150,7 +150,6 @@ const Admin = (() => {
     const hadirAshar = countHadir('Ashar');
     const hadirMaghrib = countHadir('Maghrib');
     const hadirIsya = countHadir('Isya');
-    const hadirTalim = countHadir('Ta’lim Malam');
     const ustadzHadirHariIni = new Set((db.absensiUstadz || [])
       .filter(a => a.tanggal === Store.todayStr() && a.status === 'Hadir')
       .map(a => a.ustadzId)).size;
@@ -174,7 +173,7 @@ const Admin = (() => {
     // pengampu (bisa lebih dari satu) — Libur bila ada yang mencatat Libur,
     // selain itu tampilkan status gabungan atau "Belum".
     function adminRekapAbsensiHariIni() {
-      const SESI_HARI = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
+      const SESI_HARI = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
       const today = Store.todayStr();
       const rows = db.halaqah.map(h => {
         const uIds = Store.ustadzIdsForHalaqah(h);
@@ -224,7 +223,6 @@ const Admin = (() => {
         ${Shared.statCard(Shared.ICONS.sun, hadirAshar, 'Kehadiran Ashar', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.sunset, hadirMaghrib, 'Kehadiran Maghrib', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.moon, hadirIsya, 'Kehadiran Isya', '#22C55E')}
-        ${Shared.statCard(Shared.ICONS.book, hadirTalim, 'Kehadiran Ta’lim Malam', '#22C55E')}
         ${Shared.statCard(Shared.ICONS.teacher, ustadzHadirHariIni + '/' + db.ustadz.length, 'Ustadz Hadir Hari Ini', '#3B82F6')}
       </div>`;
 
@@ -288,7 +286,7 @@ const Admin = (() => {
           'Libur Semua Sesi',
           `Halaqah <b>${UI.esc(hNama)}</b> akan dicatat <b>Libur</b> untuk semua sesi hari ini (${UI.fmtDate(Store.todayStr())}). Seluruh santri tidak terhitung Alfa. Lanjutkan?`,
           async () => {
-            const sesiAll = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
+            const sesiAll = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
             const ok = await Store.liburkanHalaqah(uId, sesiAll, hNama, 'Libur (diatur admin)', Store.todayStr());
             if (ok) {
               UI.toast(`Halaqah ${hNama} diliburkan semua sesi ✓`, 'success');
@@ -1537,7 +1535,7 @@ const Admin = (() => {
   }
 
 /* ---------------- Absensi Ustadz ---------------- */
-  const SESI_ABSENSI = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
+  const SESI_ABSENSI = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
   const STATUS_ABSENSI = ['Hadir', 'Izin', 'Sakit', 'Libur'];
 
   function absensiBadgeClass(status) {

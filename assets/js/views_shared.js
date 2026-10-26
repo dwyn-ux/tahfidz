@@ -6,7 +6,7 @@ const Shared = (() => {
 
   // Urutan waktu sesi absensi. dedupeKehadiran mengurutkan berdasarkan kunci,
   // jadi daftar sesi per tanggal perlu disusun ulang agar tampil kronologis.
-  const URUTAN_SESI = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
+  const URUTAN_SESI = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
 
   function shell(role, navItems, contentHTML) {
     const session = Store.getSession();
@@ -528,14 +528,13 @@ if (typeof document !== 'undefined' && !document._setoranDetailBound) {
     const bulan = f.bulan || Store.todayStr().slice(0, 7);
     return santri.map((s, i) => {
       const h = Store.totalHafalanSantri(s.id);
-      const kehadiran = Store.kehadiranBulan(s.id, bulan);
-      const hadirSubuh = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Subuh').length;
-      const hadirAshar = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Ashar').length;
-      const hadirMaghrib = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Maghrib').length;
-      const hadirIsya = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Isya').length;
-      const hadirTalim = kehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Ta’lim Malam').length;
-      const totalHadir = hadirSubuh + hadirAshar + hadirMaghrib + hadirIsya + hadirTalim;
-      const totalK = kehadiran.length;
+      const halaqahKehadiran = Store.kehadiranBulan(s.id, bulan).filter(k => k.sesi !== 'Ta’lim Malam');
+      const hadirSubuh = halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Subuh').length;
+      const hadirAshar = halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Ashar').length;
+      const hadirMaghrib = halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Maghrib').length;
+      const hadirIsya = halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Isya').length;
+      const totalHadir = hadirSubuh + hadirAshar + hadirMaghrib + hadirIsya;
+      const totalK = halaqahKehadiran.length;
       const pct = totalK ? Math.round((totalHadir / totalK) * 100) : 0;
       const setoran = dari && sampai ? Store.setoranRentang(s.id, dari, sampai) : null;
       return {
@@ -568,7 +567,7 @@ function renderLaporan(filters) {
       <td class="center">${r.setoranAkhir ? UI.esc(formatSetoranLabel(r.setoranAkhir)) : '-'}</td>
       <td class="center">${r.hafalan ? r.hafalan.pages + ' hlm' + (r.juzLabel ? '<br><span style="font-size:11px">' + UI.esc(r.juzLabel) + '</span>' : '') : '-'}</td>
       <td class="center">${r.nilai ? r.nilai : '-'}</td>
-      <td class="center" style="font-size:12px" title="Hadir Subuh: ${r.hadirSubuh}, Ashar: ${r.hadirAshar}, Maghrib: ${r.hadirMaghrib}, Isya: ${r.hadirIsya}, Ta'lim: ${r.hadirTalim}">${r.hadirSubuh} ${r.hadirAshar} ${r.hadirMaghrib} ${r.hadirIsya} ${r.hadirTalim}</td>
+      <td class="center" style="font-size:12px" title="Hadir Subuh: ${r.hadirSubuh}, Ashar: ${r.hadirAshar}, Maghrib: ${r.hadirMaghrib}, Isya: ${r.hadirIsya}">${r.hadirSubuh} ${r.hadirAshar} ${r.hadirMaghrib} ${r.hadirIsya}</td>
       <td class="center">${r.hadir}/${r.totalK} (${r.pct}%)</td>
     </tr>`).join('');
     return `<div class="clay-card">
@@ -579,7 +578,7 @@ function renderLaporan(filters) {
             <th class="center">No</th><th>Santri</th><th>NIS</th><th>Tingkat & Kelas</th><th>Halaqah</th><th>Level</th>
             <th class="center">JK</th><th class="center">Setoran Awal</th><th class="center">Setoran Akhir</th>
             <th class="center">Total Hafalan</th><th class="center">Rata Nilai</th>
-            <th class="center" title="Rincian Sesi Hadir: Subuh · Ashar · Maghrib · Isya · Ta'lim">Hadir per Sesi<br><span style="font-weight:400;font-size:10px">Sub · Ash · Mag · Isy · Tal</span></th>
+            <th class="center" title="Rincian Sesi Hadir: Subuh · Ashar · Maghrib · Isya">Hadir per Sesi<br><span style="font-weight:400;font-size:10px">Sub · Ash · Mag · Isy</span></th>
             <th class="center">Kehadiran (${UI.esc(bulanLabel(bulan))})</th>
           </tr></thead>
           <tbody>${body || `<tr><td colspan="13"><div class="empty">Tidak ada data.</div></tr></tbody>`}</tbody>
@@ -856,7 +855,6 @@ function exportLaporanExcel(filters) {
       <td class="center">${r.hadirAshar}</td>
       <td class="center">${r.hadirMaghrib}</td>
       <td class="center">${r.hadirIsya}</td>
-      <td class="center">${r.hadirTalim}</td>
       <td class="center">${r.hadir}</td>
       <td class="center">${r.totalK}</td>
       <td class="center">${r.pct}%</td>
@@ -880,7 +878,7 @@ function exportLaporanExcel(filters) {
       <th class="center">No</th><th>Santri</th><th>NIS</th><th>Tingkat &amp; Kelas</th><th>Halaqah</th><th>Level</th><th class="center">JK</th>
       <th class="center">Setoran Awal</th><th class="center">Setoran Akhir</th>
       <th class="center">Total Hafalan</th><th class="center">Rata Nilai</th>
-      <th class="center">Subuh</th><th class="center">Ashar</th><th class="center">Maghrib</th><th class="center">Isya</th><th class="center">Ta’lim</th>
+      <th class="center">Subuh</th><th class="center">Ashar</th><th class="center">Maghrib</th><th class="center">Isya</th>
       <th class="center">Total Hadir</th><th class="center">Total Kehadiran</th><th class="center">%</th><th>Status</th>
     </tr></thead>
     <tbody>${rowsHtml}</tbody>

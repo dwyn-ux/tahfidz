@@ -15,7 +15,7 @@
 require_once __DIR__ . '/normalized_store.php';
 
 /** Sesi yang ikut dihitung dalam rekap absensi (sama dengan frontend). */
-const WA_SESI_REKAP = ['Subuh', 'Ashar', 'Maghrib', 'Isya', 'Ta’lim Malam'];
+const WA_SESI_REKAP = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
 
 /**
  * Normalisasi setelan pemicu. Setelan dari backup lama bisa berisi teks
