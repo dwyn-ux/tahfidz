@@ -2362,11 +2362,13 @@ const Admin = (() => {
             <span id="s-wa-auto-label" style="font-size:13px">${s.waAuto ? 'WhatsApp Aktif: Aktif' : 'WhatsApp Aktif: Nonaktif'}</span>
           </label>
         </div>
-        <div class="row mt">
+        <div class="row mt" style="gap:8px;flex-wrap:wrap;align-items:center">
           <button class="clay-btn ghost" id="btn-wa-status">Cek Status</button>
           <button class="clay-btn ghost" id="btn-wa-test">Kirim Tes</button>
-          <button class="clay-btn ghost" id="btn-wa-recap">Kirim Rekap Sekarang</button>
+          <button class="clay-btn primary" id="btn-wa-recap">Kirim Rekap Sekarang</button>
+          <button class="clay-btn danger" id="btn-wa-stop" style="display:none;background:#EF4444;color:#fff;font-weight:600">⏹ Hentikan Pengiriman</button>
         </div>
+        <div id="wa-queue-box" class="mt" style="display:none"></div>
         <div id="wa-status" class="mt" style="font-size:13px"></div>
       </div>
       <div class="clay-card mb">
@@ -2670,6 +2672,75 @@ const Admin = (() => {
     // Jalankan rekap terjadwal sekarang juga, untuk mencoba tanpa menunggu
     // jadwal. Pakai endpoint yang sama dengan cron, jadi penanda "sudah
     // terkirim" tetap konsisten dan tidak ada pesan dobel.
+    let queuePollTimer = null;
+
+    async function checkQueueProgress() {
+      const q = await Store.waQueueStatus();
+      const qBox = document.getElementById('wa-queue-box');
+      const stopBtn = document.getElementById('btn-wa-stop');
+      if (!qBox || !stopBtn) return;
+
+      if (q && (q.pending > 0 || q.sending)) {
+        stopBtn.style.display = 'inline-flex';
+        qBox.style.display = 'block';
+        qBox.innerHTML = `
+          <div class="clay-card pad-sm" style="background:#fff7ed;border:1px solid #fed7aa;margin-top:10px">
+            <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+              <div>
+                <div style="font-weight:bold;color:#c2410c;display:flex;align-items:center;gap:6px">
+                  <span class="badge warn" style="font-size:11px">⏳ Sedang Mengirim Pesan...</span>
+                  Sisa Antrian: <b>${q.pending} pesan</b>
+                </div>
+                <div class="muted" style="font-size:12px;margin-top:3px">
+                  Pesan dikirim berurutan dengan jeda aman anti-banned. Anda dapat membatalkan sisa pesan kapan saja.
+                </div>
+              </div>
+              <button class="clay-btn sm danger" type="button" id="btn-wa-stop-inline" style="background:#EF4444;color:#fff;font-weight:600">
+                ⏹ Hentikan Sekarang
+              </button>
+            </div>
+          </div>`;
+        const inlineStop = document.getElementById('btn-wa-stop-inline');
+        if (inlineStop) inlineStop.onclick = handleStopQueue;
+      } else {
+        stopBtn.style.display = 'none';
+        qBox.style.display = 'none';
+        if (queuePollTimer && (!q || (!q.pending && !q.sending))) {
+          clearInterval(queuePollTimer);
+          queuePollTimer = null;
+        }
+      }
+    }
+
+    function startQueuePolling() {
+      if (queuePollTimer) clearInterval(queuePollTimer);
+      checkQueueProgress();
+      queuePollTimer = setInterval(async () => {
+        await checkQueueProgress();
+        renderWaLog();
+      }, 2500);
+    }
+
+    async function handleStopQueue() {
+      const stopBtn = document.getElementById('btn-wa-stop');
+      if (stopBtn) { stopBtn.disabled = true; stopBtn.textContent = 'Menghentikan...'; }
+      try {
+        const res = await Store.waStopQueue();
+        const cancelled = (res && res.data && res.data.cancelled) ?? (res && res.cancelled) ?? 0;
+        UI.toast(`Pengiriman dihentikan. ${cancelled} pesan dibatalkan!`, 'warn');
+        waStatusEl.innerHTML = `<span style="color:var(--danger);font-weight:600">⏹ Pengiriman dihentikan. ${cancelled} pesan dalam antrian dibatalkan.</span>`;
+        checkQueueProgress();
+        renderWaLog();
+      } catch (err) {
+        UI.toast('Gagal menghentikan antrian: ' + err.message, 'error');
+      } finally {
+        if (stopBtn) { stopBtn.disabled = false; stopBtn.textContent = '⏹ Hentikan Pengiriman'; }
+      }
+    }
+
+    const waStopBtn = document.getElementById('btn-wa-stop');
+    if (waStopBtn) waStopBtn.onclick = handleStopQueue;
+
     const waRecapBtn = document.getElementById('btn-wa-recap');
     if (waRecapBtn) waRecapBtn.onclick = async () => {
       if (waBelumTersimpan()) { waMintaSimpan(); return; }
@@ -2681,9 +2752,12 @@ const Admin = (() => {
         waStatusEl.innerHTML = '<span class="muted">' + UI.esc(res.detail || 'Tidak ada rekap baru yang perlu dikirim.') + '</span>';
       } else {
         waStatusEl.innerHTML = '<span style="color:var(--success)">✓ ' + res.terkirim + ' pesan masuk antrian bridge.</span>';
+        startQueuePolling();
       }
       renderWaLog();
     };
+
+    checkQueueProgress();
 
     function renderWaLog() {
       const el = document.getElementById('wa-log');

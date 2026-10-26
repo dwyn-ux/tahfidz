@@ -338,8 +338,18 @@ switch ($action) {
             if (!$to || !$message) err('to & message required', 400);
         }
 
-        $waPath = $waOp === 'qr' ? '/qr' : ($waOp === 'send' ? '/send' : '/status');
-        $waPayload = $waOp === 'send' ? json_encode(['to' => $to, 'message' => $message]) : null;
+        $waPath = '/status';
+        if ($waOp === 'qr') $waPath = '/qr';
+        elseif ($waOp === 'send') $waPath = '/send';
+        elseif ($waOp === 'queue') $waPath = '/queue';
+        elseif ($waOp === 'stop') $waPath = '/stop';
+
+        $waPayload = null;
+        if ($waOp === 'send') {
+            $waPayload = json_encode(['to' => $to, 'message' => $message]);
+        } elseif ($waOp === 'stop') {
+            $waPayload = json_encode(['stop' => true]);
+        }
         $r = waBridgeCall($waUrl, $waKey, $waPath, $waPayload);
 
         if ($waOp === 'qr') {
@@ -353,7 +363,9 @@ switch ($action) {
             echo $r['body'];
             exit;
         }
-        if ($waOp === 'status') send(['ok' => $r['ok'], 'status' => $r['status'], 'data' => $r['data']]);
+        if ($waOp === 'status' || $waOp === 'queue' || $waOp === 'stop') {
+            send(['ok' => $r['ok'], 'status' => $r['status'], 'data' => $r['data'], 'detail' => $r['detail']]);
+        }
         send(['ok' => $r['ok'], 'status' => $r['status'], 'detail' => $r['detail']]);
         break;
 

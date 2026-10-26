@@ -58,6 +58,7 @@ let sock = null;
 let state = { connected: false, phone: null, qr: null, status: 'starting' };
 const queue = [];
 let sending = false;
+let stopRequested = false;
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -141,7 +142,7 @@ function enqueue(to, message) {
 async function flush() {
   if (sending || !state.connected || !queue.length) return;
   sending = true;
-  while (queue.length && state.connected) {
+  while (queue.length && state.connected && !stopRequested) {
     const { to, message } = queue.shift();
     try {
       await sock.sendMessage(to + '@s.whatsapp.net', { text: message });
@@ -149,8 +150,9 @@ async function flush() {
     } catch (e) {
       console.error('[WA] send failed ->', to, e.message);
     }
-    if (queue.length) await delay((MIN_DELAY + Math.random() * (MAX_DELAY - MIN_DELAY)) * 1000);
+    if (queue.length && !stopRequested) await delay((MIN_DELAY + Math.random() * (MAX_DELAY - MIN_DELAY)) * 1000);
   }
+  stopRequested = false;
   sending = false;
 }
 
@@ -221,6 +223,28 @@ ${state.lastError ? `<p style="margin:8px 0 0;color:#ef4444;font-size:12px">${st
 </div></body></html>`);
     }
     return json(200, { connected: state.connected, qr: null, status: state.status, lastError: state.lastError || null });
+  }
+
+  if (pathname === '/queue') {
+    return json(200, {
+      ok: true,
+      pending: queue.length,
+      sending,
+      connected: state.connected
+    });
+  }
+
+  if (pathname === '/stop' || pathname === '/clear') {
+    const cancelled = queue.length;
+    queue.splice(0, queue.length);
+    stopRequested = true;
+    sending = false;
+    console.log(`[WA] Queue cancelled by user. Dropped ${cancelled} pending message(s).`);
+    return json(200, {
+      ok: true,
+      cancelled,
+      message: `${cancelled} pesan dalam antrian berhasil dibatalkan.`
+    });
   }
 
   if (pathname === '/send') {

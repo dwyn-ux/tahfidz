@@ -339,6 +339,14 @@ const Store = (() => {
     });
   }
 
+  function waQueueStatus() {
+    return api('wa&op=queue').then(r => (r && r.data) || { pending: 0, sending: false }).catch(() => ({ pending: 0, sending: false }));
+  }
+
+  function waStopQueue() {
+    return api('wa&op=stop');
+  }
+
   // Satu pesan rekap absensi untuk satu santri pada rentang tanggal tertentu.
   // Dipakai untuk pratinjau di aplikasi; pesan yang benar-benar dikirim
   // disusun di server agar sama persis dengan yang dilihat wali.
@@ -1340,7 +1348,7 @@ const Store = (() => {
     simpanTingkat, hapusTingkat, simpanKelas, hapusKelas, tingkatAda, kelasDipakaiDiTalim, jumlahSantriKelas, naturalKelasSort,
     uploadKitab, talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
     waSend, waLog, waReady, waAutoEnabled, waSendWali, waNomorWali, waStatus, waQrDataUrl, waLogServer,
-    waAutoTriggerSettings, waAutoHour, waAutoReminder, waAbsensiMessage,
+    waAutoTriggerSettings, waAutoHour, waAutoReminder, waQueueStatus, waStopQueue, waAbsensiMessage,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,
     setoranRentang, avgNilaiRentang, padaRentang, juzHafalanDisplay,
     absensiUstadzOf, absensiUstadzRow, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,
