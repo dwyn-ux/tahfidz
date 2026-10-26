@@ -869,6 +869,10 @@ const Store = (() => {
     return dedupeKehadiran(db.kehadiran.filter(k => k.santriId === santriId && k.tanggal.startsWith(bulan)));
   }
 
+  function kehadiranRentang(santriId, dari, sampai) {
+    return dedupeKehadiran(db.kehadiran.filter(k => k.santriId === santriId && padaRentang(k.tanggal, dari, sampai)));
+  }
+
   // Laporan memakai rentang tanggal (bukan bulan tetap), jadi tiga helper
   // berikut menyaring catatan apa pun yang jatuh di antara dari–sampai.
   function padaRentang(tanggal, dari, sampai) {
@@ -1366,7 +1370,7 @@ const Store = (() => {
     uploadKitab, talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
     waSend, waLog, waReady, waAutoEnabled, waSendWali, waNomorWali, waStatus, waQrDataUrl, waLogServer,
     waAutoTriggerSettings, waAutoHour, waAutoReminder, waQueueStatus, waStopQueue, waPreviewTest, waSendTestRecap, waAbsensiMessage,
-    lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, dedupeKehadiran,
+    lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, kehadiranRentang, dedupeKehadiran,
     setoranRentang, avgNilaiRentang, padaRentang, juzHafalanDisplay,
     absensiUstadzOf, absensiUstadzRow, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,
     liburkanHalaqah, batalkanLiburHalaqah, halaqahLiburInfo, getLiburLembaga, isLiburLembaga, getLiburLembagaInfo, tambahLiburLembaga, hapusLiburLembaga, terapkanLiburLembaga,

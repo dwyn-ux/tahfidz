@@ -528,7 +528,12 @@ if (typeof document !== 'undefined' && !document._setoranDetailBound) {
     const bulan = f.bulan || Store.todayStr().slice(0, 7);
     return santri.map((s, i) => {
       const h = Store.totalHafalanSantri(s.id);
-      const halaqahKehadiran = Store.kehadiranBulan(s.id, bulan).filter(k => k.sesi !== 'Ta’lim Malam');
+      const rawKehadiran = (dari && sampai)
+        ? (typeof Store.kehadiranRentang === 'function'
+            ? Store.kehadiranRentang(s.id, dari, sampai)
+            : Store.dedupeKehadiran(db.kehadiran.filter(k => k.santriId === s.id && Store.padaRentang(k.tanggal, dari, sampai))))
+        : Store.kehadiranBulan(s.id, bulan);
+      const halaqahKehadiran = rawKehadiran.filter(k => k.sesi !== 'Ta’lim Malam');
       const hadirSubuh = halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Subuh').length;
       const hadirAshar = halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Ashar').length;
       const hadirMaghrib = halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Maghrib').length;
@@ -538,7 +543,7 @@ if (typeof document !== 'undefined' && !document._setoranDetailBound) {
       const pct = totalK ? Math.round((totalHadir / totalK) * 100) : 0;
       const setoran = dari && sampai ? Store.setoranRentang(s.id, dari, sampai) : null;
       return {
-        no: i + 1, s, hafalan: h, nilai: Store.avgNilai(s.id),
+        no: i + 1, s, hafalan: h, nilai: (dari && sampai ? Store.avgNilaiRentang(s.id, dari, sampai) : 0) || Store.avgNilai(s.id),
         hadirSubuh, hadirAshar, hadirMaghrib, hadirIsya,
         hadir: totalHadir, totalK, pct,
         setoranAwal: setoran ? setoran.awal : null,
@@ -579,7 +584,7 @@ function renderLaporan(filters) {
             <th class="center">JK</th><th class="center">Setoran Awal</th><th class="center">Setoran Akhir</th>
             <th class="center">Total Hafalan</th><th class="center">Rata Nilai</th>
             <th class="center" title="Rincian Sesi Hadir: Subuh · Ashar · Maghrib · Isya">Hadir per Sesi<br><span style="font-weight:400;font-size:10px">Sub · Ash · Mag · Isy</span></th>
-            <th class="center">Kehadiran (${UI.esc(bulanLabel(bulan))})</th>
+            <th class="center">Kehadiran (${UI.esc(periode)})</th>
           </tr></thead>
           <tbody>${body || `<tr><td colspan="13"><div class="empty">Tidak ada data.</div></tr></tbody>`}</tbody>
         </table>
