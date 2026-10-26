@@ -568,7 +568,7 @@ function renderLaporan(filters) {
       <td class="center">${r.setoranAkhir ? UI.esc(formatSetoranLabel(r.setoranAkhir)) : '-'}</td>
       <td class="center">${r.hafalan ? r.hafalan.pages + ' hlm' + (r.juzLabel ? '<br><span style="font-size:11px">' + UI.esc(r.juzLabel) + '</span>' : '') : '-'}</td>
       <td class="center">${r.nilai ? r.nilai : '-'}</td>
-      <td class="center" style="font-size:12px">${r.hadirSubuh} ${r.hadirAshar} ${r.hadirMaghrib} ${r.hadirIsya} ${r.hadirTalim}</td>
+      <td class="center" style="font-size:12px" title="Hadir Subuh: ${r.hadirSubuh}, Ashar: ${r.hadirAshar}, Maghrib: ${r.hadirMaghrib}, Isya: ${r.hadirIsya}, Ta'lim: ${r.hadirTalim}">${r.hadirSubuh} ${r.hadirAshar} ${r.hadirMaghrib} ${r.hadirIsya} ${r.hadirTalim}</td>
       <td class="center">${r.hadir}/${r.totalK} (${r.pct}%)</td>
     </tr>`).join('');
     return `<div class="clay-card">
@@ -579,7 +579,7 @@ function renderLaporan(filters) {
             <th class="center">No</th><th>Santri</th><th>NIS</th><th>Tingkat & Kelas</th><th>Halaqah</th><th>Level</th>
             <th class="center">JK</th><th class="center">Setoran Awal</th><th class="center">Setoran Akhir</th>
             <th class="center">Total Hafalan</th><th class="center">Rata Nilai</th>
-            <th class="center">Absensi</th>
+            <th class="center" title="Rincian Sesi Hadir: Subuh · Ashar · Maghrib · Isya · Ta'lim">Hadir per Sesi<br><span style="font-weight:400;font-size:10px">Sub · Ash · Mag · Isy · Tal</span></th>
             <th class="center">Kehadiran (${UI.esc(bulanLabel(bulan))})</th>
           </tr></thead>
           <tbody>${body || `<tr><td colspan="13"><div class="empty">Tidak ada data.</div></tr></tbody>`}</tbody>
@@ -1147,7 +1147,7 @@ function exportLaporanExcel(filters) {
           ${cells}
           <td class="center"><b>${row.setoran}</b></td>
           <td class="center"><b>${row.missing}</b></td>
-          <td class="center" style="font-size:12px" title="Hadir/Izin/Sakit/Libur/Alfa">${row.hadir}/${row.izin}/${row.sakit}/${row.libur ? row.libur + '/' : ''}${row.alfa}</td>
+          <td class="center" style="font-size:12px" title="Hadir: ${row.hadir}, Izin: ${row.izin}, Sakit: ${row.sakit}${row.libur ? ', Libur: ' + row.libur : ''}, Alfa: ${row.alfa}">${row.hadir}/${row.izin}/${row.sakit}/${row.libur ? row.libur + '/' : ''}${row.alfa}</td>
           <td class="center"><b>${row.persen}%</b></td>
         </tr>`;
       }).join('');
@@ -1160,7 +1160,7 @@ function exportLaporanExcel(filters) {
           </div>
         </div>
         <div class="table-wrap"><table class="clay-table">
-          <thead><tr><th class="center">No</th><th>Santri</th><th>Level</th>${recap.days.map(day => `<th class="center">${day.label}<br><span style="font-weight:400;font-size:11px">${day.tanggal.slice(8)}</span></th>`).join('')}<th class="center">Setor</th><th class="center">Belum</th><th class="center">Hadir/Izin/Sakit/Alfa</th><th class="center">%</th></tr></thead>
+          <thead><tr><th class="center">No</th><th>Santri</th><th>Level</th>${recap.days.map(day => `<th class="center">${day.label}<br><span style="font-weight:400;font-size:11px">${day.tanggal.slice(8)}</span></th>`).join('')}<th class="center">Setor</th><th class="center">Belum</th><th class="center" title="Hadir / Izin / Sakit / Libur / Alfa">Kehadiran<br><span style="font-weight:400;font-size:10px">H / I / S / L / A</span></th><th class="center">%</th></tr></thead>
           <tbody>${body || '<tr><td colspan="9"><div class="empty">Belum ada santri aktif di halaqah ini.</div></td></tr>'}</tbody>
         </table></div>
       </div>`;
