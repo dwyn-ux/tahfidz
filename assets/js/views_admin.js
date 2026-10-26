@@ -2807,28 +2807,28 @@ const Admin = (() => {
     if (waTestRecapBtn) waTestRecapBtn.onclick = () => openWaTestRecapModal();
 
     function openWaTestRecapModal() {
-      if (waBelumTersimpan()) { waMintaSimpan(); return; }
+      try {
+        const db = Store.get() || {};
+        const rawSantri = (db.santri || []).filter(s => (s.status || '') !== 'Nonaktif');
+        if (!rawSantri.length) {
+          UI.toast('Belum ada data santri aktif.', 'warn');
+          return;
+        }
 
-      const rawSantri = (Store.santri() || []).filter(s => (s.status || '') !== 'Nonaktif');
-      if (!rawSantri.length) {
-        UI.toast('Belum ada data santri aktif.', 'warn');
-        return;
-      }
+        const santriList = [...rawSantri].sort((a, b) => (a.nama || '').localeCompare(b.nama || ''));
 
-      const santriList = [...rawSantri].sort((a, b) => (a.nama || '').localeCompare(b.nama || ''));
+        let trigger = 'harian';
+        let preset = 'yesterday';
+        let targetMode = 'admin';
+        let customDari = '';
+        let customSampai = '';
+        const selectedIds = new Set();
+        if (santriList[0]) selectedIds.add(santriList[0].id);
+        let activePreviewId = santriList[0]?.id || '';
+        let filterText = '';
+        let previewReqId = 0;
 
-      let trigger = 'harian';
-      let preset = 'yesterday';
-      let targetMode = 'admin';
-      let customDari = '';
-      let customSampai = '';
-      const selectedIds = new Set();
-      if (santriList[0]) selectedIds.add(santriList[0].id);
-      let activePreviewId = santriList[0]?.id || '';
-      let filterText = '';
-      let previewReqId = 0;
-
-      const defaultAdminPhone = (Store.getSettings() && Store.getSettings().waTestPhone) || '';
+        const defaultAdminPhone = (db.settings && db.settings.waTestPhone) || '';
 
       const bodyHTML = `
         <div style="display:flex;flex-direction:column;gap:12px">
@@ -3226,6 +3226,10 @@ const Admin = (() => {
       updateSelectedBadge();
       renderSantriList();
       fetchPreview();
+      } catch (err) {
+        console.error('Gagal membuka modal tes rekap:', err);
+        UI.toast('Gagal membuka dialog uji coba: ' + err.message, 'error');
+      }
     }
 
     const waRecapBtn = document.getElementById('btn-wa-recap');

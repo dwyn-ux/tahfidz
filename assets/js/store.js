@@ -1356,6 +1356,8 @@ const Store = (() => {
 
   return {
     load, save, get, reset, uid, log, nowISO, todayStr,
+    santri: () => (db.santri || []),
+    getSettings: () => (db.settings || {}),
     setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout, changePassword,
     recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahById, findHalaqahByName, ustadzIdsForHalaqah, ustadzNamesForHalaqah, halaqahHasUstadz, findHalaqahForUstadz,
     activeProgramsForSantri, halaqahForSantriProgram, halaqahForSantri, santriHasProgram, santriHasHalaqah, programsForSantriHalaqah, configureSantriPrograms, programSummaryForSantri, halaqahSummaryForSantri,
