@@ -157,10 +157,36 @@ async function flush() {
 }
 
 function parsePhone(p) {
-  let n = String(p || '').replace(/\D/g, '');
+  if (!p) return null;
+  let str = String(p).trim();
+  // Jika ada beberapa nomor dipisah garis miring, koma, atau titik koma, ambil nomor pertama
+  if (/[\/;,|\n]/.test(str)) {
+    str = str.split(/[\/;,|\n]/)[0].trim();
+  }
+  // Hapus keterangan dalam tanda kurung seperti "(Ayah)", "(Ibu)", "(WA)"
+  str = str.replace(/\([^)]*\)/g, '').trim();
+
+  // Bersihkan karakter selain angka dan tanda plus
+  let n = str.replace(/[^\d+]/g, '');
+  if (n.startsWith('+')) n = n.slice(1);
+  n = n.replace(/\D/g, '');
   if (!n) return null;
-  if (n.startsWith('0')) n = '62' + n.slice(1);
-  else if (n.startsWith('+')) n = n.slice(1);
+
+  // Normalisasi nomor Indonesia
+  if (n.startsWith('0')) {
+    n = '62' + n.slice(1);
+  } else if (n.startsWith('8')) {
+    // Sering terjadi: user mengetik 812xxx tanpa angka 0 di depan
+    n = '62' + n;
+  } else if (n.startsWith('620')) {
+    // User mengetik +6208xxx
+    n = '62' + n.slice(3);
+  }
+
+  // Validasi panjang nomor telepon yang wajar (10 - 16 digit)
+  if (n.length < 10 || n.length > 16) {
+    return null;
+  }
   return n;
 }
 

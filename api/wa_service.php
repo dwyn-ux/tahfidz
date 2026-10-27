@@ -624,23 +624,56 @@ function waPesanRekap(array $santri, array $rekap, array $periode, string $namaL
  * memperbarui nomornya sendiri lewat halaman Profil;|No HP Santri| hanya
  * cadangan untuk data lama yang belum punya record wali.
  */
+function waBersihkanNomor(string $p): string {
+    $str = trim($p);
+    if ($str === '') return '';
+    // Ambil nomor pertama jika ada pemisah / , ; atau baris baru
+    if (preg_match('/[\/;,|\n]/', $str)) {
+        $parts = preg_split('/[\/;,|\n]/', $str);
+        $str = trim($parts[0] ?? '');
+    }
+    // Hapus catatan dalam tanda kurung
+    $str = trim((string)preg_replace('/\([^)]*\)/', '', $str));
+    // Bersihkan karakter selain angka dan plus
+    $n = (string)preg_replace('/[^\d+]/', '', $str);
+    if (str_starts_with($n, '+')) $n = substr($n, 1);
+    $n = (string)preg_replace('/\D/', '', $n);
+    if ($n === '') return '';
+    if (str_starts_with($n, '0')) $n = '62' . substr($n, 1);
+    elseif (str_starts_with($n, '8')) $n = '62' . $n;
+    elseif (str_starts_with($n, '620')) $n = '62' . substr($n, 3);
+    return $n;
+}
+
 function waNomorWali(array $santri, array $waliRecords): string {
     $candidates = [];
-    $waliId = (string)($santri['waliId'] ?? '');
+    $waliId = trim((string)($santri['waliId'] ?? ''));
     if ($waliId !== '') {
         foreach ($waliRecords as $wali) {
-            if ((string)($wali['id'] ?? '') === $waliId) $candidates[] = $wali['noHp'] ?? '';
+            $wId = trim((string)($wali['id'] ?? ''));
+            if ($wId !== '' && $wId === $waliId) {
+                $hp = trim((string)($wali['noHp'] ?? ''));
+                if ($hp !== '') $candidates[] = $hp;
+            }
         }
     }
     if (!$candidates) {
-        foreach ($waliRecords as $wali) {
-            if ((string)($wali['santriId'] ?? '') === (string)($santri['id'] ?? '')) $candidates[] = $wali['noHp'] ?? '';
+        $sId = trim((string)($santri['id'] ?? ''));
+        if ($sId !== '') {
+            foreach ($waliRecords as $wali) {
+                $wSantriId = trim((string)($wali['santriId'] ?? ''));
+                if ($wSantriId !== '' && $wSantriId === $sId) {
+                    $hp = trim((string)($wali['noHp'] ?? ''));
+                    if ($hp !== '') $candidates[] = $hp;
+                }
+            }
         }
     }
-    $candidates[] = $santri['noHpWali'] ?? '';
+    $hpSantri = trim((string)($santri['noHpWali'] ?? ''));
+    if ($hpSantri !== '') $candidates[] = $hpSantri;
     foreach ($candidates as $nomor) {
-        $nomor = trim((string)$nomor);
-        if ($nomor !== '') return $nomor;
+        $cleaned = waBersihkanNomor((string)$nomor);
+        if ($cleaned !== '') return $cleaned;
     }
     return '';
 }

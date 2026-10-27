@@ -281,16 +281,45 @@ const Store = (() => {
     return value === true || value === 1 || value === '1' || value === 'true';
   }
 
-  // Nomor WhatsApp wali. Record wali diutamakan karena wali bisa
-  // memperbarui nomornya sendiri lewat halaman Profil; field noHpWali pada
-  // Santri hanya dipakai sebagai cadangan untuk data lama.
+  function waCleanPhone(p) {
+    if (!p) return '';
+    let str = String(p).trim();
+    // Ambil nomor pertama jika ada pemisah / , ; | atau baris baru
+    if (/[\/;,|\n]/.test(str)) {
+      str = str.split(/[\/;,|\n]/)[0].trim();
+    }
+    // Hapus catatan dalam tanda kurung, misal (Ayah), (Ibu), (WA)
+    str = str.replace(/\([^)]*\)/g, '').trim();
+    // Bersihkan karakter selain angka dan tanda plus
+    let n = str.replace(/[^\d+]/g, '');
+    if (n.startsWith('+')) n = n.slice(1);
+    if (!n) return '';
+    if (n.startsWith('0')) n = '62' + n.slice(1);
+    else if (n.startsWith('8')) n = '62' + n;
+    else if (n.startsWith('620')) n = '62' + n.slice(3);
+    return n;
+  }
+
+  // Nomor WhatsApp wali.
+  // Validasi ID secara ketat agar santri tanpa waliId tidak salah mencocokkan
+  // ke wali pertama yang ID-nya kosong/undefined.
   function waNomorWali(santriId) {
-    const s = db.santri.find(x => x.id === santriId);
+    const s = (db.santri || []).find(x => x && x.id === santriId);
     if (!s) return '';
-    const wali = (db.wali || []).find(w => w.id === s.waliId)
-      || (db.wali || []).find(w => w.santriId === s.id);
-    if (wali && wali.noHp && String(wali.noHp).trim()) return String(wali.noHp).trim();
-    return s.noHpWali ? String(s.noHpWali).trim() : '';
+    const sWaliId = s.waliId ? String(s.waliId).trim() : '';
+    let wali = null;
+    if (sWaliId) {
+      wali = (db.wali || []).find(w => w && String(w.id || '').trim() === sWaliId);
+    }
+    if (!wali && s.id) {
+      const sId = String(s.id).trim();
+      wali = (db.wali || []).find(w => w && String(w.santriId || '').trim() === sId);
+    }
+    if (wali && wali.noHp && String(wali.noHp).trim()) {
+      const cleaned = waCleanPhone(wali.noHp);
+      if (cleaned) return cleaned;
+    }
+    return s.noHpWali ? waCleanPhone(s.noHpWali) : '';
   }
 
   // Kirim laporan ke no. WA wali dari santri (auto jika waAuto aktif). Fire-and-forget.

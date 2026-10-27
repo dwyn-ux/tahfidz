@@ -7,8 +7,17 @@ const Admin = (() => {
 
   function parseImportRows(raw) {
     return raw.trim().split(/\r?\n/).filter(Boolean).map(line => {
-      const separator = line.includes('\t') ? '\t' : ',';
-      return line.split(separator).map(value => value.trim());
+      if (line.includes('\t')) {
+        return line.split('\t').map(value => value.trim());
+      }
+      const cells = [];
+      const re = /(?:^|,)(?:"([^"]*(?:""[^"]*)*)"|([^",]*))/g;
+      let match;
+      while ((match = re.exec(line)) !== null) {
+        let val = match[1] !== undefined ? match[1].replace(/""/g, '"') : match[2];
+        cells.push((val || '').trim());
+      }
+      return cells;
     });
   }
 
@@ -601,10 +610,19 @@ const Admin = (() => {
               const pass = m.querySelector('#f-pass').value.trim();
               if (pass) waliUser.password = pass;
             }
-            const waliRec = db.wali.find(w => w.id === Store.findSantri(id).waliId);
+            let sWaliId = santri.waliId ? String(santri.waliId).trim() : '';
+            let waliRec = sWaliId ? (db.wali || []).find(w => w && String(w.id || '').trim() === sWaliId) : null;
+            if (!waliRec) {
+              waliRec = (db.wali || []).find(w => w && String(w.santriId || '').trim() === String(santri.id).trim());
+            }
             if (waliRec) {
+              if (!santri.waliId) santri.waliId = waliRec.id;
               waliRec.nama = data.namaWali || waliRec.nama;
-              waliRec.noHp = data.noHpWali || waliRec.noHp;
+              waliRec.noHp = data.noHpWali;
+            } else if (data.namaWali || data.noHpWali) {
+              const newWaliId = Store.uid('w');
+              santri.waliId = newWaliId;
+              db.wali.push({ id: newWaliId, nama: data.namaWali || data.nama, noHp: data.noHpWali, santriId: santri.id });
             }
             Store.log('Edit santri: ' + data.nama);
           } else {
