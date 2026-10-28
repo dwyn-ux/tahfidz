@@ -1949,11 +1949,17 @@ const Admin = (() => {
         dari: document.getElementById('f-dari').value,
         sampai: document.getElementById('f-sampai').value,
         ustadzId: document.getElementById('f-ustadz').value,
+        allowMakeup: true,
         allowJpgDownload: true
       };
       Shared.setRekapSetoranRange(filters.dari, filters.sampai);
       document.getElementById('rekap-setoran-content').innerHTML = Shared.renderRekapSetoranMingguan(filters);
       Shared.bindRekapSetoranJpgDownload(filters);
+      Shared.bindRekapSetoranBayar(({ santriId, tanggal, programs }) => {
+        if (typeof Ustadz !== 'undefined' && Ustadz.bayarSetoran) {
+          Ustadz.bayarSetoran(santriId, tanggal, programs, () => apply());
+        }
+      });
     };
     document.querySelectorAll('[data-rs-preset]').forEach(button => button.onclick = () => {
       const today = Store.todayStr();

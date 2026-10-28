@@ -1088,12 +1088,17 @@ function exportLaporanExcel(filters) {
           const isFullDayLibur = isWeekend || isLembagaLibur || (auLiburCount >= 3 && auNonLiburCount === 0) || (kLiburCount >= 3 && kNonLiburCount === 0);
           const isDayLibur = isFullDayLibur;
           if (isDayLibur) return { status: 'libur', types: [] };
+          const hadirCount = santriDayAbsensi.filter(k => k.status === 'Hadir').length;
           const partialLiburRec = santriDayAbsensi.find(k => k.status === 'Libur') || halaqahAu.find(a => a.status === 'Libur');
           const sakitRec = santriDayAbsensi.find(k => k.status === 'Sakit');
-          if (sakitRec) return { status: 'sakit', types: [], sesi: sakitRec.sesi, ket: sakitRec.keterangan || sakitRec.catatan || '' };
           const izinRec = santriDayAbsensi.find(k => k.status === 'Izin');
-          if (izinRec) return { status: 'izin', types: [], sesi: izinRec.sesi, ket: izinRec.keterangan || izinRec.catatan || '' };
-          return { status: 'missing', types: [], partialLiburSesi: partialLiburRec ? partialLiburRec.sesi : '' };
+          if (sakitRec && hadirCount === 0) return { status: 'sakit', types: [], sesi: sakitRec.sesi, ket: sakitRec.keterangan || sakitRec.catatan || '' };
+          if (izinRec && hadirCount === 0) return { status: 'izin', types: [], sesi: izinRec.sesi, ket: izinRec.keterangan || izinRec.catatan || '' };
+          let partialTxt = '';
+          if (sakitRec) partialTxt = 'Sakit: ' + sakitRec.sesi + (sakitRec.keterangan ? ' - ' + sakitRec.keterangan : '');
+          else if (izinRec) partialTxt = 'Izin: ' + izinRec.sesi + (izinRec.keterangan ? ' - ' + izinRec.keterangan : '');
+          else if (partialLiburRec) partialTxt = 'Libur: ' + partialLiburRec.sesi;
+          return { status: 'missing', types: [], partialInfo: partialTxt, partialLiburSesi: partialLiburRec ? partialLiburRec.sesi : '' };
         });
         const absensi = Store.rekapKehadiranSantri(s.id, period.dari, period.sampai);
         return {
@@ -1149,10 +1154,10 @@ function exportLaporanExcel(filters) {
           if (allowMakeup) {
             const tanggal = recap.days[dayIndex].tanggal;
             const label = tanggal < Store.todayStr() ? 'Bayar' : 'Setor';
-            const partialTxt = cell.partialLiburSesi ? ` (Sesi ${cell.partialLiburSesi} Libur)` : '';
-            return `<td class="center" title="${partialTxt ? 'Belum setoran' + partialTxt : ''}"><button class="clay-btn sm secondary" data-bayar-setoran data-santri-id="${UI.esc(row.s.id)}" data-tanggal="${UI.esc(tanggal)}" data-programs="${UI.esc(row.programs.join(','))}" style="padding:3px 7px;font-size:11px">${label}</button></td>`;
+            const partialTxt = cell.partialInfo ? ` (${cell.partialInfo})` : (cell.partialLiburSesi ? ` (Sesi ${cell.partialLiburSesi} Libur)` : '');
+            return `<td class="center" title="${partialTxt ? 'Belum setoran' + partialTxt : 'Belum setoran'}"><button class="clay-btn sm secondary" data-bayar-setoran data-santri-id="${UI.esc(row.s.id)}" data-tanggal="${UI.esc(tanggal)}" data-programs="${UI.esc(row.programs.join(','))}" style="padding:3px 7px;font-size:11px">${label}</button></td>`;
           }
-          const partialTxt = cell.partialLiburSesi ? ` (Sesi ${cell.partialLiburSesi} Libur)` : '';
+          const partialTxt = cell.partialInfo ? ` (${cell.partialInfo})` : (cell.partialLiburSesi ? ` (Sesi ${cell.partialLiburSesi} Libur)` : '');
           return `<td class="center" title="Belum setoran${partialTxt}"><span class="badge danger">Belum</span></td>`;
         }).join('');
         return `<tr>

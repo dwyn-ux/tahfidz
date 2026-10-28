@@ -1912,11 +1912,14 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     return `${h.ayahs} ayat · ${h.pages} hlm`;
   }
 
-  function bayarSetoran(santriId, tanggal, programs) {
+  function bayarSetoran(santriId, tanggal, programs, onSaved) {
     const santri = Store.findSantri(santriId);
     const activePrograms = [...new Set(programs || [])].filter(program => santri && Store.santriHasProgram(santri, program));
     if (!santri || !activePrograms.length) { UI.toast('Jenis setoran santri tidak ditemukan', 'error'); return; }
-    const openInput = program => umumInput(santriId, program, tanggal, () => laporan());
+    const openInput = program => umumInput(santriId, program, tanggal, () => {
+      if (typeof onSaved === 'function') onSaved();
+      else laporan();
+    });
     if (activePrograms.length === 1) { openInput(activePrograms[0]); return; }
     UI.openModal({
       title: 'Bayar Setoran Tertinggal',
@@ -2305,5 +2308,5 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     };
   }
 
-  return { nav, dashboard, absensi, talim, pembelajaran, riwayat, laporan, notif, sesiSaatIni, formatPesanSetoranWA };
+  return { nav, dashboard, absensi, talim, pembelajaran, riwayat, laporan, notif, sesiSaatIni, formatPesanSetoranWA, bayarSetoran, umumInput };
 })();
