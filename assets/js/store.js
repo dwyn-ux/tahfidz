@@ -943,12 +943,23 @@ const Store = (() => {
     let ayahs = 0, pages = 0, juzMin = 30, juzMax = 1;
     const add = (rec) => {
       const h = computeHafalan(rec.sAwal, rec.aAwal, rec.sAkhir, rec.aAkhir);
-      if (h) { ayahs += h.ayahs; pages += h.pages; juzMin = Math.min(juzMin, h.juzStart); juzMax = Math.max(juzMax, h.juzEnd); }
+      if (h) {
+        const p = (rec.pages !== undefined && rec.pages !== null && Number(rec.pages) > 0)
+          ? Number(rec.pages)
+          : ((rec.totalHafalan !== undefined && Number(rec.totalHafalan) > 0) ? Number(rec.totalHafalan) : h.pages);
+        ayahs += h.ayahs;
+        pages += p;
+        juzMin = Math.min(juzMin, h.juzStart);
+        juzMax = Math.max(juzMax, h.juzEnd);
+      } else if (rec.totalHafalan !== undefined && Number(rec.totalHafalan) > 0) {
+        pages += Number(rec.totalHafalan);
+      }
     };
-    db.ziyadahHafalan.filter(z => z.santriId === santriId).forEach(add);
-    db.mutqin.filter(m => m.santriId === santriId).forEach(add);
-    if (ayahs === 0) return null;
-    return { ayahs, pages, juzStart: juzMin, juzEnd: juzMax, juzRange: juzMax - juzMin + 1 };
+    (db.ziyadahHafalan || []).filter(z => z.santriId === santriId).forEach(add);
+    (db.mutqin || []).filter(m => m.santriId === santriId).forEach(add);
+    if (ayahs === 0 && pages === 0) return null;
+    pages = Math.round(pages * 10) / 10;
+    return { ayahs, pages, juzStart: juzMin, juzEnd: juzMax, juzRange: Math.max(1, juzMax - juzMin + 1) };
   }
 
   function avgNilai(santriId) {

@@ -220,6 +220,15 @@ function nextHafalanPosition(lastSurah, lastAyah, juzOrder) {
   return { surah: firstSurahOfJuz(next), ayah: 1 };
 }
 
+function rankOfSurahAyah(s, a) {
+  let r = 0;
+  for (let i = 1; i < Number(s); i++) {
+    const item = getSurah(i);
+    if (item) r += item.ayahs;
+  }
+  return r + Number(a);
+}
+
 /* Hitung total hafalan dari range surat:ayat -> surat:ayat
    Mengembalikan { ayahs, pages, juzStart, juzEnd, juzRange } */
 function computeHafalan(startSurah, startAyah, endSurah, endAyah) {
@@ -241,7 +250,37 @@ function computeHafalan(startSurah, startAyah, endSurah, endAyah) {
   }
   const pStart = ayahToPage(startSurah, startAyah);
   const pEnd = ayahToPage(endSurah, endAyah);
-  const pages = Math.max(1, pEnd - pStart + 1);
+  let pages = Math.max(1, pEnd - pStart + 1);
+
+  if (typeof PAGE_START !== 'undefined') {
+    const lo = rankOfSurahAyah(startSurah, startAyah);
+    const hi = rankOfSurahAyah(endSurah, endAyah);
+    let sPage = 1, ePage = 1;
+    for (let p = 604; p >= 1; p--) {
+      const st = PAGE_START[p];
+      if (st && rankOfSurahAyah(st[0], st[1]) <= lo) { sPage = p; break; }
+    }
+    for (let p = 604; p >= 1; p--) {
+      const st = PAGE_START[p];
+      if (st && rankOfSurahAyah(st[0], st[1]) <= hi) { ePage = p; break; }
+    }
+    let totalP = 0;
+    for (let p = sPage; p <= ePage; p++) {
+      const st = PAGE_START[p];
+      if (!st) continue;
+      const pLo = rankOfSurahAyah(st[0], st[1]);
+      const nx = PAGE_START[p + 1];
+      const pHi = nx ? rankOfSurahAyah(nx[0], nx[1]) - 1 : 6236;
+      const pageCount = pHi - pLo + 1;
+      const oLo = Math.max(lo, pLo);
+      const oHi = Math.min(hi, pHi);
+      if (oLo <= oHi) {
+        totalP += (oHi - oLo + 1) / pageCount;
+      }
+    }
+    pages = Math.max(0.5, Math.round(totalP * 2) / 2);
+  }
+
   const juzStart = pageToJuz(pStart);
   const juzEnd = pageToJuz(pEnd);
   const juzRange = juzEnd - juzStart + 1;
@@ -252,7 +291,7 @@ function computeHafalan(startSurah, startAyah, endSurah, endAyah) {
 function formatHafalan(h) {
   if (!h) return '-';
   let parts = [];
-  if (h.pages >= 1) parts.push(h.pages + ' halaman');
+  if (h.pages > 0) parts.push(h.pages + ' halaman');
   if (h.juzRange >= 1) parts.push((h.juzRange === 1 ? 'Juz ' + h.juzStart : h.juzRange + ' juz'));
   if (!parts.length) parts.push(h.ayahs + ' ayat');
   return parts.join(' • ');

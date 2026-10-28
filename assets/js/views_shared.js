@@ -372,6 +372,7 @@ if (typeof document !== 'undefined' && !document._setoranDetailBound) {
     }));
     db.ziyadahHafalan.filter(z => z.santriId === santriId).forEach(z => {
       const h = computeHafalan(z.sAwal, z.aAwal, z.sAkhir, z.aAkhir);
+      if (h && z.pages !== undefined && z.pages !== null && Number(z.pages) > 0) h.pages = Number(z.pages);
       items.push({
         t: z.tanggal, html: `<b>Ziyadah Hafalan</b> — ${getSurah(z.sAwal).latin}:${z.aAwal} → ${getSurah(z.sAkhir).latin}:${z.aAkhir} · <b>${formatHafalan(h)}</b> · Nilai ${z.nilai}<div class="muted">${UI.esc(z.catatan || '')}</div>`,
         hapus: (session && (session.role === 'ustadz' || session.role === 'admin')) ? `<button class="clay-btn sm ghost" data-hapus="ziyadahHafalan" data-id="${z.id}" style="padding:2px 8px;font-size:11px;color:var(--danger)">Hapus</button>` : ''
@@ -384,7 +385,14 @@ if (typeof document !== 'undefined' && !document._setoranDetailBound) {
         hapus: (session && (session.role === 'ustadz' || session.role === 'admin')) ? `<button class="clay-btn sm ghost" data-hapus="mutqin" data-id="${m.id}" style="padding:2px 8px;font-size:11px;color:var(--danger)">Hapus</button>` : ''
       });
     });
-    db.kehadiran.filter(k => k.santriId === santriId).forEach(k => items.push({ t: k.tanggal, html: `Kehadiran ${UI.esc(k.sesi || '')}: <span class="badge ${k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : k.status === 'Libur' ? 'purple' : 'danger'}">${UI.esc(k.status)}</span>`, hapus: '' }));
+    db.kehadiran.filter(k => k.santriId === santriId).forEach(k => {
+      const ket = k.keterangan || k.catatan || '';
+      items.push({
+        t: k.tanggal,
+        html: `Kehadiran ${UI.esc(k.sesi || '')}: <span class="badge ${k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : k.status === 'Libur' ? 'purple' : 'danger'}">${UI.esc(k.status)}</span>${ket ? ` <span class="muted" style="font-size:12px;font-style:italic">(${UI.esc(ket)})</span>` : ''}`,
+        hapus: ''
+      });
+    });
     db.catatan.filter(c => c.santriId === santriId).forEach(c => items.push({ t: c.tanggal, html: `<b>Catatan Ustadz:</b> ${UI.esc(c.isi)}`, hapus: '' }));
 
     items.sort((a, b) => b.t.localeCompare(a.t));
@@ -938,7 +946,8 @@ function exportLaporanExcel(filters) {
       detail = formatSetoranLabel(rec);
       if (type === 'ziyadahHafalan') {
         const h = computeHafalan(rec.sAwal, rec.aAwal, rec.sAkhir, rec.aAkhir);
-        if (h) detail += ' (' + h.pages + ' hlm · ' + h.ayahs + ' ayat)';
+        const p = (rec.pages !== undefined && rec.pages !== null && Number(rec.pages) > 0) ? Number(rec.pages) : (h ? h.pages : 0);
+        if (h) detail += ' (' + p + ' hlm · ' + h.ayahs + ' ayat)';
       } else if (type === 'mutqin' && rec.totalHafalan) {
         detail += ' (' + rec.totalHafalan + ' hlm)';
       }
@@ -960,7 +969,8 @@ function exportLaporanExcel(filters) {
       lines.push('Surat: ' + formatSetoranLabel(rec));
       if (type === 'ziyadahHafalan') {
         const h = computeHafalan(rec.sAwal, rec.aAwal, rec.sAkhir, rec.aAkhir);
-        if (h) lines.push('Panjang: ' + h.pages + ' halaman · ' + h.ayahs + ' ayat');
+        const p = (rec.pages !== undefined && rec.pages !== null && Number(rec.pages) > 0) ? Number(rec.pages) : (h ? h.pages : 0);
+        if (h) lines.push('Panjang: ' + p + ' halaman · ' + h.ayahs + ' ayat');
       } else if (type === 'mutqin' && rec.totalHafalan) {
         lines.push('Total Murajaah: ' + rec.totalHafalan + ' halaman');
       }
@@ -1080,9 +1090,9 @@ function exportLaporanExcel(filters) {
           if (isDayLibur) return { status: 'libur', types: [] };
           const partialLiburRec = santriDayAbsensi.find(k => k.status === 'Libur') || halaqahAu.find(a => a.status === 'Libur');
           const sakitRec = santriDayAbsensi.find(k => k.status === 'Sakit');
-          if (sakitRec) return { status: 'sakit', types: [], sesi: sakitRec.sesi };
+          if (sakitRec) return { status: 'sakit', types: [], sesi: sakitRec.sesi, ket: sakitRec.keterangan || sakitRec.catatan || '' };
           const izinRec = santriDayAbsensi.find(k => k.status === 'Izin');
-          if (izinRec) return { status: 'izin', types: [], sesi: izinRec.sesi };
+          if (izinRec) return { status: 'izin', types: [], sesi: izinRec.sesi, ket: izinRec.keterangan || izinRec.catatan || '' };
           return { status: 'missing', types: [], partialLiburSesi: partialLiburRec ? partialLiburRec.sesi : '' };
         });
         const absensi = Store.rekapKehadiranSantri(s.id, period.dari, period.sampai);
@@ -1120,19 +1130,21 @@ function exportLaporanExcel(filters) {
           }
           if (cell.status === 'sakit') {
             const sesiTxt = cell.sesi ? ` (${cell.sesi})` : '';
+            const ketTxt = cell.ket ? ` - ${cell.ket}` : '';
             if (allowMakeup) {
               const tanggal = recap.days[dayIndex].tanggal;
-              return `<td class="center" title="Absensi: Sakit${sesiTxt}"><span class="badge blue" style="font-size:10px;padding:2px 5px;margin-right:2px">Sakit</span><button class="clay-btn sm secondary" data-bayar-setoran data-santri-id="${UI.esc(row.s.id)}" data-tanggal="${UI.esc(tanggal)}" data-programs="${UI.esc(row.programs.join(','))}" style="padding:2px 5px;font-size:10px" title="Klik untuk catat bayar setoran susulan">Bayar</button></td>`;
+              return `<td class="center" title="Absensi: Sakit${sesiTxt}${ketTxt}"><span class="badge blue" style="font-size:10px;padding:2px 5px;margin-right:2px">Sakit</span><button class="clay-btn sm secondary" data-bayar-setoran data-santri-id="${UI.esc(row.s.id)}" data-tanggal="${UI.esc(tanggal)}" data-programs="${UI.esc(row.programs.join(','))}" style="padding:2px 5px;font-size:10px" title="Klik untuk catat bayar setoran susulan">Bayar</button></td>`;
             }
-            return `<td class="center" title="Absensi: Sakit${sesiTxt}"><span class="badge blue" style="font-size:10px;padding:2px 6px">Sakit</span></td>`;
+            return `<td class="center" title="Absensi: Sakit${sesiTxt}${ketTxt}"><span class="badge blue" style="font-size:10px;padding:2px 6px">Sakit</span></td>`;
           }
           if (cell.status === 'izin') {
             const sesiTxt = cell.sesi ? ` (${cell.sesi})` : '';
+            const ketTxt = cell.ket ? ` - ${cell.ket}` : '';
             if (allowMakeup) {
               const tanggal = recap.days[dayIndex].tanggal;
-              return `<td class="center" title="Absensi: Izin${sesiTxt}"><span class="badge warn" style="font-size:10px;padding:2px 5px;margin-right:2px">Izin</span><button class="clay-btn sm secondary" data-bayar-setoran data-santri-id="${UI.esc(row.s.id)}" data-tanggal="${UI.esc(tanggal)}" data-programs="${UI.esc(row.programs.join(','))}" style="padding:2px 5px;font-size:10px" title="Klik untuk catat bayar setoran susulan">Bayar</button></td>`;
+              return `<td class="center" title="Absensi: Izin${sesiTxt}${ketTxt}"><span class="badge warn" style="font-size:10px;padding:2px 5px;margin-right:2px">Izin</span><button class="clay-btn sm secondary" data-bayar-setoran data-santri-id="${UI.esc(row.s.id)}" data-tanggal="${UI.esc(tanggal)}" data-programs="${UI.esc(row.programs.join(','))}" style="padding:2px 5px;font-size:10px" title="Klik untuk catat bayar setoran susulan">Bayar</button></td>`;
             }
-            return `<td class="center" title="Absensi: Izin${sesiTxt}"><span class="badge warn" style="font-size:10px;padding:2px 6px">Izin</span></td>`;
+            return `<td class="center" title="Absensi: Izin${sesiTxt}${ketTxt}"><span class="badge warn" style="font-size:10px;padding:2px 6px">Izin</span></td>`;
           }
           if (allowMakeup) {
             const tanggal = recap.days[dayIndex].tanggal;

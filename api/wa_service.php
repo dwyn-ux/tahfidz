@@ -198,6 +198,10 @@ function waRekapSantri(array $records, string $santriId, string $dari, string $s
         if (!isset($total[$status])) continue;
         $perSesi[$sesi][$status]++;
         $total[$status]++;
+        $ket = trim((string)($record['keterangan'] ?? $record['catatan'] ?? ''));
+        if ($ket !== '' && ($status === 'Izin' || $status === 'Sakit')) {
+            $perSesi[$sesi]['_keterangan'] = $ket;
+        }
     }
 
     // Alfa dihitung dari slot yang kosong: hari x sesi - catatan yang ada.
@@ -293,9 +297,10 @@ function waFormatHarian(array $santri, array $rekap, array $periode, string $lem
     $lines = [];
     foreach (WA_SESI_REKAP as $sesi) {
         $st = 'Alfa';
+        $ket = $perSesi[$sesi]['_keterangan'] ?? '';
         if (!empty($perSesi[$sesi]['Hadir'])) $st = 'Hadir';
-        elseif (!empty($perSesi[$sesi]['Izin'])) $st = 'Izin';
-        elseif (!empty($perSesi[$sesi]['Sakit'])) $st = 'Sakit';
+        elseif (!empty($perSesi[$sesi]['Izin'])) $st = 'Izin' . ($ket !== '' ? " ({$ket})" : '');
+        elseif (!empty($perSesi[$sesi]['Sakit'])) $st = 'Sakit' . ($ket !== '' ? " ({$ket})" : '');
         elseif (!empty($perSesi[$sesi]['Libur'])) $st = 'Libur';
         $sesiPad = str_pad($sesi, 13, ' ');
         $lines[] = "• {$sesiPad} : {$st}";

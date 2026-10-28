@@ -115,12 +115,21 @@ const Wali = (() => {
     const mut = db.mutqin.filter(m => m.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal));
 
     const tahsinRows = tahsin.map(t => `<tr><td>${UI.fmtDate(t.tanggal)}</td><td>Hal ${t.halAwal}-${t.halAkhir}</td><td>${t.nilai}</td><td class="muted">${UI.esc(t.catatan || '')}</td></tr>`).join('');
-    const ziyRows = ziy.map(z => `<tr><td>${UI.fmtDate(z.tanggal)}</td><td>${getSurah(z.sAwal).latin}:${z.aAwal} → ${getSurah(z.sAkhir).latin}:${z.aAkhir}</td><td>${formatHafalan(computeHafalan(z.sAwal, z.aAwal, z.sAkhir, z.aAkhir))}</td><td>${z.nilai}</td></tr>`).join('');
+    const ziyRows = ziy.map(z => {
+      const h = computeHafalan(z.sAwal, z.aAwal, z.sAkhir, z.aAkhir);
+      if (h && z.pages !== undefined && z.pages !== null && Number(z.pages) > 0) h.pages = Number(z.pages);
+      return `<tr><td>${UI.fmtDate(z.tanggal)}</td><td>${getSurah(z.sAwal).latin}:${z.aAwal} → ${getSurah(z.sAkhir).latin}:${z.aAkhir}</td><td>${formatHafalan(h)}</td><td>${z.nilai}</td></tr>`;
+    }).join('');
     const mutRows = mut.map(m => `<tr><td>${UI.fmtDate(m.tanggal)}</td><td>${getSurah(m.sAwal).latin}:${m.aAwal} → ${getSurah(m.sAkhir).latin}:${m.aAkhir}</td><td>${m.totalHafalan} hlm</td><td>${m.nilai}</td></tr>`).join('');
 
     // grafik perkembangan (akumulasi halaman per setoran)
     let acc = 0;
-    const chartData = ziy.slice().reverse().map(z => { const hh = computeHafalan(z.sAwal, z.aAwal, z.sAkhir, z.aAkhir); acc += hh ? hh.pages : 0; return { label: UI.fmtDate(z.tanggal).split(' ')[0], value: acc }; });
+    const chartData = ziy.slice().reverse().map(z => {
+      const hh = computeHafalan(z.sAwal, z.aAwal, z.sAkhir, z.aAkhir);
+      const p = (z.pages !== undefined && z.pages !== null && Number(z.pages) > 0) ? Number(z.pages) : (hh ? hh.pages : 0);
+      acc += p;
+      return { label: UI.fmtDate(z.tanggal).split(' ')[0], value: Math.round(acc * 10) / 10 };
+    });
 
     document.getElementById('view-content').innerHTML = `
       <div class="grid kpi">
@@ -164,7 +173,8 @@ const Wali = (() => {
     kehadiran.forEach(k => { if (counts[k.status] !== undefined) counts[k.status]++; });
     const rows = kehadiran.slice(0, 30).map(k => {
       const cls = k.status === 'Hadir' ? 'green' : k.status === 'Izin' ? 'warn' : k.status === 'Sakit' ? 'blue' : k.status === 'Libur' ? 'purple' : 'danger';
-      const catatanText = k.catatan ? `<div class="muted" style="font-size:11px">${UI.esc(k.catatan)}</div>` : '';
+      const ket = k.keterangan || k.catatan;
+      const catatanText = ket ? `<div class="muted" style="font-size:11px;font-style:italic">(${UI.esc(ket)})</div>` : '';
       return `<tr><td>${UI.fmtDate(k.tanggal)}</td><td>${k.sesi ? '<span class="pill sm" style="font-size:11px;padding:2px 8px">' + UI.esc(k.sesi) + '</span>' : ''}</td><td><span class="badge ${cls}">${UI.esc(k.status)}</span>${catatanText}</td></tr>`;
     }).join('');
     document.getElementById('view-content').innerHTML = `
