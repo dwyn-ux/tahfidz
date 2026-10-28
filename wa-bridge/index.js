@@ -54,6 +54,47 @@ const SESSION_DIR = path.join(__dirname, 'session');
 const MIN_DELAY = Number(process.env.WA_MIN_DELAY || 6);
 const MAX_DELAY = Number(process.env.WA_MAX_DELAY || 12);
 
+// Cache pesan terkirim & diterima untuk melayani retry receipt / handshake kunci enkripsi E2EE WhatsApp
+// (Mencegah masalah "Menunggu pesan ini. Ini mungkin membutuhkan waktu beberapa saat")
+const MSG_CACHE_FILE = path.join(SESSION_DIR, 'messages_cache.json');
+let messageCache = {};
+try {
+  if (fs.existsSync(MSG_CACHE_FILE)) {
+    messageCache = JSON.parse(fs.readFileSync(MSG_CACHE_FILE, 'utf8') || '{}');
+  }
+} catch (_) {
+  messageCache = {};
+}
+
+let saveCacheTimer = null;
+function saveMessage(id, message) {
+  if (!id || !message) return;
+  messageCache[id] = message;
+  if (!saveCacheTimer) {
+    saveCacheTimer = setTimeout(() => {
+      saveCacheTimer = null;
+      try {
+        const keys = Object.keys(messageCache);
+        if (keys.length > 500) {
+          const excess = keys.length - 500;
+          for (let i = 0; i < excess; i++) delete messageCache[keys[i]];
+        }
+        fs.writeFileSync(MSG_CACHE_FILE, JSON.stringify(messageCache));
+      } catch (err) {
+        console.warn('[WA] Gagal simpan message cache:', err.message);
+      }
+    }, 2000);
+  }
+}
+
+const retryCacheMap = new Map();
+const msgRetryCounterCache = {
+  get: (key) => retryCacheMap.get(key),
+  set: (key, val) => retryCacheMap.set(key, val),
+  del: (key) => retryCacheMap.delete(key),
+  flushAll: () => retryCacheMap.clear()
+};
+
 let sock = null;
 let state = { connected: false, phone: null, qr: null, status: 'starting' };
 const queue = [];
@@ -85,7 +126,14 @@ async function startWA() {
     sock = makeWASocket({
       version,
       auth: authState,
-      markOnlineOnConnect: false,
+      msgRetryCounterCache,
+      getMessage: async (key) => {
+        if (key && key.id && messageCache[key.id]) {
+          return messageCache[key.id];
+        }
+        return undefined;
+      },
+      markOnlineOnConnect: true,
       syncFullHistory: false,
       logger: silentLogger,
       generateHighQualityLinkPreview: false,
@@ -93,6 +141,14 @@ async function startWA() {
     });
 
     sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('messages.upsert', ({ messages }) => {
+      for (const m of (messages || [])) {
+        if (m.key && m.key.id && m.message) {
+          saveMessage(m.key.id, m.message);
+        }
+      }
+    });
 
     sock.ev.on('connection.update', async (u) => {
       const { connection, lastDisconnect, qr } = u;
@@ -145,7 +201,10 @@ async function flush() {
   while (queue.length && state.connected && !stopRequested) {
     const { to, message } = queue.shift();
     try {
-      await sock.sendMessage(to + '@s.whatsapp.net', { text: message });
+      const sent = await sock.sendMessage(to + '@s.whatsapp.net', { text: message });
+      if (sent && sent.key && sent.key.id && sent.message) {
+        saveMessage(sent.key.id, sent.message);
+      }
       console.log('[WA] sent ->', to);
     } catch (e) {
       console.error('[WA] send failed ->', to, e.message);
