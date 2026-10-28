@@ -284,6 +284,14 @@ ${state.lastError ? `<p style="margin:8px 0 0;color:#ef4444;font-size:12px">${st
         const message = String(b.message || '').trim();
         if (!to || !message) return json(400, { error: 'to & message required' });
         if (!state.connected) return json(409, { error: 'WA belum terhubung. Scan QR dulu.' });
+
+        // Keamanan: Tolak jika nomor tujuan sama dengan nomor WhatsApp bot bridge itu sendiri
+        const myJid = (sock && sock.user && sock.user.id) ? String(sock.user.id).split(':')[0].replace(/\D/g, '') : '';
+        if (myJid && to === myJid) {
+          console.warn(`[WA] Ditolak: Mencoba mengirim ke nomor bot itu sendiri (${to})`);
+          return json(400, { error: 'Nomor tujuan sama dengan nomor bot WhatsApp pengirim' });
+        }
+
         enqueue(to, message);
         json(202, { ok: true, queued: true });
       } catch (e) {

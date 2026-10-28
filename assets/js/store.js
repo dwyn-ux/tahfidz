@@ -153,6 +153,7 @@ const Store = (() => {
       // Data baru dapat menyimpan beberapa program sekaligus, misalnya Tahsin
       // dan Ziyadah, masing-masing dengan halaqah yang berbeda.
       db.santri = (db.santri || []).map(santri => normalizeSantriEducation(normalizeSantriPrograms(santri)));
+      healWaliRelations();
       // Data absensi dari versi awal belum memiliki sesi. Anggap sebagai
       // Subuh supaya tetap muncul di rekap, lalu semua input baru memakai
       // sesi yang eksplisit.
@@ -281,6 +282,37 @@ const Store = (() => {
     return value === true || value === 1 || value === '1' || value === 'true';
   }
 
+  // Normalisasi & perbaikan otomatis relasi santri - wali.
+  // Mencegah santri berbagi waliId secara tidak sengaja dan memastikan setiap
+  // santri memiliki record wali yang valid dengan nomor HP tersinkronisasi.
+  function healWaliRelations() {
+    if (!db || !Array.isArray(db.santri)) return;
+    db.wali = (db.wali || []).filter(w => w && w.id && String(w.id).trim() !== '');
+
+    (db.santri || []).forEach(s => {
+      if (!s || !s.id) return;
+      const sWaliId = s.waliId ? String(s.waliId).trim() : '';
+      let waliRec = sWaliId ? db.wali.find(w => String(w.id).trim() === sWaliId) : null;
+      if (!waliRec) {
+        waliRec = db.wali.find(w => String(w.santriId || '').trim() === String(s.id).trim());
+      }
+      if (waliRec) {
+        s.waliId = waliRec.id;
+        if (!waliRec.noHp && s.noHpWali) waliRec.noHp = s.noHpWali;
+        if (!s.noHpWali && waliRec.noHp) s.noHpWali = waliRec.noHp;
+      } else {
+        const newWaliId = uid('w');
+        s.waliId = newWaliId;
+        db.wali.push({
+          id: newWaliId,
+          nama: s.namaWali || s.nama,
+          noHp: s.noHpWali || '',
+          santriId: s.id
+        });
+      }
+    });
+  }
+
   function waCleanPhone(p) {
     if (!p) return '';
     let str = String(p).trim();
@@ -329,6 +361,20 @@ const Store = (() => {
     if (!waAutoEnabled()) { waLog({ to: null, status: 'skipped', detail: 'WhatsApp Otomatis nonaktif', message }); return Promise.resolve(false); }
     const nomor = waNomorWali(santriId);
     if (!nomor) { waLog({ to: null, status: 'skipped', detail: 'Santri tanpa no. HP wali', message }); return Promise.resolve(false); }
+
+    // Keamanan tambahan: cegah kirim ke nomor dummy/demo bawaan
+    const dummyPrefixes = ['628120000', '628121111', '628122222', '628123456789'];
+    if (dummyPrefixes.some(d => nomor === d || nomor.startsWith(d))) {
+      waLog({ to: nomor, status: 'skipped', detail: 'Ditolak: Nomor terdeteksi sebagai nomor demo/dummy (' + nomor + ')', message });
+      return Promise.resolve(false);
+    }
+    // Keamanan tambahan: cegah kirim ke nomor bot bridge pengirim itu sendiri
+    const bridgePhone = (db.settings && db.settings.waBridgePhone) || '';
+    if (bridgePhone && waCleanPhone(bridgePhone) === nomor) {
+      waLog({ to: nomor, status: 'skipped', detail: 'Ditolak: Nomor tujuan sama dengan nomor WA bot pengirim', message });
+      return Promise.resolve(false);
+    }
+
     return waSend(nomor, message);
   }
   /* ---------- Pemicu WA otomatis (setoran / harian / mingguan / bulanan) ---------- */
@@ -1417,7 +1463,7 @@ const Store = (() => {
     tingkatOptions, kelasOptions, tingkatForSantri, kelasForSantri, normalizeSantriEducation, kelasLabel, educationLabel,
     simpanTingkat, hapusTingkat, simpanKelas, hapusKelas, tingkatAda, kelasDipakaiDiTalim, jumlahSantriKelas, naturalKelasSort,
     uploadKitab, talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
-    waSend, waLog, waReady, waAutoEnabled, waSendWali, waNomorWali, waStatus, waQrDataUrl, waLogServer,
+    waSend, waLog, waReady, waAutoEnabled, waSendWali, waNomorWali, waCleanPhone, healWaliRelations, waStatus, waQrDataUrl, waLogServer,
     waAutoTriggerSettings, waReportContentSettings, waAutoHour, waAutoReminder, waQueueStatus, waStopQueue, waPreviewTest, waSendTestRecap, waAbsensiMessage,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, kehadiranRentang, dedupeKehadiran,
     setoranRentang, avgNilaiRentang, padaRentang, juzHafalanDisplay,

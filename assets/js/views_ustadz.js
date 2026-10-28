@@ -63,13 +63,16 @@ const Ustadz = (() => {
 
     const laporanBlock = lines.length ? `\n*Laporan*\n${lines.join('\n')}\n` : '';
 
+    const namaWali = (santri.namaWali && String(santri.namaWali).trim()) ? `Bpk/Ibu ${santri.namaWali}` : 'Orang Tua / Wali';
+
     return `*INFORMASI CAPAIAN TAHFIDZ AL_QUR'AN SANTRI*
 *${lembaga}*
 
-Nama     : ${santri.nama || '-'}
-Kelas     : ${kelas}
-Tanggal  : ${tglStr}
-Waktu     : ${jamStr}
+Kepada Yth. : ${namaWali}
+Nama Santri : ${santri.nama || '-'}
+Kelas       : ${kelas}
+Tanggal     : ${tglStr}
+Waktu       : ${jamStr}
 ${laporanBlock}
 Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhirat Keluarga kelak. Amiin`;
   }

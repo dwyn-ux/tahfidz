@@ -359,15 +359,87 @@ const Admin = (() => {
     ]);
   }
 
+  function auditWaliModal(phoneUsage) {
+    const dupKeys = Object.keys(phoneUsage).filter(p => phoneUsage[p].length > 1);
+    let bodyHTML = '';
+    if (!dupKeys.length) {
+      bodyHTML = '<div class="clay-card pad-sm" style="background:#f0fdf4;border:1px solid #bbf7d0;color:#166534">' +
+        '✓ <b>Semua nomor aman!</b> Tidak ditemukan nomor WhatsApp wali yang dipakai oleh lebih dari 1 santri aktif.' +
+      '</div>';
+    } else {
+      bodyHTML = '<div style="font-size:13px;color:#713f12;background:#fef3c7;border:1px solid #fde68a;padding:10px 14px;border-radius:10px;margin-bottom:14px;">' +
+        '⚠️ Ditemukan <b>' + dupKeys.length + ' nomor WhatsApp</b> yang terdaftar pada beberapa santri sekaligus.<br>' +
+        'Jika santri di bawah ini <b>bukan saudara kandung</b>, silakan klik tombol <b>Edit No. HP</b> untuk memperbaikinya agar laporan setoran tidak salah sasaran.' +
+      '</div>' +
+      '<div style="display:flex;flex-direction:column;gap:12px;max-height:420px;overflow-y:auto;">' +
+        dupKeys.map(phone => {
+          const list = phoneUsage[phone];
+          return '<div class="clay-card pad-sm" style="border:1px solid var(--border)">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+              '<span style="font-family:monospace;font-weight:700;font-size:13px;color:#0284c7">📱 ' + UI.esc(phone) + '</span>' +
+              '<span class="badge warn" style="font-size:11px">' + list.length + ' Santri Terdaftar</span>' +
+            '</div>' +
+            '<div class="table-wrap"><table class="clay-table">' +
+              '<thead><tr><th>Nama Santri</th><th>Tingkat &amp; Kelas</th><th>Nama Wali</th><th>Aksi</th></tr></thead>' +
+              '<tbody>' +
+                list.map(st =>
+                  '<tr>' +
+                    '<td><b>' + UI.esc(st.nama) + '</b><div class="muted">' + UI.esc(st.nis || '') + '</div></td>' +
+                    '<td>' + UI.esc(Store.educationLabel(st) || '-') + '</td>' +
+                    '<td>' + UI.esc(st.namaWali || '-') + '</td>' +
+                    '<td><button type="button" class="clay-btn sm primary" data-audit-edit="' + UI.esc(st.id) + '">✏ Edit No. HP</button></td>' +
+                  '</tr>'
+                ).join('') +
+              '</tbody>' +
+            '</table></div>' +
+          '</div>';
+        }).join('') +
+      '</div>';
+    }
+
+    const modalObj = UI.openModal({
+      cls: 'modal-lg',
+      title: 'Audit Kontak WhatsApp Wali',
+      sub: 'Deteksi santri yang berbagi nomor HP wali yang sama untuk mencegah salah sasaran laporan.',
+      bodyHTML,
+      actions: [
+        { label: 'Tutup', cls: 'ghost', onClick: (m, c) => c() }
+      ]
+    });
+
+    modalObj.modal.querySelectorAll('[data-audit-edit]').forEach(btn => {
+      btn.onclick = () => {
+        modalObj.close();
+        santriForm(btn.dataset.auditEdit);
+      };
+    });
+  }
+
   function santri() {
     Shared.shell('admin', nav('admin_santri'), '');
     Shared.setHeader('Manajemen Santri', 'Kelola data santri & akun wali otomatis');
     const db = Store.get();
+
+    // Hitung nomor HP yang terpakai di lebih dari 1 santri aktif
+    const activeSantri = db.santri.filter(s => s.status !== 'Nonaktif');
+    const phoneUsage = {};
+    activeSantri.forEach(s => {
+      const p = Store.waNomorWali(s.id);
+      if (p && p.length >= 9) {
+        if (!phoneUsage[p]) phoneUsage[p] = [];
+        phoneUsage[p].push(s);
+      }
+    });
+    const dupCount = Object.keys(phoneUsage).filter(p => phoneUsage[p].length > 1).length;
+
     const rows = db.santri.map(s => {
+      const p = Store.waNomorWali(s.id);
+      const isDup = p && phoneUsage[p] && phoneUsage[p].length > 1;
+      const dupBadge = isDup ? (' <span class="badge warn" style="font-size:10px;padding:1px 6px;cursor:pointer;" title="Nomor HP wali (' + p + ') terdaftar di ' + (phoneUsage[p].length - 1) + ' santri lain">⚠️ No. Duplikat</span>') : '';
       const waliUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
       const username = waliUser ? waliUser.username : '-';
       return `<tr>
-        <td><b>${UI.esc(s.nama)}</b><div class="muted">${UI.esc(s.nis)}</div></td>
+        <td><b>${UI.esc(s.nama)}</b>${dupBadge}<div class="muted">${UI.esc(s.nis)}${s.namaWali ? ' · Wali: ' + UI.esc(s.namaWali) : ''}</div></td>
         <td>${UI.esc(s.jk)}</td>
         <td>${UI.esc(Store.tingkatForSantri(s) || '-')}</td>
         <td>${UI.esc(Store.kelasForSantri(s) || '-')}</td>
@@ -383,6 +455,7 @@ const Admin = (() => {
         <div class="row" style="justify-content:space-between">
           <div class="section-title" style="margin:0">Daftar Santri (${db.santri.length})</div>
           <div class="row">
+            ${dupCount > 0 ? '<button type="button" class="clay-btn warn" id="btn-audit-wali" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;">⚠️ ' + dupCount + ' No. Wali Duplikat</button>' : ''}
             <button class="clay-btn ghost" id="btn-gen-bulk">⚙️ Generate Username</button>
             <button class="clay-btn ghost" id="btn-import">Import Excel</button>
             <button class="clay-btn secondary" id="btn-download-xlsx">⬇ Download XLSX</button>
@@ -397,6 +470,8 @@ const Admin = (() => {
           <tbody id="santri-table-body">${rows || `<tr><td colspan="9"><div class="empty">Belum ada santri.</div></td></tr>`}</tbody>
         </table></div>
       </div>`;
+    const btnAudit = document.getElementById('btn-audit-wali');
+    if (btnAudit) btnAudit.onclick = () => auditWaliModal(phoneUsage);
     document.getElementById('btn-add').onclick = () => santriForm();
     document.getElementById('btn-import').onclick = () => importSantriDialog();
     document.getElementById('btn-download-xlsx').onclick = downloadSantriXlsx;
@@ -649,6 +724,36 @@ const Admin = (() => {
       const taken = new Set(db.users.filter(u => u.username).map(u => u.username));
       modal.modal.querySelector('#f-uname').value = uniqueUsername(base, taken);
     };
+    const hpWaliInput = modal.modal.querySelector('#f-hpwali');
+    if (hpWaliInput) {
+      const hpWaliWarn = document.createElement('div');
+      hpWaliWarn.style.cssText = 'font-size:12px;color:#b45309;background:#fef3c7;padding:6px 10px;border-radius:8px;border:1px solid #fde68a;margin-top:5px;display:none;line-height:1.45;';
+      hpWaliInput.parentNode.appendChild(hpWaliWarn);
+
+      const checkDup = () => {
+        const val = Store.waCleanPhone(hpWaliInput.value);
+        if (!val || val.length < 9) {
+          hpWaliWarn.style.display = 'none';
+          return;
+        }
+        const existing = (db.santri || []).filter(other => {
+          if (id && other.id === id) return false;
+          if (other.status === 'Nonaktif') return false;
+          const otherPhone = Store.waCleanPhone(Store.waNomorWali(other.id));
+          return otherPhone === val;
+        });
+        if (existing.length > 0) {
+          const names = existing.map(x => (x.nama + ' (' + (Store.educationLabel(x) || '-') + ')')).join(', ');
+          hpWaliWarn.innerHTML = '⚠️ <b>Perhatian:</b> Nomor WhatsApp ini sudah dipakai untuk santri: <b>' + UI.esc(names) + '</b>.<br><span style="font-size:11px;color:#92400e">Pastikan mereka benar-benar bersaudara kandung (1 wali yang sama) agar laporan tidak salah sasaran.</span>';
+          hpWaliWarn.style.display = 'block';
+        } else {
+          hpWaliWarn.style.display = 'none';
+        }
+      };
+      hpWaliInput.addEventListener('input', checkDup);
+      setTimeout(checkDup, 60);
+    }
+
     const syncKelasInput = () => {
       const tingkat = modal.modal.querySelector('#f-tingkat').value;
       const select = modal.modal.querySelector('#f-kelas');
