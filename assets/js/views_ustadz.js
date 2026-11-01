@@ -699,6 +699,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
                   ? '<span class="badge green">Sudah tersimpan</span><button class="clay-btn ghost" id="btn-edit"> Edit Absensi</button>'
                   : (isLocked ? '<span class="badge warn">Menunggu absensi ustadz</span>' : '<button class="clay-btn primary" id="btn-save"> Simpan Absensi</button>')}
               `}
+              ${isTalimNow && hasSaved && !isLibur ? '<button class="clay-btn primary" id="btn-isi-jurnal">Isi Jurnal Ta’lim</button>' : ''}
             </div>
           </div>
           <div class="row mb" style="margin-top:12px;align-items:flex-end">
@@ -898,6 +899,8 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       if (btnSwitchTalim) btnSwitchTalim.onclick = () => App.navigate('ustadz_talim_absensi');
       const btnSwitchHalaqah = document.getElementById('btn-switch-halaqah');
       if (btnSwitchHalaqah) btnSwitchHalaqah.onclick = () => App.navigate('ustadz_absensi');
+      const btnIsiJurnal = document.getElementById('btn-isi-jurnal');
+      if (btnIsiJurnal) btnIsiJurnal.onclick = () => talimForm(null, [...kelasFilters]);
 
       const editButton = document.getElementById('btn-edit');
       if (editButton) editButton.onclick = () => {
@@ -1096,15 +1099,17 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     });
   }
 
-  function talimForm(sourceJournal = null) {
+  function talimForm(sourceJournal = null, initialKelasKeys = []) {
     const db = Store.get();
     const session = Store.getSession();
     const currentUstadz = Store.findUstadz(session?.refId);
     const isAdmin = session?.role === 'admin';
     const source = sourceJournal || {};
-    const sourceKelasKeys = Array.isArray(source.kelasKeys) && source.kelasKeys.length
-      ? source.kelasKeys
-      : (source.tingkat && source.kelas ? [Store.talimClassKey(source.tingkat, source.kelas)] : []);
+    const sourceKelasKeys = initialKelasKeys.length
+      ? initialKelasKeys
+      : (Array.isArray(source.kelasKeys) && source.kelasKeys.length
+        ? source.kelasKeys
+        : (source.tingkat && source.kelas ? [Store.talimClassKey(source.tingkat, source.kelas)] : []));
     let selectedKelasKeys = new Set(sourceKelasKeys);
     // ID dibuat saat formulir dibuka, bukan setiap tombol Simpan ditekan.
     // Jadi jika sebuah klik terkirim ulang, server akan meng-upsert jurnal
