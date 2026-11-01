@@ -264,7 +264,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
   function dialogAbsenUstadz(ustadz, sesi, tanggal, onDone) {
     if (!ustadz) return;
     const existing = Store.absensiUstadzOf(ustadz.id, tanggal, sesi);
-    const picked = { status: (existing && existing.status) || 'Hadir' };
+    const picked = { status: (existing && existing.status) || (tanggal === Store.todayStr() ? 'Hadir' : '') };
     const halaqah = Store.findHalaqahForUstadz(ustadz);
     const hNama = halaqah ? halaqah.nama : (ustadz.halaqah || 'Halaqah');
 
@@ -273,7 +273,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       sub: ustadz.nama + ' - ' + UI.fmtDate(tanggal) + ' - Sesi ' + sesi,
       dismissable: false,
       bodyHTML: `
-        <div class="muted" style="font-size:13px;margin-bottom:10px">Absen diri dulu sebelum mengabsen Santri. Pilih <b>Libur</b> bila ada kegiatan dan halaqah ditiadakan.</div>
+        <div class="muted" style="font-size:13px;margin-bottom:10px">Absen diri dulu sebelum mengabsen Santri. Jika berhalangan, pilih <b>Sakit</b> atau <b>Izin</b>; absensi santri tetap bisa diisi bila halaqah diasuh pengganti. Pilih <b>Libur</b> bila halaqah ditiadakan.</div>
         <div class="row" style="gap:6px;flex-wrap:wrap" id="au-status">
           ${STATUS_USTADZ.map(s => `<button type="button" class="clay-btn sm ghost" data-au-st="${UI.esc(s)}">${UI.esc(s)}</button>`).join('')}
         </div>
@@ -291,6 +291,10 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         {
           label: 'Simpan & Lanjut', cls: 'primary',
           onClick: async (m, c) => {
+            if (!picked.status) {
+              UI.toast('Pilih status absensi ustadz terlebih dahulu', 'error');
+              return;
+            }
             const input = m.querySelector('#au-catatan');
             const catatan = input ? input.value.trim() : '';
             let ok = false;
@@ -345,8 +349,8 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           Gunakan menu ini jika ada kegiatan/acara dan halaqah ditiadakan. Absensi ustadz dan seluruh santri di halaqah ini akan otomatis dicatat <b>Libur</b> sehingga tidak terhitung sebagai Alfa.
         </div>
         <div style="margin-bottom:12px">
-          ${UI.field('Tanggal Libur', `<input type="date" class="clay-input" id="libur-tanggal-input" value="${UI.esc(t)}" min="${UI.esc(Store.todayStr())}">`)}
-          <div class="muted" style="font-size:11px;margin-top:4px">Bisa untuk hari ini atau diatur jauh hari ke depan (besok, minggu depan, dst).</div>
+          ${UI.field('Tanggal Libur', `<input type="date" class="clay-input" id="libur-tanggal-input" value="${UI.esc(t)}">`)}
+          <div class="muted" style="font-size:11px;margin-top:4px">Pilih tanggal lampau, hari ini, atau jadwalkan libur ke depan.</div>
         </div>
         <div class="field-label">Pilih Sesi yang Diliburkan</div>
         <div class="row" style="gap:8px;margin-bottom:12px;flex-wrap:wrap">
@@ -480,7 +484,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     // Opsi "Semua Santri" memang harus memperlihatkan seluruh roster,
     // sedangkan opsi kedua membatasi ke halaqah ustadz yang sedang login.
     const allSantri = db.santri;
-    const t = Store.todayStr();
+    let t = Store.todayStr();
     let sesiAktif = initialSesi;
     // Penanda "Otomatis" hanya berlaku pada sesi yang dipilih sistem dan
     // hilang begitu ustadz memilih sesi sendiri.
@@ -697,6 +701,12 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
               `}
             </div>
           </div>
+          <div class="row mb" style="margin-top:12px;align-items:flex-end">
+            <div style="width:min(100%,260px)">
+              ${UI.field('Tanggal Absensi', `<input type="date" class="clay-input" id="abs-tanggal" value="${UI.esc(t)}" max="${UI.esc(Store.todayStr())}">`)}
+            </div>
+            ${t !== Store.todayStr() ? '<span class="badge warn">Mengisi absensi tanggal lampau</span>' : ''}
+          </div>
           <div class="row mb" style="margin-top:12px;align-items:center;flex-wrap:wrap;gap:8px">
             <span class="muted" style="font-size:13px">Sesi:</span>
             ${isTalimNow ? `
@@ -792,6 +802,21 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       }
       const searchInput = document.getElementById('abs-search');
       searchInput.value = searchTerm;
+      const dateInput = document.getElementById('abs-tanggal');
+      dateInput.onchange = () => {
+        const selectedDate = dateInput.value;
+        if (!selectedDate || selectedDate > Store.todayStr()) {
+          UI.toast('Pilih tanggal hari ini atau tanggal lampau', 'error');
+          dateInput.value = t;
+          return;
+        }
+        t = selectedDate;
+        editing = null;
+        pendingStatus = {};
+        pendingKeterangan = {};
+        renderAbsensi();
+        mintaAbsenUstadz();
+      };
 
       document.querySelectorAll('[data-sesi]').forEach(b => b.onclick = () => {
         sesiAktif = b.dataset.sesi;
@@ -914,7 +939,6 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       const saveButton = document.getElementById('btn-save');
       if (saveButton) saveButton.onclick = async () => {
         const db = Store.get();
-        const t = Store.todayStr();
         const allState = {};
         roster.forEach(s => {
           const previous = sessionRecords.find(k => k.santriId === s.id);
