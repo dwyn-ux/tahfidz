@@ -512,7 +512,7 @@ if (typeof document !== 'undefined' && !document._setoranDetailBound) {
   let _laporanFilters = {};
 let _laporanData = null;
 let _laporanBaseRows = [];
-let _laporanTableFilters = { nama: '', kelas: '', halaqah: '' };
+  let _laporanTableSort = { field: '', direction: 'asc' };
 const _laporanRequests = new WeakMap();
 
   const BULAN_ID = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -546,50 +546,42 @@ const _laporanRequests = new WeakMap();
     });
   }
 
-  function laporanFilterValue(row, filter) {
-    if (filter === 'nama') return String(row.s.nama || '');
-    if (filter === 'kelas') return Store.educationLabel(row.s);
-    return Store.halaqahSummaryForSantri(row.s);
+  function laporanSortValue(row, field) {
+    if (field === 'nama') return String(row.s.nama || '');
+    if (field === 'kelas') return String(Store.educationLabel(row.s));
+    return String(Store.halaqahSummaryForSantri(row.s));
   }
 
-  function laporanFilterOptions(filter, rows) {
-    return [...new Set(rows.map(row => laporanFilterValue(row, filter)).filter(Boolean))]
-      .sort((a, b) => a.localeCompare(b, 'id'));
+  function sortLaporanRows(rows) {
+    const { field, direction } = _laporanTableSort;
+    if (!field) return rows.map((row, index) => ({ ...row, no: index + 1 }));
+    const multiplier = direction === 'desc' ? -1 : 1;
+    return rows.slice().sort((a, b) =>
+      multiplier * laporanSortValue(a, field).localeCompare(laporanSortValue(b, field), 'id', { numeric: true, sensitivity: 'base' })
+    ).map((row, index) => ({ ...row, no: index + 1 }));
   }
 
-  function laporanFilterControl(filter, rows) {
-    const labels = { nama: 'Nama santri', kelas: 'Tingkat dan kelas', halaqah: 'Halaqah' };
-    const value = _laporanTableFilters[filter] || '';
-    if (filter === 'nama') {
-      return `<input class="clay-input" type="search" data-laporan-filter-input="${filter}" aria-label="Cari nama santri" placeholder="Cari nama..." value="${UI.esc(value)}">`;
-    }
-    const options = laporanFilterOptions(filter, rows);
-    return `<select class="clay-select" data-laporan-filter-input="${filter}" aria-label="Filter ${labels[filter]}">
-      <option value="">Semua</option>
-      ${options.map(option => `<option value="${UI.esc(option)}"${option === value ? ' selected' : ''}>${UI.esc(option)}</option>`).join('')}
-    </select>`;
-  }
-
-  function laporanFilterHeader(label, filter, rows) {
-    const expanded = !!_laporanTableFilters[filter];
-    return `<th class="laporan-filter-heading">
-      <button class="laporan-filter-toggle" type="button" data-laporan-filter-toggle="${filter}" aria-expanded="${expanded}">
-        ${label}<span aria-hidden="true"></span>
+  function laporanSortHeader(label, field) {
+    const active = _laporanTableSort.field === field;
+    const direction = active ? _laporanTableSort.direction : '';
+    const sortLabel = active && direction === 'asc' ? 'menurun' : 'menaik';
+    return `<th class="laporan-sort-heading" aria-sort="${active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none'}">
+      <button class="laporan-sort-toggle" type="button" data-laporan-sort="${field}" aria-label="Urutkan ${label} ${sortLabel}" aria-pressed="${active}">
+        ${label}<span aria-hidden="true">${active ? (direction === 'asc' ? '↑' : '↓') : '↕'}</span>
       </button>
-      <div class="laporan-filter-control" data-laporan-filter-control="${filter}"${expanded ? '' : ' hidden'}>
-        ${laporanFilterControl(filter, rows)}
-      </div>
     </th>`;
   }
 
-  function filterLaporanRows(rows) {
-    const name = _laporanTableFilters.nama.trim().toLocaleLowerCase('id');
-    return rows.filter(row => {
-      if (name && !laporanFilterValue(row, 'nama').toLocaleLowerCase('id').includes(name)) return false;
-      if (_laporanTableFilters.kelas && laporanFilterValue(row, 'kelas') !== _laporanTableFilters.kelas) return false;
-      if (_laporanTableFilters.halaqah && laporanFilterValue(row, 'halaqah') !== _laporanTableFilters.halaqah) return false;
-      return true;
-    }).map((row, index) => ({ ...row, no: index + 1 }));
+  function laporanMobileSortControls() {
+    return `<div class="laporan-mobile-sort" aria-label="Urutkan laporan">
+      ${[['nama', 'Nama'], ['kelas', 'Tingkat & Kelas'], ['halaqah', 'Halaqah']].map(([field, label]) => {
+        const active = _laporanTableSort.field === field;
+        const direction = active ? _laporanTableSort.direction : '';
+        return `<button class="clay-btn sm ${active ? 'primary' : 'ghost'}" type="button" data-laporan-sort="${field}" aria-pressed="${active}">
+          ${label}${active ? (direction === 'asc' ? ' ↑' : ' ↓') : ''}
+        </button>`;
+      }).join('')}
+    </div>`;
   }
 
   function renderLaporanRows(rows) {
@@ -610,44 +602,47 @@ const _laporanRequests = new WeakMap();
     </tr>`).join('');
   }
 
-  function applyLaporanTableFilters(container) {
-    const rows = filterLaporanRows(_laporanBaseRows);
+  function applyLaporanTableSort(container) {
+    const rows = sortLaporanRows(_laporanBaseRows);
     const tbody = container.querySelector('#laporan-table tbody');
     if (!tbody) return;
     tbody.innerHTML = renderLaporanRows(rows) || '<tr><td colspan="13"><div class="empty">Tidak ada data yang cocok.</div></td></tr>';
     const count = container.querySelector('[data-laporan-result-count]');
     if (count) count.textContent = `Menampilkan ${rows.length} dari ${_laporanBaseRows.length} santri`;
-    container.querySelectorAll('[data-laporan-filter-input]').forEach(input => {
-      if (input.value !== (_laporanTableFilters[input.dataset.laporanFilterInput] || '')) {
-        input.value = _laporanTableFilters[input.dataset.laporanFilterInput] || '';
+    container.querySelectorAll('[data-laporan-sort]').forEach(button => {
+      const active = _laporanTableSort.field === button.dataset.laporanSort;
+      const direction = active ? _laporanTableSort.direction : '';
+      button.setAttribute('aria-pressed', String(active));
+      const labels = { nama: 'Santri', kelas: 'Tingkat dan kelas', halaqah: 'Halaqah' };
+      if (button.closest('th')) {
+        button.setAttribute('aria-label', `Urutkan ${labels[button.dataset.laporanSort]} ${active && direction === 'asc' ? 'menurun' : 'menaik'}`);
+        button.querySelector('span').textContent = active ? (direction === 'asc' ? '↑' : '↓') : '↕';
+        button.closest('th').setAttribute('aria-sort', active ? (direction === 'asc' ? 'ascending' : 'descending') : 'none');
+      } else {
+        const mobileLabels = { nama: 'Nama', kelas: 'Tingkat & Kelas', halaqah: 'Halaqah' };
+        button.textContent = `${mobileLabels[button.dataset.laporanSort]}${active ? (direction === 'asc' ? ' ↑' : ' ↓') : ''}`;
+        button.className = `clay-btn sm ${active ? 'primary' : 'ghost'}`;
       }
     });
   }
 
   function bindLaporanTableFilters(container) {
-    container.querySelectorAll('[data-laporan-filter-toggle]').forEach(button => {
+    container.querySelectorAll('[data-laporan-sort]').forEach(button => {
       button.onclick = () => {
-        const filter = button.dataset.laporanFilterToggle;
-        const control = container.querySelector(`[data-laporan-filter-control="${filter}"]`);
-        const expanded = button.getAttribute('aria-expanded') === 'true';
-        button.setAttribute('aria-expanded', String(!expanded));
-        if (control) control.hidden = expanded;
-        if (!expanded) control?.querySelector('input, select')?.focus();
+        const field = button.dataset.laporanSort;
+        _laporanTableSort = {
+          field,
+          direction: _laporanTableSort.field === field && _laporanTableSort.direction === 'asc' ? 'desc' : 'asc'
+        };
+        applyLaporanTableSort(container);
       };
-    });
-    container.querySelectorAll('[data-laporan-filter-input]').forEach(input => {
-      const update = () => {
-        _laporanTableFilters[input.dataset.laporanFilterInput] = input.value;
-        applyLaporanTableFilters(container);
-      };
-      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', update);
     });
   }
 
   async function loadLaporan(container, filters) {
     const requestId = (_laporanRequests.get(container) || 0) + 1;
     _laporanRequests.set(container, requestId);
-    _laporanTableFilters = { nama: '', kelas: '', halaqah: '' };
+    _laporanTableSort = { field: '', direction: 'asc' };
     container.innerHTML = '<div class="clay-card muted" role="status">Memuat rekap laporan...</div>';
     try {
       const reportData = await Store.laporanData(filters);
@@ -665,7 +660,7 @@ const _laporanRequests = new WeakMap();
     _laporanFilters = filters || {};
     _laporanData = reportData;
     _laporanBaseRows = buildLaporanRows(_laporanFilters, _laporanData);
-    const rows = filterLaporanRows(_laporanBaseRows);
+    const rows = sortLaporanRows(_laporanBaseRows);
     const bulan = _laporanFilters.bulan || Store.todayStr().slice(0, 7);
     const periode = (_laporanFilters.dari && _laporanFilters.sampai)
       ? UI.fmtDate(_laporanFilters.dari) + ' – ' + UI.fmtDate(_laporanFilters.sampai)
@@ -673,15 +668,11 @@ const _laporanRequests = new WeakMap();
     const body = renderLaporanRows(rows);
     return `<div class="clay-card">
       <div class="section-title"> Laporan Santri — ${UI.esc(periode)}</div>
-      <div class="laporan-mobile-filters">
-        <label>Nama${laporanFilterControl('nama', _laporanBaseRows)}</label>
-        <label>Tingkat &amp; Kelas${laporanFilterControl('kelas', _laporanBaseRows)}</label>
-        <label>Halaqah${laporanFilterControl('halaqah', _laporanBaseRows)}</label>
-      </div>
+      ${laporanMobileSortControls()}
       <div class="table-wrap">
         <table class="clay-table" id="laporan-table">
           <thead><tr>
-            <th class="center">No</th>${laporanFilterHeader('Santri', 'nama', _laporanBaseRows)}<th>NIS</th>${laporanFilterHeader('Tingkat &amp; Kelas', 'kelas', _laporanBaseRows)}${laporanFilterHeader('Halaqah', 'halaqah', _laporanBaseRows)}<th>Level</th>
+            <th class="center">No</th>${laporanSortHeader('Santri', 'nama')}<th>NIS</th>${laporanSortHeader('Tingkat &amp; Kelas', 'kelas')}${laporanSortHeader('Halaqah', 'halaqah')}<th>Level</th>
             <th class="center">JK</th><th class="center">Setoran Awal</th><th class="center">Setoran Akhir</th>
             <th class="center">Total Hafalan</th><th class="center">Rata Nilai</th>
             <th class="center" title="Rincian Sesi Hadir: Subuh · Ashar · Maghrib · Isya">Hadir per Sesi<br><span style="font-weight:400;font-size:10px">Sub · Ash · Mag · Isy</span></th>
