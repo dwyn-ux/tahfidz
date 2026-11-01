@@ -111,14 +111,16 @@ const App = (() => {
     document.body.classList.remove('nav-open');
   }
 
-  async function start() {
+  async function start(options = {}) {
     startTableEnhancer();
+    const startupStatus = document.getElementById('startup-status');
+    if (startupStatus) startupStatus.textContent = 'Memuat data akun...';
     const session = Store.getSession();
     if (!session) { Auth.renderLogin(); return; }
     const role = session.role;
     if (!defaultRoute[role]) { Auth.renderLogin(); return; }
     try {
-      await Store.load();
+      if (!options.dataLoaded) await Store.load();
       try { if (typeof Shared && typeof Shared.kirimRekapOtomatis === 'function') Shared.kirimRekapOtomatis(); } catch (e) {}
     } catch (e) {
       // token invalid or server unreachable -> back to login

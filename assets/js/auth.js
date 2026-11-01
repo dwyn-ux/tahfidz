@@ -52,7 +52,7 @@ const Auth = (() => {
         return;
       }
       UI.toast('Login berhasil', 'success');
-      App.start();
+      App.start({ dataLoaded: true });
     };
 
     const qBtn = app.querySelector('#open-quran');
