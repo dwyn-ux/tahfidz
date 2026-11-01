@@ -41,6 +41,7 @@ const Store = (() => {
   let db = defaultDB();
   let saveChain = Promise.resolve();
   let hafalanRecordsBySantri = null;
+  let gradeRecordsBySantri = null;
   let totalHafalanCache = new Map();
   let attendanceBySantri = null;
   let missedSetoranDays = null;
@@ -49,6 +50,7 @@ const Store = (() => {
 
   function invalidateDerivedDataCaches() {
     hafalanRecordsBySantri = null;
+    gradeRecordsBySantri = null;
     totalHafalanCache.clear();
     attendanceBySantri = null;
     missedSetoranDays = null;
@@ -74,6 +76,17 @@ const Store = (() => {
       ]);
     }
     return hafalanRecordsBySantri;
+  }
+
+  function getGradeRecordsBySantri() {
+    if (!gradeRecordsBySantri) {
+      gradeRecordsBySantri = recordsBySantriId([
+        ...(db.tahsin || []),
+        ...(db.ziyadahHafalan || []),
+        ...(db.mutqin || [])
+      ]);
+    }
+    return gradeRecordsBySantri;
   }
 
   function getAttendanceBySantri() {
@@ -210,6 +223,10 @@ const Store = (() => {
       }
       throw e;
     }
+  }
+
+  async function laporanData(filters) {
+    return api('report_data', { method: 'POST', body: filters || {} });
   }
 
   function get() { return db; }
@@ -1011,12 +1028,9 @@ const Store = (() => {
   }
 
   function avgNilai(santriId) {
-    const vals = [];
-    db.tahsin.filter(t => t.santriId === santriId).forEach(t => vals.push(t.nilai));
-    db.ziyadahHafalan.filter(z => z.santriId === santriId).forEach(z => vals.push(z.nilai));
-    db.mutqin.filter(m => m.santriId === santriId).forEach(m => vals.push(m.nilai));
-    if (!vals.length) return 0;
-    return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+    const records = getGradeRecordsBySantri().get(santriId) || [];
+    if (!records.length) return 0;
+    return Math.round(records.reduce((total, record) => total + record.nilai, 0) / records.length);
   }
 
   function kehadiranBulan(santriId, bulan) {
@@ -1074,12 +1088,10 @@ const Store = (() => {
   }
 
   function avgNilaiRentang(santriId, dari, sampai) {
-    const vals = [];
-    db.tahsin.filter(t => t.santriId === santriId && padaRentang(t.tanggal, dari, sampai)).forEach(t => vals.push(t.nilai));
-    db.ziyadahHafalan.filter(z => z.santriId === santriId && padaRentang(z.tanggal, dari, sampai)).forEach(z => vals.push(z.nilai));
-    db.mutqin.filter(m => m.santriId === santriId && padaRentang(m.tanggal, dari, sampai)).forEach(m => vals.push(m.nilai));
-    if (!vals.length) return 0;
-    return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+    const records = (getGradeRecordsBySantri().get(santriId) || [])
+      .filter(record => padaRentang(record.tanggal, dari, sampai));
+    if (!records.length) return 0;
+    return Math.round(records.reduce((total, record) => total + record.nilai, 0) / records.length);
   }
 
   /* ---------- Absensi ustadz ----------
@@ -1546,7 +1558,7 @@ const Store = (() => {
   }
 
   return {
-    load, save, get, reset, uid, log, nowISO, todayStr,
+    load, laporanData, save, get, reset, uid, log, nowISO, todayStr,
     santri: () => (db.santri || []),
     getSettings: () => (db.settings || {}),
     setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout, changePassword,

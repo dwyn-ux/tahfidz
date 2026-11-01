@@ -211,6 +211,22 @@ label.field-label { display: block; font-size: 13px; font-weight: 600; margin: 1
   text-align: left; color: var(--text-soft); font-weight: 600;
   padding: 6px 14px; font-size: 12px; text-transform: uppercase; letter-spacing: .5px;
 }
+.laporan-filter-heading { min-width: 130px; }
+.laporan-filter-toggle {
+  display: inline-flex; align-items: center; gap: 6px; border: 0; padding: 0;
+  background: transparent; color: inherit; font: inherit; letter-spacing: inherit;
+  text-transform: inherit; cursor: pointer;
+}
+.laporan-filter-toggle span { color: var(--primary); font-size: 15px; }
+.laporan-filter-toggle span::after { content: '⌕'; }
+.laporan-filter-toggle[aria-expanded="true"] span::after { content: '⌄'; }
+.laporan-filter-toggle[aria-expanded="true"] { color: var(--primary); }
+.laporan-filter-control { margin-top: 6px; min-width: 150px; }
+.laporan-filter-control[hidden] { display: none; }
+.laporan-filter-control .clay-input,
+.laporan-filter-control .clay-select { min-width: 130px; padding: 7px 9px; font-size: 12px; }
+.laporan-mobile-filters { display: none; }
+.laporan-result-count { margin-top: 8px; font-size: 12px; text-align: right; }
 .clay-table td {
   background: var(--card); padding: 14px; box-shadow: var(--shadow-clay-sm);
 }
@@ -637,6 +653,10 @@ label.field-label { font-size: 12px; letter-spacing: .02em; color: #526172; }
   .stat .meta .num { font-size: 22px; }
   .topbar { gap: 10px; }
   .topbar h1 { font-size: 21px; }
+  .laporan-mobile-filters { display: grid; grid-template-columns: 1fr; gap: 10px; margin: 12px 0; }
+  .laporan-mobile-filters label { display: grid; gap: 5px; color: var(--text-soft); font-size: 11px; font-weight: 600; }
+  .laporan-mobile-filters .clay-input,
+  .laporan-mobile-filters .clay-select { width: 100%; }
   .table-wrap { overflow: visible; border: 0; background: transparent; }
   .clay-table, .clay-table tbody, .clay-table tr, .clay-table td { display: block; width: 100%; }
   .clay-table { border-spacing: 0; }
@@ -779,4 +799,3 @@ body.q-reading-fullscreen { overflow: hidden; background: #f8f7f2; }
   }
   .q-reading-fullscreen .q-full-page + .clay-card { width: calc(100% - 20px); }
 }
-

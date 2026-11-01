@@ -353,6 +353,77 @@ final class NormalizedStore {
         return $records;
     }
 
+    public static function getReportRecords(string $type, array $santriIds, ?string $from = null, ?string $to = null): array {
+        $definition = self::definition($type);
+        if (!isset($definition['fields']['santriId'], $definition['fields']['tanggal'])) {
+            throw new InvalidArgumentException('Tipe data tidak mendukung filter laporan.');
+        }
+        $santriIds = array_values(array_unique(array_filter($santriIds, 'is_string')));
+        if (!$santriIds) return [];
+
+        $records = [];
+        foreach (array_chunk($santriIds, 500) as $ids) {
+            $placeholders = implode(', ', array_fill(0, count($ids), '?'));
+            $sql = 'SELECT * FROM ' . self::identifier($definition['table'])
+                . ' WHERE ' . self::identifier('santri_id') . ' IN (' . $placeholders . ')';
+            $params = $ids;
+            if ($from !== null && $to !== null) {
+                $sql .= ' AND ' . self::identifier('tanggal') . ' >= ? AND ' . self::identifier('tanggal') . ' <= ?';
+                $params[] = $from;
+                $params[] = $to;
+            }
+            $stmt = pdo()->prepare($sql);
+            $stmt->execute($params);
+            foreach ($stmt->fetchAll() as $row) $records[] = self::hydrate($definition, $row);
+        }
+        return $records;
+    }
+
+    public static function getReportGradeAverages(array $santriIds, ?string $from = null, ?string $to = null): array {
+        $definitions = self::definitions();
+        $types = ['tahsin', 'ziyadahHafalan', 'mutqin'];
+        $result = ['period' => [], 'all' => []];
+        $santriIds = array_values(array_unique(array_filter($santriIds, 'is_string')));
+        if (!$santriIds) return $result;
+
+        foreach (array_chunk($santriIds, 500) as $ids) {
+            $placeholders = implode(', ', array_fill(0, count($ids), '?'));
+            foreach ($types as $type) {
+                $definition = $definitions[$type];
+                $table = self::identifier($definition['table']);
+                foreach (['all' => null, 'period' => ($from !== null && $to !== null) ? [$from, $to] : null] as $scope => $range) {
+                    if ($scope === 'period' && $range === null) continue;
+                    $sql = 'SELECT ' . self::identifier('santri_id') . ' AS santri_id, SUM('
+                        . self::identifier('nilai') . ') AS score_sum, COUNT(' . self::identifier('nilai')
+                        . ') AS score_count FROM ' . $table . ' WHERE ' . self::identifier('santri_id')
+                        . ' IN (' . $placeholders . ')';
+                    $params = $ids;
+                    if ($range !== null) {
+                        $sql .= ' AND ' . self::identifier('tanggal') . ' >= ? AND ' . self::identifier('tanggal') . ' <= ?';
+                        $params[] = $range[0];
+                        $params[] = $range[1];
+                    }
+                    $sql .= ' GROUP BY ' . self::identifier('santri_id');
+                    $stmt = pdo()->prepare($sql);
+                    $stmt->execute($params);
+                    while ($row = $stmt->fetch()) {
+                        $id = (string)$row['santri_id'];
+                        $result[$scope][$id] = [
+                            'sum' => ($result[$scope][$id]['sum'] ?? 0) + (float)$row['score_sum'],
+                            'count' => ($result[$scope][$id]['count'] ?? 0) + (int)$row['score_count'],
+                        ];
+                    }
+                }
+            }
+        }
+        foreach ($result as $scope => $scores) {
+            foreach ($scores as $id => $score) {
+                $result[$scope][$id] = $score['count'] ? (int)round($score['sum'] / $score['count']) : 0;
+            }
+        }
+        return $result;
+    }
+
     public static function getRecord(string $type, string $id): ?array {
         $definition = self::definition($type);
         $stmt = pdo()->prepare('SELECT * FROM ' . self::identifier($definition['table']) . ' WHERE id = ?');

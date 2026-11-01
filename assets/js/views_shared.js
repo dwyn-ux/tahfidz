@@ -510,6 +510,10 @@ if (typeof document !== 'undefined' && !document._setoranDetailBound) {
 
 */ } /* ---------- Laporan (shared, role-aware) ---------- */
   let _laporanFilters = {};
+let _laporanData = null;
+let _laporanBaseRows = [];
+let _laporanTableFilters = { nama: '', kelas: '', halaqah: '' };
+const _laporanRequests = new WeakMap();
 
   const BULAN_ID = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   function bulanLabel(bulan) {
@@ -519,56 +523,77 @@ if (typeof document !== 'undefined' && !document._setoranDetailBound) {
     return (BULAN_ID[Number(parts[1])] || parts[1]) + ' ' + parts[0];
   }
 
-  function buildLaporanRows(filters) {
-    const db = Store.get();
-    const f = filters || {};
-    let santri = db.santri.slice();
-    if (f.halaqah) santri = santri.filter(s => Store.santriHasHalaqah(s, f.halaqah));
-    if (f.level) santri = santri.filter(s => Store.santriHasProgram(s, f.level));
-    if (f.tingkat) santri = santri.filter(s => Store.tingkatForSantri(s) === f.tingkat);
-    if (f.kelas && f.tingkat) {
-      santri = santri.filter(s => Store.tingkatForSantri(s) === f.tingkat
-        && Store.kelasForSantri(s) === f.kelas);
-    }
-    if (f.status) santri = santri.filter(s => s.status === f.status);
-    const dari = f.dari || '';
-    const sampai = f.sampai || '';
-    const bulan = f.bulan || Store.todayStr().slice(0, 7);
+  function buildLaporanRows(filters, reportData) {
+    const santriData = Store.get().santri;
+    const stats = reportData && reportData.rows ? reportData.rows : {};
+    const santri = santriData.filter(s => Object.prototype.hasOwnProperty.call(stats, s.id));
     return santri.map((s, i) => {
       const h = Store.totalHafalanSantri(s.id);
-      const rawKehadiran = (dari && sampai)
-        ? (typeof Store.kehadiranRentang === 'function'
-            ? Store.kehadiranRentang(s.id, dari, sampai)
-            : Store.dedupeKehadiran(db.kehadiran.filter(k => k.santriId === s.id && Store.padaRentang(k.tanggal, dari, sampai))))
-        : Store.kehadiranBulan(s.id, bulan);
-      const halaqahKehadiran = rawKehadiran.filter(k => k.sesi !== 'Ta’lim Malam');
-      const hadirSubuh = halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Subuh').length;
-      const hadirAshar = halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Ashar').length;
-      const hadirMaghrib = halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Maghrib').length;
-      const hadirIsya = halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Isya').length;
-      const totalHadir = hadirSubuh + hadirAshar + hadirMaghrib + hadirIsya;
-      const totalK = halaqahKehadiran.length;
-      const pct = totalK ? Math.round((totalHadir / totalK) * 100) : 0;
-      const setoran = dari && sampai ? Store.setoranRentang(s.id, dari, sampai) : null;
+      const summary = stats[s.id];
       return {
-        no: i + 1, s, hafalan: h, nilai: (dari && sampai ? Store.avgNilaiRentang(s.id, dari, sampai) : 0) || Store.avgNilai(s.id),
-        hadirSubuh, hadirAshar, hadirMaghrib, hadirIsya,
-        hadir: totalHadir, totalK, pct,
-        setoranAwal: setoran ? setoran.awal : null,
-        setoranAkhir: setoran ? setoran.akhir : null,
+        no: i + 1, s, hafalan: h, nilai: summary.nilai || 0,
+        hadirSubuh: summary.hadirSubuh || 0,
+        hadirAshar: summary.hadirAshar || 0,
+        hadirMaghrib: summary.hadirMaghrib || 0,
+        hadirIsya: summary.hadirIsya || 0,
+        hadir: summary.hadir || 0,
+        totalK: summary.totalK || 0,
+        pct: summary.pct || 0,
+        setoranAwal: summary.setoranAwal,
+        setoranAkhir: summary.setoranAkhir,
         juzLabel: Store.juzHafalanDisplay(s.id)
       };
     });
   }
 
-function renderLaporan(filters) {
-    _laporanFilters = filters || {};
-    const rows = buildLaporanRows(_laporanFilters);
-    const bulan = _laporanFilters.bulan || Store.todayStr().slice(0, 7);
-    const periode = (_laporanFilters.dari && _laporanFilters.sampai)
-      ? UI.fmtDate(_laporanFilters.dari) + ' – ' + UI.fmtDate(_laporanFilters.sampai)
-      : bulanLabel(bulan);
-    const body = rows.map(r => `<tr>
+  function laporanFilterValue(row, filter) {
+    if (filter === 'nama') return String(row.s.nama || '');
+    if (filter === 'kelas') return Store.educationLabel(row.s);
+    return Store.halaqahSummaryForSantri(row.s);
+  }
+
+  function laporanFilterOptions(filter, rows) {
+    return [...new Set(rows.map(row => laporanFilterValue(row, filter)).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'id'));
+  }
+
+  function laporanFilterControl(filter, rows) {
+    const labels = { nama: 'Nama santri', kelas: 'Tingkat dan kelas', halaqah: 'Halaqah' };
+    const value = _laporanTableFilters[filter] || '';
+    if (filter === 'nama') {
+      return `<input class="clay-input" type="search" data-laporan-filter-input="${filter}" aria-label="Cari nama santri" placeholder="Cari nama..." value="${UI.esc(value)}">`;
+    }
+    const options = laporanFilterOptions(filter, rows);
+    return `<select class="clay-select" data-laporan-filter-input="${filter}" aria-label="Filter ${labels[filter]}">
+      <option value="">Semua</option>
+      ${options.map(option => `<option value="${UI.esc(option)}"${option === value ? ' selected' : ''}>${UI.esc(option)}</option>`).join('')}
+    </select>`;
+  }
+
+  function laporanFilterHeader(label, filter, rows) {
+    const expanded = !!_laporanTableFilters[filter];
+    return `<th class="laporan-filter-heading">
+      <button class="laporan-filter-toggle" type="button" data-laporan-filter-toggle="${filter}" aria-expanded="${expanded}">
+        ${label}<span aria-hidden="true"></span>
+      </button>
+      <div class="laporan-filter-control" data-laporan-filter-control="${filter}"${expanded ? '' : ' hidden'}>
+        ${laporanFilterControl(filter, rows)}
+      </div>
+    </th>`;
+  }
+
+  function filterLaporanRows(rows) {
+    const name = _laporanTableFilters.nama.trim().toLocaleLowerCase('id');
+    return rows.filter(row => {
+      if (name && !laporanFilterValue(row, 'nama').toLocaleLowerCase('id').includes(name)) return false;
+      if (_laporanTableFilters.kelas && laporanFilterValue(row, 'kelas') !== _laporanTableFilters.kelas) return false;
+      if (_laporanTableFilters.halaqah && laporanFilterValue(row, 'halaqah') !== _laporanTableFilters.halaqah) return false;
+      return true;
+    }).map((row, index) => ({ ...row, no: index + 1 }));
+  }
+
+  function renderLaporanRows(rows) {
+    return rows.map(r => `<tr>
       <td class="center">${r.no}</td>
       <td><b>${UI.esc(r.s.nama)}</b></td>
       <td>${UI.esc(r.s.nis)}</td>
@@ -583,20 +608,89 @@ function renderLaporan(filters) {
       <td class="center" style="font-size:12px" title="Hadir Subuh: ${r.hadirSubuh}, Ashar: ${r.hadirAshar}, Maghrib: ${r.hadirMaghrib}, Isya: ${r.hadirIsya}">${r.hadirSubuh} ${r.hadirAshar} ${r.hadirMaghrib} ${r.hadirIsya}</td>
       <td class="center">${r.hadir}/${r.totalK} (${r.pct}%)</td>
     </tr>`).join('');
+  }
+
+  function applyLaporanTableFilters(container) {
+    const rows = filterLaporanRows(_laporanBaseRows);
+    const tbody = container.querySelector('#laporan-table tbody');
+    if (!tbody) return;
+    tbody.innerHTML = renderLaporanRows(rows) || '<tr><td colspan="13"><div class="empty">Tidak ada data yang cocok.</div></td></tr>';
+    const count = container.querySelector('[data-laporan-result-count]');
+    if (count) count.textContent = `Menampilkan ${rows.length} dari ${_laporanBaseRows.length} santri`;
+    container.querySelectorAll('[data-laporan-filter-input]').forEach(input => {
+      if (input.value !== (_laporanTableFilters[input.dataset.laporanFilterInput] || '')) {
+        input.value = _laporanTableFilters[input.dataset.laporanFilterInput] || '';
+      }
+    });
+  }
+
+  function bindLaporanTableFilters(container) {
+    container.querySelectorAll('[data-laporan-filter-toggle]').forEach(button => {
+      button.onclick = () => {
+        const filter = button.dataset.laporanFilterToggle;
+        const control = container.querySelector(`[data-laporan-filter-control="${filter}"]`);
+        const expanded = button.getAttribute('aria-expanded') === 'true';
+        button.setAttribute('aria-expanded', String(!expanded));
+        if (control) control.hidden = expanded;
+        if (!expanded) control?.querySelector('input, select')?.focus();
+      };
+    });
+    container.querySelectorAll('[data-laporan-filter-input]').forEach(input => {
+      const update = () => {
+        _laporanTableFilters[input.dataset.laporanFilterInput] = input.value;
+        applyLaporanTableFilters(container);
+      };
+      input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', update);
+    });
+  }
+
+  async function loadLaporan(container, filters) {
+    const requestId = (_laporanRequests.get(container) || 0) + 1;
+    _laporanRequests.set(container, requestId);
+    _laporanTableFilters = { nama: '', kelas: '', halaqah: '' };
+    container.innerHTML = '<div class="clay-card muted" role="status">Memuat rekap laporan...</div>';
+    try {
+      const reportData = await Store.laporanData(filters);
+      if (_laporanRequests.get(container) !== requestId || !container.isConnected) return;
+      container.innerHTML = renderLaporan(filters, reportData);
+      bindLaporanExport();
+    } catch (error) {
+      if (_laporanRequests.get(container) !== requestId || !container.isConnected) return;
+      container.innerHTML = `<div class="clay-card"><div class="section-title">Laporan gagal dimuat</div><div class="muted">${UI.esc(error.message || 'Kesalahan server')}</div><button class="clay-btn mt" type="button" data-retry-laporan>Coba Lagi</button></div>`;
+      container.querySelector('[data-retry-laporan]').onclick = () => loadLaporan(container, filters);
+    }
+  }
+
+  function renderLaporan(filters, reportData) {
+    _laporanFilters = filters || {};
+    _laporanData = reportData;
+    _laporanBaseRows = buildLaporanRows(_laporanFilters, _laporanData);
+    const rows = filterLaporanRows(_laporanBaseRows);
+    const bulan = _laporanFilters.bulan || Store.todayStr().slice(0, 7);
+    const periode = (_laporanFilters.dari && _laporanFilters.sampai)
+      ? UI.fmtDate(_laporanFilters.dari) + ' – ' + UI.fmtDate(_laporanFilters.sampai)
+      : bulanLabel(bulan);
+    const body = renderLaporanRows(rows);
     return `<div class="clay-card">
       <div class="section-title"> Laporan Santri — ${UI.esc(periode)}</div>
+      <div class="laporan-mobile-filters">
+        <label>Nama${laporanFilterControl('nama', _laporanBaseRows)}</label>
+        <label>Tingkat &amp; Kelas${laporanFilterControl('kelas', _laporanBaseRows)}</label>
+        <label>Halaqah${laporanFilterControl('halaqah', _laporanBaseRows)}</label>
+      </div>
       <div class="table-wrap">
         <table class="clay-table" id="laporan-table">
           <thead><tr>
-            <th class="center">No</th><th>Santri</th><th>NIS</th><th>Tingkat & Kelas</th><th>Halaqah</th><th>Level</th>
+            <th class="center">No</th>${laporanFilterHeader('Santri', 'nama', _laporanBaseRows)}<th>NIS</th>${laporanFilterHeader('Tingkat &amp; Kelas', 'kelas', _laporanBaseRows)}${laporanFilterHeader('Halaqah', 'halaqah', _laporanBaseRows)}<th>Level</th>
             <th class="center">JK</th><th class="center">Setoran Awal</th><th class="center">Setoran Akhir</th>
             <th class="center">Total Hafalan</th><th class="center">Rata Nilai</th>
             <th class="center" title="Rincian Sesi Hadir: Subuh · Ashar · Maghrib · Isya">Hadir per Sesi<br><span style="font-weight:400;font-size:10px">Sub · Ash · Mag · Isy</span></th>
             <th class="center">Kehadiran (${UI.esc(periode)})</th>
           </tr></thead>
-          <tbody>${body || `<tr><td colspan="13"><div class="empty">Tidak ada data.</div></tr></tbody>`}</tbody>
+          <tbody>${body || `<tr><td colspan="13"><div class="empty">Tidak ada data.</div></td></tr>`}</tbody>
         </table>
       </div>
+      <div class="muted laporan-result-count" data-laporan-result-count>Menampilkan ${rows.length} dari ${_laporanBaseRows.length} santri</div>
       <div class="row mt">
         <button class="clay-btn secondary" id="export-excel">Export Excel</button>
         <button class="clay-btn" id="export-pdf">Unduh PDF</button>
@@ -620,6 +714,11 @@ function renderLaporan(filters) {
     const heading = table.closest('.clay-card')?.querySelector('.section-title');
     const institution = document.getElementById('page-sub');
     const filename = 'Laporan_Tahfidz_' + Store.todayStr();
+    const printableTable = table.cloneNode(true);
+    printableTable.querySelectorAll('.laporan-filter-toggle').forEach(button => {
+      button.replaceWith(document.createTextNode(button.textContent.trim()));
+    });
+    printableTable.querySelectorAll('.laporan-filter-control').forEach(control => control.remove());
     printWindow.onafterprint = () => printWindow.close();
     printWindow.document.open();
     printWindow.document.write(`<!doctype html>
@@ -650,7 +749,7 @@ function renderLaporan(filters) {
         <div class="institution">${UI.esc(institution ? institution.textContent : '')}</div>
         <div class="period">${UI.esc(heading ? heading.textContent : 'Laporan Santri')}</div>
         <div class="generated">Dicetak pada ${UI.esc(UI.fmtDate(Store.todayStr()))}</div>
-        ${table.outerHTML}
+        ${printableTable.outerHTML}
       </body>
       </html>`);
     printWindow.document.close();
@@ -666,6 +765,8 @@ function renderLaporan(filters) {
     const pdf = document.getElementById('export-pdf');
     if (ex) ex.onclick = () => exportLaporanExcel(_laporanFilters);
     if (pdf) pdf.onclick = downloadLaporanPdf;
+    const container = document.getElementById('laporan-content') || document.getElementById('lap');
+    if (container) bindLaporanTableFilters(container);
   }
 
   /* ---------------- Konversi tabel HTML ke .xlsx ----------------
@@ -907,7 +1008,7 @@ function exportLaporanExcel(filters) {
     const periode = (f.dari && f.sampai)
       ? UI.fmtDate(f.dari) + ' – ' + UI.fmtDate(f.sampai)
       : bulanLabel(bulan);
-    const rows = buildLaporanRows(f);
+    const rows = filterLaporanRows(buildLaporanRows(f, _laporanData));
     if (!rows.length) { UI.toast('Tidak ada data untuk diekspor', 'error'); return; }
     const rowsHtml = rows.map(r => `<tr>
       <td class="center">${r.no}</td>
@@ -1504,7 +1605,7 @@ function exportLaporanExcel(filters) {
     </div>`;
   }
 
-  return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, bindLaporanExport, exportLaporanExcel, htmlTableToSheet, downloadExcel, downloadXlsx, downloadTemplateExcel, bulanLabel, mondayOf, rekapSetoranRange, setRekapSetoranRange, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, kirimRekapOtomatis, ICONS, hafalanMapHTML };
+  return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, loadLaporan, bindLaporanExport, exportLaporanExcel, htmlTableToSheet, downloadExcel, downloadXlsx, downloadTemplateExcel, bulanLabel, mondayOf, rekapSetoranRange, setRekapSetoranRange, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, kirimRekapOtomatis, ICONS, hafalanMapHTML };
 })();
 
 // Detail info saat centang setoran di-hover (desktop) atau di-tap/hold (HP)

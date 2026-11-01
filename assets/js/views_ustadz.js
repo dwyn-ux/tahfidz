@@ -1823,8 +1823,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         allowMakeup: true
       });
       Shared.bindRekapSetoranBayar(({ santriId, tanggal, programs }) => bayarSetoran(santriId, tanggal, programs));
-      document.getElementById('lap').innerHTML = Shared.renderLaporan({ halaqah: ownHalaqah, dari, sampai, bulan: (dari || '').slice(0, 7) });
-      Shared.bindLaporanExport();
+      Shared.loadLaporan(document.getElementById('lap'), { halaqah: ownHalaqah, dari, sampai, bulan: (dari || '').slice(0, 7) });
     };
     document.querySelectorAll('[data-ul-preset]').forEach(button => button.onclick = () => {
       const today = Store.todayStr();

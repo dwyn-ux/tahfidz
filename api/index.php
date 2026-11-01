@@ -5,6 +5,7 @@
  */
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/wa_service.php';
+require_once __DIR__ . '/report_service.php';
 
 $action = $_GET['action'] ?? '';
 
@@ -54,6 +55,13 @@ switch ($action) {
     case 'bootstrap':
         $u = requireAuth();
         send(['user' => ['id' => $u['uid'], 'role' => $u['role'], 'refId' => $u['refId']], 'db' => bootstrapData($u)]);
+        break;
+
+    case 'report_data':
+        $u = requireAuth();
+        if (!in_array($u['role'], ['admin', 'ustadz'], true)) err('Forbidden', 403);
+        NormalizedStore::ensureUpgrade();
+        send(['rows' => laporanDataForUser($u, body())]);
         break;
 
     /* ---------------- RECORDS CRUD (role-restricted) ---------------- */

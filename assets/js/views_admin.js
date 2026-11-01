@@ -1319,8 +1319,7 @@ const Admin = (() => {
         bulan: (document.getElementById('f-dari').value || '').slice(0, 7)
       };
       Shared.setRekapSetoranRange(f.dari, f.sampai);
-      document.getElementById('laporan-content').innerHTML = Shared.renderLaporan(f);
-      Shared.bindLaporanExport();
+      Shared.loadLaporan(document.getElementById('laporan-content'), f);
     };
     document.querySelectorAll('[data-lap-preset]').forEach(button => button.onclick = () => {
       const today = Store.todayStr();
