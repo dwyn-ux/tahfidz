@@ -1034,22 +1034,21 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const allMapel = Store.talimMapel();
     const myAssignments = Store.talimAssignmentsForUstadz(myUstadz);
     const myMapelIds = new Set(myAssignments.map(a => a.mapel.id));
-    const mapelWithKitab = allMapel.filter(m => m.kitabUrl || m.kitabNama);
+    const mapelWithKitab = allMapel.filter(m => myMapelIds.has(m.id) && (m.kitabUrl || m.kitabNama));
     const kitabCardsHTML = mapelWithKitab.length ? mapelWithKitab.map(m => {
-      const isMine = myMapelIds.has(m.id);
       const sizeStr = m.kitabSize ? ` · ${(m.kitabSize / (1024 * 1024)).toFixed(1)} MB` : '';
       return `
         <div class="clay-card pad-sm" style="flex:1 1 240px;max-width:340px;background:var(--bg)">
           <div class="row" style="justify-content:space-between;align-items:flex-start">
             <div>
-              <div style="font-size:12px;color:var(--text-soft);font-weight:600">${UI.esc(m.nama)}${isMine ? ' · <span class="badge green" style="font-size:10px;padding:2px 5px">Diajar</span>' : ''}</div>
+              <div style="font-size:12px;color:var(--text-soft);font-weight:600">${UI.esc(m.nama)}</div>
               <div style="font-weight:bold;margin-top:2px;font-size:14px">📖 ${UI.esc(m.kitabNama || m.nama)}</div>
               <div class="muted" style="font-size:11px;margin-top:2px">Format PDF${sizeStr}</div>
             </div>
             ${m.kitabUrl ? `<button class="clay-btn sm primary" type="button" data-buka-kitab="${UI.esc(m.id)}">📖 Baca</button>` : ''}
           </div>
         </div>`;
-    }).join('') : '<div class="muted" style="font-size:13px">Belum ada file kitab yang diunggah oleh admin di menu Ta’lim.</div>';
+    }).join('') : '<div class="muted" style="font-size:13px">Belum ada kitab untuk mapel yang Anda ampu. Hubungi admin jika penugasan mapel belum sesuai.</div>';
 
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card mb">
