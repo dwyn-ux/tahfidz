@@ -732,6 +732,10 @@ const _laporanRequests = new WeakMap();
           th { background: #e5e7eb; font-size: 6.5pt; }
           td { font-size: 6.5pt; }
           .center { text-align: center; }
+          .signature { width: 58mm; margin: 24px 12mm 0 auto; text-align: center; break-inside: avoid; page-break-inside: avoid; }
+          .signature-date { margin-bottom: 4px; }
+          .signature-title { margin-bottom: 42px; }
+          .signature-name { font-weight: 700; text-decoration: underline; }
           @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
         </style>
       </head>
@@ -741,6 +745,11 @@ const _laporanRequests = new WeakMap();
         <div class="period">${UI.esc(heading ? heading.textContent : 'Laporan Santri')}</div>
         <div class="generated">Dicetak pada ${UI.esc(UI.fmtDate(Store.todayStr()))}</div>
         ${printableTable.outerHTML}
+        <div class="signature">
+          <div class="signature-date">Ngawen, ${UI.esc(UI.fmtDate(Store.todayStr()))}</div>
+          <div class="signature-title">TTD Mudir</div>
+          <div class="signature-name">KH. Suroto Abu Nizam, M. Pd.</div>
+        </div>
       </body>
       </html>`);
     printWindow.document.close();
