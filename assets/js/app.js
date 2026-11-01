@@ -47,15 +47,18 @@ const App = (() => {
 
   // Tables remain semantic on desktop and become labeled cards on small screens.
   // Labels are inferred from their table headers, so all existing views benefit.
-  function enhanceTables(root = document) {
-    root.querySelectorAll('.clay-table').forEach(table => {
-      const labels = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
-      table.querySelectorAll('tbody tr').forEach(row => {
-        [...row.children].forEach((cell, index) => {
-          if (cell.tagName === 'TD') cell.dataset.label = labels[index] || '';
-        });
+  function enhanceTable(table) {
+    if (!table || !table.matches('.clay-table')) return;
+    const labels = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    table.querySelectorAll('tbody tr').forEach(row => {
+      [...row.children].forEach((cell, index) => {
+        if (cell.tagName === 'TD') cell.dataset.label = labels[index] || '';
       });
     });
+  }
+
+  function enhanceTables(root = document) {
+    root.querySelectorAll('.clay-table').forEach(enhanceTable);
   }
 
   function startTableEnhancer() {
@@ -63,7 +66,20 @@ const App = (() => {
     const root = document.getElementById('app');
     if (!root) return;
     tableObserverStarted = true;
-    new MutationObserver(() => enhanceTables(root)).observe(root, { childList: true, subtree: true });
+    new MutationObserver(records => {
+      const tables = new Set();
+      records.forEach(record => {
+        const target = record.target.nodeType === Node.ELEMENT_NODE ? record.target : record.target.parentElement;
+        const parentTable = target && target.closest('.clay-table');
+        if (parentTable) tables.add(parentTable);
+        record.addedNodes.forEach(node => {
+          if (node.nodeType !== Node.ELEMENT_NODE) return;
+          if (node.matches('.clay-table')) tables.add(node);
+          node.querySelectorAll('.clay-table').forEach(table => tables.add(table));
+        });
+      });
+      tables.forEach(enhanceTable);
+    }).observe(root, { childList: true, subtree: true });
   }
 
   function historyUrl(view) {

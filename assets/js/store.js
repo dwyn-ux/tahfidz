@@ -40,6 +40,47 @@ const Store = (() => {
   }
   let db = defaultDB();
   let saveChain = Promise.resolve();
+  let hafalanRecordsBySantri = null;
+  let totalHafalanCache = new Map();
+  let attendanceBySantri = null;
+  let missedSetoranDays = null;
+  let missedAttendanceDays = null;
+  let notificationKeysCache = null;
+
+  function invalidateDerivedDataCaches() {
+    hafalanRecordsBySantri = null;
+    totalHafalanCache.clear();
+    attendanceBySantri = null;
+    missedSetoranDays = null;
+    missedAttendanceDays = null;
+    notificationKeysCache = null;
+  }
+
+  function recordsBySantriId(records) {
+    const grouped = new Map();
+    records.forEach(record => {
+      if (!record || !record.santriId) return;
+      if (!grouped.has(record.santriId)) grouped.set(record.santriId, []);
+      grouped.get(record.santriId).push(record);
+    });
+    return grouped;
+  }
+
+  function getHafalanRecordsBySantri() {
+    if (!hafalanRecordsBySantri) {
+      hafalanRecordsBySantri = recordsBySantriId([
+        ...(db.ziyadahHafalan || []),
+        ...(db.mutqin || [])
+      ]);
+    }
+    return hafalanRecordsBySantri;
+  }
+
+  function getAttendanceBySantri() {
+    if (!attendanceBySantri) attendanceBySantri = recordsBySantriId(db.kehadiran || []);
+    return attendanceBySantri;
+  }
+
   // Salinan data terakhir yang dimuat/disimpan. Ini dipakai agar browser
   // hanya mengirim perubahan, bukan menimpa seluruh database dengan cache
   // yang mungkin sudah tertinggal dari perangkat lain.
@@ -161,6 +202,7 @@ const Store = (() => {
       db.absensiUstadz = db.absensiUstadz || [];
       db.jurnalTalim = db.jurnalTalim || [];
       persisted = snapshot(db);
+      invalidateDerivedDataCaches();
       return db;
     } catch (e) {
       if (String(e.message).includes('Unauthorized') || String(e.message).includes('401')) {
@@ -476,6 +518,7 @@ const Store = (() => {
   function save() {
     const changes = changesSincePersisted();
     if (!changes) return Promise.resolve(true);
+    invalidateDerivedDataCaches();
     // Ambil snapshot agar perubahan cepat berurutan dikirim satu per satu.
     const savedSnapshot = snapshot(db);
     const payload = { changes: snapshot(changes) };
@@ -940,6 +983,7 @@ const Store = (() => {
   }
 
   function totalHafalanSantri(santriId) {
+    if (totalHafalanCache.has(santriId)) return totalHafalanCache.get(santriId);
     let ayahs = 0, pages = 0, juzMin = 30, juzMax = 1;
     const add = (rec) => {
       const h = computeHafalan(rec.sAwal, rec.aAwal, rec.sAkhir, rec.aAkhir);
@@ -955,11 +999,15 @@ const Store = (() => {
         pages += Number(rec.totalHafalan);
       }
     };
-    (db.ziyadahHafalan || []).filter(z => z.santriId === santriId).forEach(add);
-    (db.mutqin || []).filter(m => m.santriId === santriId).forEach(add);
-    if (ayahs === 0 && pages === 0) return null;
+    (getHafalanRecordsBySantri().get(santriId) || []).forEach(add);
+    if (ayahs === 0 && pages === 0) {
+      totalHafalanCache.set(santriId, null);
+      return null;
+    }
     pages = Math.round(pages * 10) / 10;
-    return { ayahs, pages, juzStart: juzMin, juzEnd: juzMax, juzRange: Math.max(1, juzMax - juzMin + 1) };
+    const result = { ayahs, pages, juzStart: juzMin, juzEnd: juzMax, juzRange: Math.max(1, juzMax - juzMin + 1) };
+    totalHafalanCache.set(santriId, result);
+    return result;
   }
 
   function avgNilai(santriId) {
@@ -972,11 +1020,11 @@ const Store = (() => {
   }
 
   function kehadiranBulan(santriId, bulan) {
-    return dedupeKehadiran(db.kehadiran.filter(k => k.santriId === santriId && k.tanggal.startsWith(bulan)));
+    return dedupeKehadiran((getAttendanceBySantri().get(santriId) || []).filter(k => k.tanggal.startsWith(bulan)));
   }
 
   function kehadiranRentang(santriId, dari, sampai) {
-    return dedupeKehadiran(db.kehadiran.filter(k => k.santriId === santriId && padaRentang(k.tanggal, dari, sampai)));
+    return dedupeKehadiran((getAttendanceBySantri().get(santriId) || []).filter(k => padaRentang(k.tanggal, dari, sampai)));
   }
 
   // Laporan memakai rentang tanggal (bukan bulan tetap), jadi tiga helper
@@ -989,8 +1037,7 @@ const Store = (() => {
   // input), supaya "Setoran Awal/Akhir" di laporan sesuai bacaan sang santri.
   function setoranRentang(santriId, dari, sampai) {
     const records = [
-      ...db.ziyadahHafalan.filter(z => z.santriId === santriId && padaRentang(z.tanggal, dari, sampai)),
-      ...db.mutqin.filter(m => m.santriId === santriId && padaRentang(m.tanggal, dari, sampai))
+      ...(getHafalanRecordsBySantri().get(santriId) || []).filter(r => padaRentang(r.tanggal, dari, sampai))
     ].sort(lastSetoran);
     if (!records.length) return null;
     return { awal: records[records.length - 1], akhir: records[0], jumlah: records.length };
@@ -1000,10 +1047,7 @@ const Store = (() => {
   // Jika rentang melintasi batas 30→1 (mis. juz 26-30 dan 1-4), tampilkan
   // sebagai "Juz 26–30 dan 1–4", bukan "Juz 1–30".
   function juzHafalanDisplay(santriId) {
-    const records = [
-      ...db.ziyadahHafalan.filter(z => z.santriId === santriId),
-      ...db.mutqin.filter(m => m.santriId === santriId)
-    ];
+    const records = getHafalanRecordsBySantri().get(santriId) || [];
     if (!records.length) return null;
     const ranges = records.map(r => {
       const h = computeHafalan(r.sAwal, r.aAwal, r.sAkhir, r.aAkhir);
@@ -1392,9 +1436,9 @@ const Store = (() => {
     return Object.keys(latest).sort().map(key => latest[key]);
   }
 
-  function addNotif(userId, tipe, pesan) {
+  function addNotif(userId, tipe, pesan, persist = true) {
     db.notifikasi.unshift({ id: uid('n'), userId, tipe, pesan, tanggal: nowISO(), read: false });
-    save();
+    if (persist) save();
   }
   function notifFor(userId) { return db.notifikasi.filter(n => n.userId === userId); }
   function clearNotifs(userId) {
@@ -1420,10 +1464,33 @@ const Store = (() => {
     if (!db.settings.notifActive) return;
     const today = todayStr();
     if (!db.setoranNotif) db.setoranNotif = [];
-    const sudah = (sid, tgl) => db.setoranNotif.some(x => x.santriId === sid && x.tanggal === tgl);
-    const tandai = (sid, tgl) => { if (!sudah(sid, tgl)) db.setoranNotif.push({ santriId: sid, tanggal: tgl }); };
+    const key = (sid, tgl) => sid + '\u0000' + tgl;
+    const checkedDays = new Set(db.setoranNotif.map(x => key(x.santriId, x.tanggal)));
+    if (!missedSetoranDays) {
+      missedSetoranDays = new Set();
+      [db.ziyadahHafalan, db.ziyadahBacaan, db.tahsin].forEach(records => {
+        (records || []).forEach(record => missedSetoranDays.add(key(record.santriId, record.tanggal)));
+      });
+    }
+    if (!missedAttendanceDays) {
+      missedAttendanceDays = new Map();
+      (db.kehadiran || []).forEach(record => {
+        const attendanceKey = key(record.santriId, record.tanggal);
+        const state = missedAttendanceDays.get(attendanceKey) || { count: 0, excused: true };
+        state.count++;
+        state.excused = state.excused && (record.status === 'Sakit' || record.status === 'Izin' || record.status === 'Libur');
+        missedAttendanceDays.set(attendanceKey, state);
+      });
+    }
+    if (!notificationKeysCache) notificationKeysCache = new Set((db.notifikasi || []).map(n => n.userId + '\u0000' + n.pesan));
+    const setoranDays = missedSetoranDays;
+    const attendanceDays = missedAttendanceDays;
+    const notificationKeys = notificationKeysCache;
+    const waliUsers = new Map(db.users.filter(u => u.role === 'wali').map(user => [user.refId, user]));
+    const ustadzUsers = new Map(db.users.filter(u => u.role === 'ustadz').map(user => [user.refId, user]));
     const maxNotif = db.settings.notifMaxPerDay || 3;
     let notifCount = 0;
+    let changed = false;
 
     db.santri.filter(s => s.status === 'Aktif').forEach(s => {
       const kemarin = new Date(); kemarin.setDate(kemarin.getDate() - 1);
@@ -1433,36 +1500,49 @@ const Store = (() => {
         // Tanggal libur lembaga tidak dihitung sebagai hari setoran.
         if (isHariKerja(cek) && !isLiburLembaga(todayLocal(cek))) {
           const tgl = todayLocal(cek);
-          if (!sudah(s.id, tgl) && notifCount < maxNotif) {
-            const adaSetoran = db.ziyadahHafalan.some(z => z.santriId === s.id && z.tanggal === tgl)
-              || db.ziyadahBacaan.some(z => z.santriId === s.id && z.tanggal === tgl)
-              || db.tahsin.some(z => z.santriId === s.id && z.tanggal === tgl);
-            const dayAbs = (db.kehadiran || []).filter(k => k.santriId === s.id && k.tanggal === tgl);
-            const isAbsenSakitIzin = dayAbs.length > 0 && dayAbs.every(k => k.status === 'Sakit' || k.status === 'Izin' || k.status === 'Libur');
+          const dayKey = key(s.id, tgl);
+          if (!checkedDays.has(dayKey) && notifCount < maxNotif) {
+            const adaSetoran = setoranDays.has(dayKey);
+            const dayAbs = attendanceDays.get(dayKey);
+            const isAbsenSakitIzin = !!(dayAbs && dayAbs.count > 0 && dayAbs.excused);
             if (!adaSetoran && !isAbsenSakitIzin) {
-              const wUser = db.settings.notifWali && db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
+              const wUser = db.settings.notifWali && waliUsers.get(s.waliId);
               const halaqahSantri = halaqahForSantri(s);
               const ustadzPengampu = db.ustadz.filter(u => halaqahSantri.some(h => halaqahHasUstadz(h, u)));
               const uUsers = db.settings.notifUstadz
-                ? ustadzPengampu.map(u => db.users.find(user => user.role === 'ustadz' && user.refId === u.id)).filter(Boolean)
+                ? ustadzPengampu.map(u => ustadzUsers.get(u.id)).filter(Boolean)
                 : [];
               const tglTxt = UI.fmtDate(tgl);
               const pesan = '⚠️ ' + s.nama + ' belum setoran pada ' + tglTxt + '. Mohon dampingi anak untuk setoran.';
               const pesanU = s.nama + ' belum setoran pada ' + tglTxt + '.';
-              if (wUser && !db.notifikasi.some(n => n.userId === wUser.id && n.pesan === pesan)) { addNotif(wUser.id, 'wali', pesan); notifCount++; }
+              const waliKey = wUser && (wUser.id + '\u0000' + pesan);
+              if (wUser && !notificationKeys.has(waliKey)) {
+                addNotif(wUser.id, 'wali', pesan, false);
+                notificationKeys.add(waliKey);
+                notifCount++;
+                changed = true;
+              }
               uUsers.forEach(uUser => {
-                if (notifCount < maxNotif && !db.notifikasi.some(n => n.userId === uUser.id && n.pesan === pesanU)) {
-                  addNotif(uUser.id, 'ustadz', pesanU); notifCount++;
+                const ustadzKey = uUser.id + '\u0000' + pesanU;
+                if (notifCount < maxNotif && !notificationKeys.has(ustadzKey)) {
+                  addNotif(uUser.id, 'ustadz', pesanU, false);
+                  notificationKeys.add(ustadzKey);
+                  notifCount++;
+                  changed = true;
                 }
               });
-              tandai(s.id, tgl);
+              if (!checkedDays.has(dayKey)) {
+                db.setoranNotif.push({ santriId: s.id, tanggal: tgl });
+                checkedDays.add(dayKey);
+                changed = true;
+              }
             }
           }
         }
         cek.setDate(cek.getDate() + 1);
       }
     });
-    save();
+    if (changed) save();
   }
 
   return {
