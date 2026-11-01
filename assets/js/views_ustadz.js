@@ -1026,7 +1026,9 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       .sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
     const rows = journals.map(j => `<tr>
       <td>${UI.fmtDate(j.tanggal)}</td><td>${UI.esc(j.ustadz || '-')}</td>
-      <td>${UI.esc(j.mapel || '-')}</td><td>${UI.esc(j.kelas ? Store.kelasLabel(j.tingkat, j.kelas) : '-')}</td>
+      <td>${UI.esc(j.mapel || '-')}</td><td>${UI.esc(Array.isArray(j.kelasKeys) && j.kelasKeys.length
+        ? j.kelasKeys.map(Store.talimClassLabel).join(', ')
+        : (j.kelas ? Store.kelasLabel(j.tingkat, j.kelas) : '-'))}</td>
       <td><b>${UI.esc(j.judulKitab)}</b></td><td>${UI.esc(j.bab)}</td>
       <td>${UI.esc(j.pembahasan)}</td><td>${UI.esc(j.halaman)}</td>
       <td><button class="clay-btn sm ghost" type="button" data-continue-talim="${UI.esc(j.id)}">Lanjutkan</button></td>
@@ -1100,6 +1102,10 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const currentUstadz = Store.findUstadz(session?.refId);
     const isAdmin = session?.role === 'admin';
     const source = sourceJournal || {};
+    const sourceKelasKeys = Array.isArray(source.kelasKeys) && source.kelasKeys.length
+      ? source.kelasKeys
+      : (source.tingkat && source.kelas ? [Store.talimClassKey(source.tingkat, source.kelas)] : []);
+    let selectedKelasKeys = new Set(sourceKelasKeys);
     // ID dibuat saat formulir dibuka, bukan setiap tombol Simpan ditekan.
     // Jadi jika sebuah klik terkirim ulang, server akan meng-upsert jurnal
     // yang sama alih-alih membuat baris Ta'lim baru.
@@ -1116,7 +1122,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         ? `<select class="clay-select" id="f-talim-ustadz"><option value="">- Pilih Ustadz -</option>${UI.optionsFromList(db.ustadz.map(u => ({ v: u.id, l: u.nama })), 'v', 'l', defaultUstadzId)}</select>`
         : `<input class="clay-input" value="${UI.esc(currentUstadz?.nama || 'Ustadz')}" disabled>`)}
       ${UI.field('Mapel', `<select class="clay-select" id="f-talim-mapel"></select>`)}
-      ${UI.field('Tingkat & Kelas', `<select class="clay-select" id="f-talim-kelas"></select><div class="muted" id="f-talim-assignment-info" style="font-size:12px;margin-top:4px"></div>`)}
+      ${UI.field('Tingkat & Kelas (bisa pilih beberapa)', `<div class="row" id="f-talim-kelas" style="gap:8px;flex-wrap:wrap"></div><div class="muted" id="f-talim-assignment-info" style="font-size:12px;margin-top:4px"></div>`)}
       ${UI.field('Judul Kitab', `
         <div class="row" style="gap:8px">
           <input class="clay-input" id="f-talim-kitab" placeholder="Contoh: Riyadhus Shalihin" value="${UI.esc(source.judulKitab || malamDefaults.judulKitab)}" style="flex:1">
@@ -1133,22 +1139,22 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           const ustadzId = isAdmin ? m.querySelector('#f-talim-ustadz').value : currentUstadz?.id;
           const ustadz = db.ustadz.find(u => u.id === ustadzId);
           const mapelId = m.querySelector('#f-talim-mapel').value;
-          const kelasKey = m.querySelector('#f-talim-kelas').value;
+          const kelasKeys = [...m.querySelectorAll('[data-talim-jurnal-kelas]:checked')].map(input => input.value);
           const judulKitab = m.querySelector('#f-talim-kitab').value.trim();
           const bab = m.querySelector('#f-talim-bab').value.trim();
           const pembahasan = m.querySelector('#f-talim-bahas').value.trim();
           const halaman = m.querySelector('#f-talim-halaman').value.trim();
           if (!ustadz) { UI.toast('Pilih ustadz', 'error'); return; }
           const assignment = Store.talimAssignmentsForUstadz(ustadz).find(item => item.mapel.id === mapelId);
-          if (!assignment || !kelasKey || !assignment.kelasKeys.includes(kelasKey)) {
-            UI.toast('Pilih mapel dan kelas sesuai penugasan Ta’lim', 'error'); return;
+          if (!assignment || !kelasKeys.length || kelasKeys.some(key => !assignment.kelasKeys.includes(key))) {
+            UI.toast('Pilih mapel dan minimal satu kelas sesuai penugasan Ta’lim', 'error'); return;
           }
           if (!judulKitab || !bab || !pembahasan || !halaman) { UI.toast('Lengkapi judul kitab, bab, pembahasan, dan halaman', 'error'); return; }
           if (!db.jurnalTalim) db.jurnalTalim = [];
           const halaqah = Store.findHalaqahForUstadz(ustadz);
           const mapel = Store.findTalimMapel(mapelId);
-          const pendidikan = Store.talimClassFromKey(kelasKey);
-          const journal = { id: journalId, tanggal: m.querySelector('#f-talim-tgl').value, ustadzId, ustadz: ustadz.nama, halaqah: halaqah?.nama || ustadz.halaqah || '', mapelId, mapel: mapel?.nama || '', tingkat: pendidikan.tingkat, kelas: pendidikan.kelas, judulKitab, bab, pembahasan, halaman };
+          const pendidikan = Store.talimClassFromKey(kelasKeys[0]);
+          const journal = { id: journalId, tanggal: m.querySelector('#f-talim-tgl').value, ustadzId, ustadz: ustadz.nama, halaqah: halaqah?.nama || ustadz.halaqah || '', mapelId, mapel: mapel?.nama || '', tingkat: pendidikan.tingkat, kelas: pendidikan.kelas, kelasKeys, judulKitab, bab, pembahasan, halaman };
           const existingIndex = db.jurnalTalim.findIndex(j => j.id === journalId);
           if (existingIndex === -1) {
             db.jurnalTalim.push(journal);
@@ -1168,21 +1174,32 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       const teacher = db.ustadz.find(u => u.id === teacherId);
       const assignments = Store.talimAssignmentsForUstadz(teacher);
       const mapelSelect = modal.modal.querySelector('#f-talim-mapel');
-      const kelasSelect = modal.modal.querySelector('#f-talim-kelas');
+      const kelasBox = modal.modal.querySelector('#f-talim-kelas');
       const info = modal.modal.querySelector('#f-talim-assignment-info');
       const priorMapel = mapelSelect.value || source.mapelId;
       const selectedMapel = assignments.some(item => item.mapel.id === priorMapel) ? priorMapel : assignments[0]?.mapel.id || '';
       mapelSelect.innerHTML = `<option value="">Pilih mapel</option>${UI.optionsFromList(assignments.map(item => ({ v: item.mapel.id, l: item.mapel.nama })), 'v', 'l', selectedMapel)}`;
       const selectedAssignment = assignments.find(item => item.mapel.id === mapelSelect.value);
-      const priorKelas = kelasSelect.value || (source.tingkat && source.kelas ? Store.talimClassKey(source.tingkat, source.kelas) : '');
-      const selectedKelas = selectedAssignment?.kelasKeys.includes(priorKelas) ? priorKelas : selectedAssignment?.kelasKeys[0] || '';
-      kelasSelect.innerHTML = `<option value="">Pilih tingkat & kelas</option>${UI.optionsFromList((selectedAssignment?.kelasKeys || []).map(key => ({ v: key, l: Store.talimClassLabel(key) })), 'v', 'l', selectedKelas)}`;
+      const availableKelas = selectedAssignment?.kelasKeys || [];
+      selectedKelasKeys = new Set([...selectedKelasKeys].filter(key => availableKelas.includes(key)));
+      if (!selectedKelasKeys.size && availableKelas.length) selectedKelasKeys.add(availableKelas[0]);
+      kelasBox.innerHTML = availableKelas.map(key => `
+        <label class="pill ${selectedKelasKeys.has(key) ? 'active' : ''}" style="display:inline-flex;align-items:center;gap:6px;padding:7px 11px;cursor:pointer">
+          <input type="checkbox" data-talim-jurnal-kelas value="${UI.esc(key)}" ${selectedKelasKeys.has(key) ? 'checked' : ''} style="margin:0;accent-color:${selectedKelasKeys.has(key) ? '#fff' : 'var(--primary)'}"> ${UI.esc(Store.talimClassLabel(key))}
+        </label>`).join('') || '<span class="muted">Belum ada kelas yang ditugaskan.</span>';
+      kelasBox.querySelectorAll('[data-talim-jurnal-kelas]').forEach(input => {
+        input.onchange = () => {
+          if (input.checked) selectedKelasKeys.add(input.value);
+          else selectedKelasKeys.delete(input.value);
+          input.closest('label').classList.toggle('active', input.checked);
+          input.style.accentColor = input.checked ? '#fff' : 'var(--primary)';
+        };
+      });
       const disabled = !assignments.length;
       mapelSelect.disabled = disabled;
-      kelasSelect.disabled = disabled;
       info.textContent = disabled
         ? 'Belum ada penugasan Ta’lim untuk ustadz ini. Minta admin mengatur mapel dan kelas di Settings → Ta’lim.'
-        : 'Pilihan hanya menampilkan mapel dan kelas yang ditugaskan admin.';
+        : 'Pilih satu atau beberapa kelas yang ditugaskan admin untuk mapel ini.';
 
       const currentMapelObj = Store.findTalimMapel(mapelSelect.value);
       const btnBukaKitab = modal.modal.querySelector('#btn-talim-buka-kitab-form');
