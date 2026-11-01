@@ -51,6 +51,17 @@ switch ($action) {
         send(['ok' => true]);
         break;
 
+    /* ---------------- VERSION (latest git commit) ---------------- */
+    case 'version':
+        $commitMsg = '';
+        $commitHash = '';
+        if (is_dir(dirname(__DIR__) . '/.git')) {
+            $commitHash = trim(@exec('git log -1 --format="%h"'));
+            $commitMsg = trim(@exec('git log -1 --format="%s"'));
+        }
+        send(['hash' => $commitHash, 'message' => $commitMsg]);
+        break;
+
     /* ---------------- BOOTSTRAP (all data, role-filtered) ---------------- */
     case 'bootstrap':
         $u = requireAuth();

@@ -1596,10 +1596,11 @@ function exportLaporanExcel(filters) {
         <div class="section-title" style="margin:0">Notifikasi</div>
         <button class="clay-btn sm ghost" id="clear-notif" style="color:var(--danger)">Hapus Semua</button>
       </div>
+      <div style="position:absolute;top:16px;right:16px;z-index:900" id="git-update-notif-container"></div>
       ${list.map(n =>
       `<div class="row center" style="justify-content:space-between;padding:12px 0;border-bottom:1px solid #eee">
         <div class="row center" style="gap:10px"><span style="font-size:20px">${icon[n.tipe] || ''}</span>
-        <div><div>${UI.esc(n.pesan)}</div><div class="muted" style="font-size:12px">${UI.fmtDateTime(n.tanggal)}</div></div></div>
+        <div><div>${n.html ? n.pesan : UI.esc(n.pesan)}</div><div class="muted" style="font-size:12px">${UI.fmtDateTime(n.tanggal)}</div></div></div>
         ${n.read ? '' : '<span class="badge blue">Baru</span>'}
       </div>`).join('')}
     </div>`;

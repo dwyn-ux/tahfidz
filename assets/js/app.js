@@ -138,6 +138,20 @@ const App = (() => {
     try {
       if (!options.dataLoaded) await Store.load();
       try { if (typeof Shared && typeof Shared.kirimRekapOtomatis === 'function') Shared.kirimRekapOtomatis(); } catch (e) {}
+      
+      // Cek versi aplikasi dari commit git terakhir
+      try {
+        const v = await Store.api('version');
+        if (v && v.hash) {
+          const lastHash = localStorage.getItem('tahfidz_last_commit');
+          if (lastHash && lastHash !== v.hash) {
+            const msg = `Aplikasi diperbarui (v.${v.hash}): ${v.message || 'Pembaruan sistem'}`;
+            UI.toast('Update Baru: ' + (v.message || v.hash), 'info');
+            Store.addNotif(session.userId, 'admin', msg);
+          }
+          localStorage.setItem('tahfidz_last_commit', v.hash);
+        }
+      } catch(e) {}
     } catch (e) {
       // token invalid or server unreachable -> back to login
       Auth.renderLogin();
