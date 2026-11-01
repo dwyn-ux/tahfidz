@@ -599,16 +599,73 @@ function renderLaporan(filters) {
       </div>
       <div class="row mt">
         <button class="clay-btn secondary" id="export-excel">Export Excel</button>
-        <button class="clay-btn" id="export-pdf"> Print / PDF</button>
+        <button class="clay-btn" id="export-pdf">Unduh PDF</button>
       </div>
     </div>`;
+  }
+
+  function downloadLaporanPdf() {
+    const table = document.querySelector('#laporan-table');
+    if (!table) {
+      UI.toast('Data laporan tidak ditemukan', 'error');
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      UI.toast('Izinkan pop-up untuk mengunduh laporan PDF', 'error');
+      return;
+    }
+
+    const heading = table.closest('.clay-card')?.querySelector('.section-title');
+    const institution = document.getElementById('page-sub');
+    const filename = 'Laporan_Tahfidz_' + Store.todayStr();
+    printWindow.onafterprint = () => printWindow.close();
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+      <html lang="id">
+      <head>
+        <meta charset="utf-8">
+        <title>${UI.esc(filename)}</title>
+        <style>
+          @page { size: landscape; margin: 8mm; }
+          * { box-sizing: border-box; }
+          body { color: #1f2937; font: 8pt Arial, sans-serif; }
+          h1 { margin: 0 0 3px; font-size: 15pt; }
+          .institution, .period, .generated { margin: 2px 0; }
+          .institution { font-size: 10pt; font-weight: 600; }
+          .generated { color: #4b5563; font-size: 7pt; }
+          table { width: 100%; margin-top: 10px; border-collapse: collapse; table-layout: fixed; }
+          thead { display: table-header-group; }
+          tr { break-inside: avoid; }
+          th, td { padding: 4px 3px; border: 1px solid #9ca3af; vertical-align: top; overflow-wrap: anywhere; }
+          th { background: #e5e7eb; font-size: 6.5pt; }
+          td { font-size: 6.5pt; }
+          .center { text-align: center; }
+          @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+        </style>
+      </head>
+      <body>
+        <h1>Laporan Tahfidz</h1>
+        <div class="institution">${UI.esc(institution ? institution.textContent : '')}</div>
+        <div class="period">${UI.esc(heading ? heading.textContent : 'Laporan Santri')}</div>
+        <div class="generated">Dicetak pada ${UI.esc(UI.fmtDate(Store.todayStr()))}</div>
+        ${table.outerHTML}
+      </body>
+      </html>`);
+    printWindow.document.close();
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+      UI.toast('Pilih “Simpan sebagai PDF” pada dialog cetak untuk mengunduh laporan', 'info');
+    }, 250);
   }
 
   function bindLaporanExport() {
     const ex = document.getElementById('export-excel');
     const pdf = document.getElementById('export-pdf');
     if (ex) ex.onclick = () => exportLaporanExcel(_laporanFilters);
-    if (pdf) pdf.onclick = () => window.print();
+    if (pdf) pdf.onclick = downloadLaporanPdf;
   }
 
   /* ---------------- Konversi tabel HTML ke .xlsx ----------------
