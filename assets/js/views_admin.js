@@ -111,8 +111,25 @@ const Admin = (() => {
   }
 
   function nav(active) {
+    const session = Store.getSession();
+    const isPengawas = session?.role === 'pengawas';
+    if (isPengawas) {
+      return [
+        { view: 'admin_live_monitor', label: '🔴 Live Monitor', active: active === 'admin_live_monitor' },
+        { view: 'admin_dashboard', label: 'Dashboard', active: active === 'admin_dashboard' },
+        { view: 'admin_rekap_kehadiran', label: 'Rekap Kehadiran', active: active === 'admin_rekap_kehadiran' },
+        { view: 'admin_rekap_setoran', label: 'Rekap Setoran', active: active === 'admin_rekap_setoran' },
+        { view: 'admin_absensi_ustadz', label: 'Absensi Ustadz', active: active === 'admin_absensi_ustadz' },
+        { view: 'admin_riwayat', label: 'Riwayat', active: active === 'admin_riwayat' },
+        { view: 'admin_laporan', label: 'Laporan', active: active === 'admin_laporan' },
+        { view: 'admin_libur', label: 'Kalender Libur', active: active === 'admin_libur' },
+        { view: 'admin_notif', label: 'Notifikasi', active: active === 'admin_notif' },
+        { view: 'quran', label: 'Al-Qur\'an', active: active === 'quran' }
+      ];
+    }
     return [
       { view: 'admin_dashboard', label: 'Dashboard', active: active === 'admin_dashboard' },
+      { view: 'admin_live_monitor', label: '🔴 Live Monitor', active: active === 'admin_live_monitor' },
       { view: 'admin_santri', label: 'Santri', active: active === 'admin_santri' },
       { view: 'admin_ustadz', label: 'Ustadz', active: active === 'admin_ustadz' },
       { view: 'admin_halaqah', label: 'Halaqah', active: active === 'admin_halaqah' },
@@ -174,6 +191,74 @@ const Admin = (() => {
             <b>${UI.esc(info.keterangan || 'Libur Lembaga')}</b>
             <span class="muted" style="font-size:12px">Sesi: ${UI.esc(info.sesi === 'semua' ? 'Semua Sesi' : (Array.isArray(info.sesi) ? info.sesi.join(', ') : String(info.sesi)))}</span>
             <button class="clay-btn sm ghost" data-go="admin_libur" style="margin-left:auto;color:#7e22ce;border:1px solid #d8b4fe">Kelola Kalender Libur</button>
+          </div>
+        </div>`;
+    }
+
+    // Widget Live Monitor Hari Ini di Dashboard
+    function adminLiveMonitorWidget() {
+      const today = Store.todayStr();
+      const activeU = db.ustadz.filter(u => u.status !== 'Nonaktif');
+      const activeS = db.santri.filter(s => s.status !== 'Nonaktif');
+      const uAbsen = new Set((db.absensiUstadz || []).filter(a => a.tanggal === today).map(a => a.ustadzId)).size;
+      const sDiabsen = new Set((db.kehadiran || []).filter(k => k.tanggal === today).map(k => k.santriId)).size;
+      const sSetoran = new Set([
+        ...(db.ziyadahHafalan || []).filter(z => z.tanggal === today).map(z => z.santriId),
+        ...(db.tahsin || []).filter(t => t.tanggal === today).map(t => t.santriId),
+        ...(db.mutqin || []).filter(m => m.tanggal === today).map(m => m.santriId),
+        ...(db.ziyadahBacaan || []).filter(b => b.tanggal === today).map(b => b.santriId),
+      ]).size;
+      const pU = activeU.length > 0 ? Math.round((uAbsen / activeU.length) * 100) : 0;
+      const pS = activeS.length > 0 ? Math.round((sDiabsen / activeS.length) * 100) : 0;
+      const pSet = activeS.length > 0 ? Math.round((sSetoran / activeS.length) * 100) : 0;
+
+      return `
+        <div class="clay-card mb" style="background:linear-gradient(135deg, rgba(239,68,68,0.03), rgba(37,99,235,0.03));border:1px solid rgba(220,38,38,0.2)">
+          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <span class="badge live"><span class="live-pulse-dot"></span> LIVE MONITOR</span>
+              <b style="font-size:15px">Aktivitas &amp; Setoran Hari Ini (${UI.fmtDate(today)})</b>
+            </div>
+            <button class="clay-btn sm primary" data-go="admin_live_monitor" style="display:inline-flex;align-items:center;gap:6px">
+              Buka Live Monitor Lengkap ➜
+            </button>
+          </div>
+          <div class="grid cols-3 mt" style="gap:14px">
+            <div class="clay-card pad-sm live-kpi-card blue" style="background:#fff">
+              <div style="font-size:12px;color:var(--text-soft);font-weight:600">👨‍🏫 GURU SUDAH ABSEN</div>
+              <div class="row center mt" style="justify-content:space-between">
+                <b style="font-size:20px">${uAbsen} <span style="font-size:13px;font-weight:400" class="muted">/ ${activeU.length} guru</span></b>
+                <span class="badge ${pU >= 80 ? 'green' : 'blue'}">${pU}%</span>
+              </div>
+              <div class="live-bar-container">
+                <div class="live-bar-seg" style="width:${pU}%;background:#2563eb"></div>
+              </div>
+              <div class="muted" style="font-size:11.5px">${activeU.length - uAbsen} guru belum absen hari ini</div>
+            </div>
+
+            <div class="clay-card pad-sm live-kpi-card purple" style="background:#fff">
+              <div style="font-size:12px;color:var(--text-soft);font-weight:600">🎓 SANTRI SUDAH DIABSEN</div>
+              <div class="row center mt" style="justify-content:space-between">
+                <b style="font-size:20px">${sDiabsen} <span style="font-size:13px;font-weight:400" class="muted">/ ${activeS.length} santri</span></b>
+                <span class="badge ${pS >= 80 ? 'green' : 'purple'}">${pS}%</span>
+              </div>
+              <div class="live-bar-container">
+                <div class="live-bar-seg" style="width:${pS}%;background:#9333ea"></div>
+              </div>
+              <div class="muted" style="font-size:11.5px">${activeS.length - sDiabsen} santri belum diabsen hari ini</div>
+            </div>
+
+            <div class="clay-card pad-sm live-kpi-card green" style="background:#fff">
+              <div style="font-size:12px;color:var(--text-soft);font-weight:600">📖 SANTRI SUDAH SETORAN</div>
+              <div class="row center mt" style="justify-content:space-between">
+                <b style="font-size:20px">${sSetoran} <span style="font-size:13px;font-weight:400" class="muted">/ ${activeS.length} santri</span></b>
+                <span class="badge ${pSet >= 70 ? 'green' : 'warn'}">${pSet}%</span>
+              </div>
+              <div class="live-bar-container">
+                <div class="live-bar-seg" style="width:${pSet}%;background:#16a34a"></div>
+              </div>
+              <div class="muted" style="font-size:11.5px">${activeS.length - sSetoran} santri belum setoran hari ini</div>
+            </div>
           </div>
         </div>`;
     }
@@ -246,6 +331,7 @@ const Admin = (() => {
     const kehadiranData = days.map(d => ({ label: d, value: hadirBulanIni.filter(k => new Date(k.tanggal).getDay() === (days.indexOf(d) + 1) % 7).length + Math.floor(Math.random() * 3) }));
 
     const content = `
+      ${adminLiveMonitorWidget()}
       ${kpi}
       ${adminLiburBanner()}
       ${adminRekapAbsensiHariIni()}
@@ -306,6 +392,963 @@ const Admin = (() => {
       };
     });
     const imp = document.getElementById('qa-import'); if (imp) imp.onclick = () => importSantriDialog();
+  }
+
+  /* ---------------- Live Monitor ---------------- */
+  function liveMonitor() {
+    const session = Store.getSession();
+    const role = session?.role || 'admin';
+    Shared.shell(role, nav('admin_live_monitor'), '');
+    Shared.setHeader('Live Monitor', 'Pantau real-time kehadiran guru, santri, dan progres setoran harian');
+    Shared.setActions(`
+      <button class="clay-btn sm secondary" id="btn-export-live-xlsx">Export Excel</button>
+    `);
+
+    let currentDate = Store.todayStr();
+    let currentSesi = ''; // '' = Semua Sesi
+    let currentHalaqah = '';
+    let currentTab = 'guru'; // 'guru' | 'santri' | 'setoran' | 'halaqah'
+    let guruSubFilter = 'all'; // 'all' | 'sudah' | 'belum'
+    let santriSubFilter = 'all'; // 'all' | 'sudah' | 'belum'
+    let santriStatusFilter = ''; // '' | 'Hadir' | 'Izin' | 'Sakit' | 'Alfa' | 'Belum'
+    let setoranSubFilter = 'all'; // 'all' | 'sudah' | 'belum'
+    let setoranTypeFilter = ''; // '' | 'Ziyadah Hafalan' | 'Tahsin' | 'Mutqin' | 'Ziyadah Bacaan'
+    let searchTerm = '';
+    let autoRefresh = true;
+    let autoRefreshSeconds = 30;
+    let countdown = autoRefreshSeconds;
+    let timerId = null;
+
+    const SESI_LIST = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
+
+    function cleanPhone(raw) {
+      if (!raw) return '';
+      let num = String(raw).replace(/[^0-9]/g, '');
+      if (num.startsWith('0')) num = '62' + num.slice(1);
+      return num;
+    }
+
+    function ustadzNameById(id) {
+      const db = Store.get();
+      const u = (db.ustadz || []).find(x => x.id === id);
+      return u ? u.nama : '-';
+    }
+
+    function renderSesiPill(r) {
+      if (!r) return `<span class="live-sesi-pill belum">Belum</span>`;
+      const st = r.status || '';
+      const cls = st === 'Hadir' ? 'hadir' : (st === 'Izin' ? 'izin' : (st === 'Sakit' ? 'sakit' : (st === 'Alfa' ? 'alfa' : (st === 'Libur' ? 'libur' : 'belum'))));
+      const time = r.waktu ? (r.waktu.includes('T') ? r.waktu.split('T')[1].slice(0, 5) : (r.waktu.length >= 16 ? r.waktu.slice(11, 16) : '')) : '';
+      return `<span class="live-sesi-pill ${cls}">${UI.esc(st)}${time ? ` <small>${time}</small>` : ''}</span>`;
+    }
+
+    function computeData() {
+      const db = Store.get();
+      let activeUstadz = (db.ustadz || []).filter(u => u.status !== 'Nonaktif');
+      let activeSantri = (db.santri || []).filter(s => s.status !== 'Nonaktif');
+
+      // Filter by halaqah
+      if (currentHalaqah) {
+        const targetH = (db.halaqah || []).find(h => h.id === currentHalaqah);
+        if (targetH) {
+          activeUstadz = activeUstadz.filter(u => Store.halaqahHasUstadz(targetH, u));
+          activeSantri = activeSantri.filter(s => Store.santriHasHalaqah(s, targetH));
+        }
+      }
+
+      // Filter by search
+      const term = searchTerm.toLowerCase().trim();
+
+      // Attendance records for selected date
+      const auRecords = (db.absensiUstadz || []).filter(a => a.tanggal === currentDate);
+      const kRecords = (db.kehadiran || []).filter(k => k.tanggal === currentDate);
+
+      // Setoran records for selected date
+      const zHafalan = (db.ziyadahHafalan || []).filter(z => z.tanggal === currentDate);
+      const zBacaan = (db.ziyadahBacaan || []).filter(b => b.tanggal === currentDate);
+      const tahsin = (db.tahsin || []).filter(t => t.tanggal === currentDate);
+      const mutqin = (db.mutqin || []).filter(m => m.tanggal === currentDate);
+
+      // 1. Process Guru data
+      const guruList = activeUstadz.map(u => {
+        const assignedHalaqah = (db.halaqah || []).filter(h => Store.halaqahHasUstadz(h, u));
+        const halaqahNames = assignedHalaqah.map(h => h.nama).join(', ') || u.halaqah || '-';
+        const uRecs = auRecords.filter(a => a.ustadzId === u.id);
+
+        const sesiMap = {};
+        SESI_LIST.forEach(s => {
+          sesiMap[s] = uRecs.find(a => a.sesi === s) || null;
+        });
+
+        let sudah = false;
+        let status = 'Belum Absen';
+        let waktuTerakhir = '';
+        let catatanTerakhir = '';
+
+        if (currentSesi) {
+          const recS = uRecs.find(a => a.sesi === currentSesi);
+          sudah = !!recS;
+          status = recS ? recS.status : 'Belum Absen';
+          waktuTerakhir = recS?.waktu ? UI.fmtDateTime(recS.waktu) : '-';
+          catatanTerakhir = recS?.catatan || '';
+        } else {
+          sudah = uRecs.length > 0;
+          status = uRecs.length === 0 ? 'Belum Absen' : (uRecs.length === SESI_LIST.length ? 'Lengkap Semua Sesi' : `${uRecs.length}/${SESI_LIST.length} Sesi`);
+          const sorted = uRecs.slice().sort((a, b) => (b.waktu || '').localeCompare(a.waktu || ''));
+          waktuTerakhir = sorted[0]?.waktu ? UI.fmtDateTime(sorted[0].waktu) : '-';
+          catatanTerakhir = sorted[0]?.catatan || '';
+        }
+
+        return {
+          id: u.id,
+          nama: u.nama,
+          noHp: u.noHp || '',
+          halaqah: halaqahNames,
+          sesiMap,
+          sudah,
+          status,
+          waktuTerakhir,
+          catatanTerakhir,
+          rawRecords: uRecs
+        };
+      });
+
+      // 2. Process Santri Attendance data
+      const santriList = activeSantri.map(s => {
+        const hObj = (db.halaqah || []).find(h => Store.santriHasHalaqah(s, h));
+        const halaqahName = hObj ? hObj.nama : (s.halaqah || '-');
+        const pengampuNames = hObj ? Store.ustadzNamesForHalaqah(hObj).join(', ') : '-';
+        const pengampuUstadz = hObj ? activeUstadz.filter(u => Store.halaqahHasUstadz(hObj, u)) : [];
+        const ustadzSudahAbsen = pengampuUstadz.length > 0 && pengampuUstadz.some(u => auRecords.some(a => a.ustadzId === u.id));
+
+        const sRecs = kRecords.filter(k => k.santriId === s.id);
+        const sesiMap = {};
+        SESI_LIST.forEach(ses => {
+          sesiMap[ses] = sRecs.find(k => k.sesi === ses) || null;
+        });
+
+        let sudahDiabsen = false;
+        let status = 'Belum Diabsen';
+        if (currentSesi) {
+          const recS = sRecs.find(k => k.sesi === currentSesi);
+          sudahDiabsen = !!recS;
+          status = recS ? recS.status : 'Belum Diabsen';
+        } else {
+          sudahDiabsen = sRecs.length > 0;
+          status = sRecs.length === 0 ? 'Belum Diabsen' : `${sRecs.length}/${SESI_LIST.length} Sesi Diabsen`;
+        }
+
+        return {
+          id: s.id,
+          nama: s.nama,
+          nis: s.nis || '',
+          jk: s.jk || '-',
+          tingkat: Store.tingkatForSantri(s) || '-',
+          kelas: Store.kelasForSantri(s) || '-',
+          halaqah: halaqahName,
+          pengampu: pengampuNames,
+          ustadzSudahAbsen,
+          sesiMap,
+          sudahDiabsen,
+          status,
+          rawRecords: sRecs
+        };
+      });
+
+      // 3. Process Santri Setoran data
+      const setoranList = activeSantri.map(s => {
+        const hObj = (db.halaqah || []).find(h => Store.santriHasHalaqah(s, h));
+        const halaqahName = hObj ? hObj.nama : (s.halaqah || '-');
+
+        const items = [];
+        zHafalan.filter(z => z.santriId === s.id).forEach(z => {
+          items.push({
+            tipe: 'Ziyadah Hafalan',
+            badgeClass: 'green',
+            desc: (typeof formatSetoranLabel === 'function' ? formatSetoranLabel(z) : `${z.sAwal || ''}:${z.aAwal || ''}`) + (z.pages ? ` (${z.pages} hlm)` : ''),
+            nilai: z.nilai || '-',
+            catatan: z.catatan || '',
+            ustadz: ustadzNameById(z.ustadzId),
+            waktu: z._created ? UI.fmtDateTime(z._created) : '-'
+          });
+        });
+        tahsin.filter(t => t.santriId === s.id).forEach(t => {
+          items.push({
+            tipe: 'Tahsin',
+            badgeClass: 'blue',
+            desc: `Jilid ${t.jilid || '-'} Hlm ${t.halaman || '-'} Ayat ${t.ayat || '-'}`,
+            nilai: t.nilai || '-',
+            catatan: t.catatan || '',
+            ustadz: ustadzNameById(t.ustadzId),
+            waktu: t._created ? UI.fmtDateTime(t._created) : '-'
+          });
+        });
+        mutqin.filter(m => m.santriId === s.id).forEach(m => {
+          const surahObj = (typeof getSurah === 'function' && m.surah) ? getSurah(m.surah) : null;
+          items.push({
+            tipe: 'Mutqin',
+            badgeClass: 'purple',
+            desc: `Juz ${m.juz || '-'} ${surahObj ? surahObj.latin : ''} (Ayat ${m.ayat || '-'})`,
+            nilai: m.nilai || '-',
+            catatan: m.catatan || '',
+            ustadz: ustadzNameById(m.ustadzId),
+            waktu: m._created ? UI.fmtDateTime(m._created) : '-'
+          });
+        });
+        zBacaan.filter(b => b.santriId === s.id).forEach(b => {
+          const surahObj = (typeof getSurah === 'function' && b.surah) ? getSurah(b.surah) : null;
+          items.push({
+            tipe: 'Ziyadah Bacaan',
+            badgeClass: 'cream',
+            desc: `Binnazhar ${surahObj ? surahObj.latin : ''} (Ayat ${b.ayat || '-'})`,
+            nilai: b.nilai || '-',
+            catatan: b.catatan || '',
+            ustadz: ustadzNameById(b.ustadzId),
+            waktu: b._created ? UI.fmtDateTime(b._created) : '-'
+          });
+        });
+
+        return {
+          id: s.id,
+          nama: s.nama,
+          nis: s.nis || '',
+          halaqah: halaqahName,
+          items,
+          sudahSetor: items.length > 0
+        };
+      });
+
+      // 4. Halaqah Matrix Summary
+      const halaqahList = (db.halaqah || []).map(h => {
+        const hSantri = santriList.filter(s => Store.santriHasHalaqah(s, h));
+        const hUstadz = guruList.filter(u => Store.halaqahHasUstadz(h, u));
+        const ustadzAbsenCount = hUstadz.filter(u => u.sudah).length;
+        const santriDiabsenCount = hSantri.filter(s => s.sudahDiabsen).length;
+        const santriSetorCount = setoranList.filter(s => Store.santriHasHalaqah(s, h) && s.sudahSetor).length;
+        const belumSetorNames = setoranList.filter(s => Store.santriHasHalaqah(s, h) && !s.sudahSetor).map(s => s.nama);
+
+        return {
+          id: h.id,
+          nama: h.nama,
+          level: h.level || '',
+          ustadzNames: Store.ustadzNamesForHalaqah(h).join(', ') || 'Belum ada pengampu',
+          hUstadzTotal: hUstadz.length,
+          ustadzAbsenCount,
+          hSantriTotal: hSantri.length,
+          santriDiabsenCount,
+          santriSetorCount,
+          persenAbsen: hSantri.length > 0 ? Math.round((santriDiabsenCount / hSantri.length) * 100) : 0,
+          persenSetor: hSantri.length > 0 ? Math.round((santriSetorCount / hSantri.length) * 100) : 0,
+          belumSetorNames
+        };
+      });
+
+      // Filtered lists for view
+      let displayGuru = guruList;
+      if (term) displayGuru = displayGuru.filter(g => g.nama.toLowerCase().includes(term) || g.halaqah.toLowerCase().includes(term));
+      if (guruSubFilter === 'sudah') displayGuru = displayGuru.filter(g => g.sudah);
+      else if (guruSubFilter === 'belum') displayGuru = displayGuru.filter(g => !g.sudah);
+
+      let displaySantri = santriList;
+      if (term) displaySantri = displaySantri.filter(s => s.nama.toLowerCase().includes(term) || s.nis.toLowerCase().includes(term) || s.halaqah.toLowerCase().includes(term));
+      if (santriSubFilter === 'sudah') displaySantri = displaySantri.filter(s => s.sudahDiabsen);
+      else if (santriSubFilter === 'belum') displaySantri = displaySantri.filter(s => !s.sudahDiabsen);
+      if (santriStatusFilter) {
+        displaySantri = displaySantri.filter(s => {
+          if (santriStatusFilter === 'Belum') return !s.sudahDiabsen;
+          if (currentSesi) return s.sesiMap[currentSesi]?.status === santriStatusFilter;
+          return Object.values(s.sesiMap).some(r => r?.status === santriStatusFilter);
+        });
+      }
+
+      let displaySetoran = setoranList;
+      if (term) displaySetoran = displaySetoran.filter(s => s.nama.toLowerCase().includes(term) || s.halaqah.toLowerCase().includes(term));
+      if (setoranSubFilter === 'sudah') displaySetoran = displaySetoran.filter(s => s.sudahSetor);
+      else if (setoranSubFilter === 'belum') displaySetoran = displaySetoran.filter(s => !s.sudahSetor);
+      if (setoranTypeFilter) {
+        displaySetoran = displaySetoran.filter(s => s.items.some(it => it.tipe === setoranTypeFilter));
+      }
+
+      let displayHalaqah = halaqahList;
+      if (term) displayHalaqah = displayHalaqah.filter(h => h.nama.toLowerCase().includes(term) || h.ustadzNames.toLowerCase().includes(term));
+
+      // Global Totals
+      const totalGuru = guruList.length;
+      const guruSudah = guruList.filter(g => g.sudah).length;
+      const guruBelum = totalGuru - guruSudah;
+      const persenGuru = totalGuru > 0 ? Math.round((guruSudah / totalGuru) * 100) : 0;
+
+      const totalSantri = santriList.length;
+      const santriDiabsen = santriList.filter(s => s.sudahDiabsen).length;
+      const santriBelum = totalSantri - santriDiabsen;
+      const persenSantriAbsen = totalSantri > 0 ? Math.round((santriDiabsen / totalSantri) * 100) : 0;
+
+      const santriSudahSetor = setoranList.filter(s => s.sudahSetor).length;
+      const santriBelumSetor = totalSantri - santriSudahSetor;
+      const persenSetoran = totalSantri > 0 ? Math.round((santriSudahSetor / totalSantri) * 100) : 0;
+
+      return {
+        guruList, santriList, setoranList, halaqahList,
+        displayGuru, displaySantri, displaySetoran, displayHalaqah,
+        totalGuru, guruSudah, guruBelum, persenGuru,
+        totalSantri, santriDiabsen, santriBelum, persenSantriAbsen,
+        santriSudahSetor, santriBelumSetor, persenSetoran,
+        countHafalan: zHafalan.length, countTahsin: tahsin.length, countMutqin: mutqin.length, countBacaan: zBacaan.length
+      };
+    }
+
+    function exportLiveExcel(data) {
+      const sheets = [];
+
+      // Sheet 1: Guru
+      sheets.push({
+        name: 'Live_Guru',
+        columns: [
+          { key: 'no', label: 'No' },
+          { key: 'nama', label: 'Nama Guru' },
+          { key: 'noHp', label: 'No. HP' },
+          { key: 'halaqah', label: 'Halaqah' },
+          { key: 'subuh', label: 'Subuh' },
+          { key: 'ashar', label: 'Ashar' },
+          { key: 'maghrib', label: 'Maghrib' },
+          { key: 'isya', label: 'Isya' },
+          { key: 'status', label: 'Kesimpulan' },
+          { key: 'waktu', label: 'Waktu Terakhir' },
+          { key: 'catatan', label: 'Catatan' }
+        ],
+        rows: data.guruList.map((g, i) => ({
+          no: i + 1,
+          nama: g.nama,
+          noHp: g.noHp || '-',
+          halaqah: g.halaqah,
+          subuh: g.sesiMap.Subuh ? g.sesiMap.Subuh.status : 'Belum',
+          ashar: g.sesiMap.Ashar ? g.sesiMap.Ashar.status : 'Belum',
+          maghrib: g.sesiMap.Maghrib ? g.sesiMap.Maghrib.status : 'Belum',
+          isya: g.sesiMap.Isya ? g.sesiMap.Isya.status : 'Belum',
+          status: g.sudah ? 'Sudah Absen' : 'Belum Absen',
+          waktu: g.waktuTerakhir || '-',
+          catatan: g.catatanTerakhir || '-'
+        }))
+      });
+
+      // Sheet 2: Santri Absensi
+      sheets.push({
+        name: 'Live_Santri_Absensi',
+        columns: [
+          { key: 'no', label: 'No' },
+          { key: 'nama', label: 'Nama Santri' },
+          { key: 'nis', label: 'NIS' },
+          { key: 'halaqah', label: 'Halaqah' },
+          { key: 'pengampu', label: 'Guru Pengampu' },
+          { key: 'subuh', label: 'Subuh' },
+          { key: 'ashar', label: 'Ashar' },
+          { key: 'maghrib', label: 'Maghrib' },
+          { key: 'isya', label: 'Isya' },
+          { key: 'status', label: 'Status Diabsen' }
+        ],
+        rows: data.santriList.map((s, i) => ({
+          no: i + 1,
+          nama: s.nama,
+          nis: s.nis || '-',
+          halaqah: s.halaqah,
+          pengampu: s.pengampu,
+          subuh: s.sesiMap.Subuh ? s.sesiMap.Subuh.status : 'Belum',
+          ashar: s.sesiMap.Ashar ? s.sesiMap.Ashar.status : 'Belum',
+          maghrib: s.sesiMap.Maghrib ? s.sesiMap.Maghrib.status : 'Belum',
+          isya: s.sesiMap.Isya ? s.sesiMap.Isya.status : 'Belum',
+          status: s.sudahDiabsen ? 'Sudah Diabsen' : 'Belum Diabsen'
+        }))
+      });
+
+      // Sheet 3: Santri Setoran
+      sheets.push({
+        name: 'Live_Setoran_Santri',
+        columns: [
+          { key: 'no', label: 'No' },
+          { key: 'nama', label: 'Nama Santri' },
+          { key: 'halaqah', label: 'Halaqah' },
+          { key: 'status', label: 'Status Setoran' },
+          { key: 'jumlah', label: 'Jumlah Setoran' },
+          { key: 'rincian', label: 'Rincian Setoran' },
+          { key: 'nilai', label: 'Nilai' },
+          { key: 'penyimak', label: 'Ustadz Penyimak' }
+        ],
+        rows: data.setoranList.map((s, i) => ({
+          no: i + 1,
+          nama: s.nama,
+          halaqah: s.halaqah,
+          status: s.sudahSetor ? 'Sudah Setoran' : 'Belum Setoran',
+          jumlah: s.items.length,
+          rincian: s.items.map(it => `[${it.tipe}] ${it.desc}`).join('; ') || 'Belum ada setoran',
+          nilai: s.items.map(it => it.nilai || '-').join(', ') || '-',
+          penyimak: s.items.map(it => it.ustadz || '-').join(', ') || '-'
+        }))
+      });
+
+      Shared.downloadXlsx('Live_Monitor_' + currentDate, sheets);
+      UI.toast('Laporan Live Monitor berhasil diunduh (.xlsx)', 'success');
+    }
+
+    function render() {
+      const db = Store.get();
+      const d = computeData();
+
+      const halaqahOptions = [{ v: '', l: 'Semua Halaqah' }].concat(
+        (db.halaqah || []).map(h => ({ v: h.id, l: h.nama }))
+      );
+
+      const html = `
+        <div id="live-monitor-root">
+          <!-- Filter & Kontrol Realtime -->
+          <div class="clay-card mb" style="background:#fff">
+            <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span class="badge live"><span class="live-pulse-dot"></span> LIVE MONITOR</span>
+                <span class="muted" style="font-size:12.5px" id="lm-last-updated">Pembaruan: ${new Date().toLocaleTimeString()}</span>
+              </div>
+              <div class="row center" style="gap:8px">
+                <button class="clay-btn sm ghost" id="btn-toggle-refresh">
+                  Auto-refresh: <b style="color:${autoRefresh ? 'var(--primary)' : 'var(--danger)'}">${autoRefresh ? 'Aktif' : 'Mati'}</b>
+                </button>
+                <button class="clay-btn sm primary" id="btn-refresh-now" style="display:inline-flex;align-items:center;gap:5px">
+                  🔄 Segarkan
+                </button>
+                <span class="muted" id="lm-countdown" style="font-size:12px;min-width:40px">${autoRefresh ? `${countdown}s` : ''}</span>
+              </div>
+            </div>
+
+            <div class="row mt" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+              <div style="flex:1;min-width:140px">
+                ${UI.field('Tanggal Monitor', `<input type="date" class="clay-input" id="lm-date" value="${currentDate}">`)}
+              </div>
+              <div style="flex:1;min-width:140px">
+                ${UI.field('Sesi', `
+                  <select class="clay-select" id="lm-sesi">
+                    <option value="" ${!currentSesi ? 'selected' : ''}>Semua Sesi Hari Ini</option>
+                    ${SESI_LIST.map(s => `<option value="${s}" ${currentSesi === s ? 'selected' : ''}>${s}</option>`).join('')}
+                    <option value="Ta’lim Malam" ${currentSesi === 'Ta’lim Malam' ? 'selected' : ''}>Ta’lim Malam</option>
+                  </select>
+                `)}
+              </div>
+              <div style="flex:1;min-width:160px">
+                ${UI.field('Halaqah', `
+                  <select class="clay-select" id="lm-halaqah">
+                    ${UI.optionsFromList(halaqahOptions, 'v', 'l', currentHalaqah)}
+                  </select>
+                `)}
+              </div>
+              <div style="flex:1.2;min-width:180px">
+                ${UI.field('Cari', `
+                  <input type="search" class="clay-input" id="lm-search" placeholder="Cari nama guru atau santri..." value="${UI.esc(searchTerm)}" autocomplete="off">
+                `)}
+              </div>
+              <div style="flex:0 0 auto;display:flex;gap:6px;padding-bottom:2px">
+                <button class="clay-btn sm ghost" id="lm-preset-today">Hari Ini</button>
+                <button class="clay-btn sm ghost" id="lm-preset-yesterday">Kemarin</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3 KPI Card Utama Live Monitor -->
+          <div class="grid cols-3 mb" style="gap:16px">
+            <!-- 1. Live Guru / Ustadz -->
+            <div class="clay-card pad-sm live-kpi-card blue" style="background:#fff">
+              <div class="row center" style="justify-content:space-between">
+                <span style="font-size:12px;font-weight:700;color:var(--text-soft)">👨‍🏫 KEHADIRAN GURU / USTADZ</span>
+                <span class="badge ${d.persenGuru >= 80 ? 'green' : (d.persenGuru >= 50 ? 'blue' : 'warn')}">${d.persenGuru}% Absen</span>
+              </div>
+              <div class="mt" style="display:flex;align-items:baseline;gap:8px">
+                <b style="font-size:26px;color:#2563eb">${d.guruSudah}</b>
+                <span class="muted" style="font-size:13px">/ ${d.totalGuru} Guru Aktif</span>
+              </div>
+              <div class="live-bar-container">
+                <div class="live-bar-seg" style="width:${d.persenGuru}%;background:#2563eb"></div>
+                <div class="live-bar-seg" style="width:${100 - d.persenGuru}%;background:#e2e8f0"></div>
+              </div>
+              <div class="row center" style="justify-content:space-between;margin-top:6px;font-size:12px">
+                <span style="color:#16a34a;font-weight:600">✅ Sudah Absen: ${d.guruSudah}</span>
+                <span style="color:${d.guruBelum > 0 ? '#dc2626' : '#6b7280'};font-weight:600">❌ Belum Absen: ${d.guruBelum}</span>
+              </div>
+            </div>
+
+            <!-- 2. Live Santri Diabsen -->
+            <div class="clay-card pad-sm live-kpi-card purple" style="background:#fff">
+              <div class="row center" style="justify-content:space-between">
+                <span style="font-size:12px;font-weight:700;color:var(--text-soft)">🎓 STATUS ABSENSI SANTRI</span>
+                <span class="badge ${d.persenSantriAbsen >= 80 ? 'green' : (d.persenSantriAbsen >= 50 ? 'purple' : 'warn')}">${d.persenSantriAbsen}% Diabsen</span>
+              </div>
+              <div class="mt" style="display:flex;align-items:baseline;gap:8px">
+                <b style="font-size:26px;color:#9333ea">${d.santriDiabsen}</b>
+                <span class="muted" style="font-size:13px">/ ${d.totalSantri} Santri Aktif</span>
+              </div>
+              <div class="live-bar-container">
+                <div class="live-bar-seg" style="width:${d.persenSantriAbsen}%;background:#9333ea"></div>
+                <div class="live-bar-seg" style="width:${100 - d.persenSantriAbsen}%;background:#e2e8f0"></div>
+              </div>
+              <div class="row center" style="justify-content:space-between;margin-top:6px;font-size:12px">
+                <span style="color:#16a34a;font-weight:600">✅ Sudah Diabsen: ${d.santriDiabsen}</span>
+                <span style="color:${d.santriBelum > 0 ? '#d97706' : '#6b7280'};font-weight:600">⏳ Belum Diabsen: ${d.santriBelum}</span>
+              </div>
+            </div>
+
+            <!-- 3. Live Presentase Setoran 1 Hari -->
+            <div class="clay-card pad-sm live-kpi-card green" style="background:#fff">
+              <div class="row center" style="justify-content:space-between">
+                <span style="font-size:12px;font-weight:700;color:var(--text-soft)">📖 PRESENTASE SETORAN 1 HARI</span>
+                <span class="badge ${d.persenSetoran >= 70 ? 'green' : 'warn'}">${d.persenSetoran}% Capaian</span>
+              </div>
+              <div class="mt" style="display:flex;align-items:baseline;gap:8px">
+                <b style="font-size:26px;color:#16a34a">${d.persenSetoran}%</b>
+                <span class="muted" style="font-size:13px">(${d.santriSudahSetor} dari ${d.totalSantri} santri)</span>
+              </div>
+              <div class="live-bar-container">
+                <div class="live-bar-seg" style="width:${d.persenSetoran}%;background:#16a34a"></div>
+                <div class="live-bar-seg" style="width:${100 - d.persenSetoran}%;background:#e2e8f0"></div>
+              </div>
+              <div class="row center" style="justify-content:space-between;margin-top:6px;font-size:12px">
+                <span style="color:#16a34a;font-weight:600">✅ Sudah Setoran: ${d.santriSudahSetor}</span>
+                <span style="color:${d.santriBelumSetor > 0 ? '#dc2626' : '#6b7280'};font-weight:600">⏳ Belum Setoran: ${d.santriBelumSetor}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Navigasi Tab Monitor -->
+          <div class="pill-tabs" id="lm-tab-bar" style="margin-bottom:12px">
+            <button class="pill ${currentTab === 'guru' ? 'active' : ''}" data-lm-tab="guru">👨‍🏫 Live Guru (${d.totalGuru})</button>
+            <button class="pill ${currentTab === 'santri' ? 'active' : ''}" data-lm-tab="santri">🎓 Live Santri Diabsen (${d.totalSantri})</button>
+            <button class="pill ${currentTab === 'setoran' ? 'active' : ''}" data-lm-tab="setoran">📖 Live Setoran &amp; Presentase (${d.santriSudahSetor}/${d.totalSantri})</button>
+            <button class="pill ${currentTab === 'halaqah' ? 'active' : ''}" data-lm-tab="halaqah">📊 Ringkasan per Halaqah (${d.halaqahList.length})</button>
+          </div>
+
+          <!-- Isi Tab -->
+          <div id="lm-tab-content">
+            ${renderTabContent(d)}
+          </div>
+        </div>
+      `;
+
+      document.getElementById('view-content').innerHTML = html;
+      bindEvents();
+    }
+
+    function renderTabContent(d) {
+      if (currentTab === 'guru') return renderTabGuru(d);
+      if (currentTab === 'santri') return renderTabSantri(d);
+      if (currentTab === 'setoran') return renderTabSetoran(d);
+      if (currentTab === 'halaqah') return renderTabHalaqah(d);
+      return '';
+    }
+
+    /* ---------------- Tab 1: Guru ---------------- */
+    function renderTabGuru(d) {
+      const rows = d.displayGuru.map((g, idx) => {
+        const cleanNum = cleanPhone(g.noHp);
+        const waBtn = (!g.sudah && cleanNum)
+          ? `<a href="https://wa.me/${cleanNum}?text=${encodeURIComponent(`Assalamu'alaikum Ustadz/Ustadzah ${g.nama}, mengingatkan untuk mengisi absensi ${currentSesi || 'hari ini'} di aplikasi Tahfidzku.`)}" target="_blank" class="clay-btn sm ghost" style="color:#16a34a;border:1px solid #86efac;font-size:11px;padding:3px 8px;text-decoration:none;display:inline-flex;align-items:center;gap:4px">💬 Ingatkan WA</a>`
+          : (cleanNum ? `<a href="https://wa.me/${cleanNum}" target="_blank" class="clay-btn sm ghost" style="font-size:11px;padding:3px 8px;text-decoration:none">💬 Chat WA</a>` : '<span class="muted">-</span>');
+
+        const sesiCells = currentSesi
+          ? `<td>${renderSesiPill(g.sesiMap[currentSesi])}</td>`
+          : `
+            <td>${renderSesiPill(g.sesiMap.Subuh)}</td>
+            <td>${renderSesiPill(g.sesiMap.Ashar)}</td>
+            <td>${renderSesiPill(g.sesiMap.Maghrib)}</td>
+            <td>${renderSesiPill(g.sesiMap.Isya)}</td>
+          `;
+
+        const statusBadge = g.sudah
+          ? `<span class="badge green">✅ Sudah Absen</span>`
+          : `<span class="badge danger">❌ Belum Absen</span>`;
+
+        return `
+          <tr>
+            <td class="center" style="width:40px">${idx + 1}</td>
+            <td>
+              <b>${UI.esc(g.nama)}</b>
+              ${g.noHp ? `<div class="muted" style="font-size:11.5px">📱 ${UI.esc(g.noHp)}</div>` : ''}
+            </td>
+            <td><b>${UI.esc(g.halaqah)}</b></td>
+            ${sesiCells}
+            <td>${statusBadge}</td>
+            <td style="font-size:12px">${UI.esc(g.waktuTerakhir || '-')}</td>
+            <td>${waBtn}</td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <div class="clay-card mb" style="background:#fff">
+          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+            <div class="row center" style="gap:6px">
+              <span class="muted" style="font-size:13px">Filter Status:</span>
+              <button class="clay-btn sm ${guruSubFilter === 'all' ? 'primary' : 'ghost'}" data-guru-filter="all">Semua Guru (${d.totalGuru})</button>
+              <button class="clay-btn sm ${guruSubFilter === 'sudah' ? 'primary' : 'ghost'}" data-guru-filter="sudah" style="color:${guruSubFilter === 'sudah' ? '#fff' : '#16a34a'}">✅ Sudah Absen (${d.guruSudah})</button>
+              <button class="clay-btn sm ${guruSubFilter === 'belum' ? 'danger' : 'ghost'}" data-guru-filter="belum" style="color:${guruSubFilter === 'belum' ? '#fff' : '#dc2626'}">❌ Belum Absen (${d.guruBelum})</button>
+            </div>
+            <div class="muted" style="font-size:12px">Menampilkan <b>${d.displayGuru.length}</b> guru</div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="clay-table">
+              <thead>
+                <tr>
+                  <th class="center" style="width:40px">No</th>
+                  <th>Nama Guru / Ustadz</th>
+                  <th>Halaqah</th>
+                  ${currentSesi ? `<th>Sesi ${currentSesi}</th>` : `<th>Subuh</th><th>Ashar</th><th>Maghrib</th><th>Isya</th>`}
+                  <th>Status</th>
+                  <th>Waktu Terakhir</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows || '<tr><td colspan="9" class="center"><div class="empty">Tidak ada data guru yang sesuai filter.</div></td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    /* ---------------- Tab 2: Santri (Diabsen Apa Belum) ---------------- */
+    function renderTabSantri(d) {
+      const rows = d.displaySantri.map((s, idx) => {
+        const sesiCells = currentSesi
+          ? `<td>${renderSesiPill(s.sesiMap[currentSesi])}</td>`
+          : `
+            <td>${renderSesiPill(s.sesiMap.Subuh)}</td>
+            <td>${renderSesiPill(s.sesiMap.Ashar)}</td>
+            <td>${renderSesiPill(s.sesiMap.Maghrib)}</td>
+            <td>${renderSesiPill(s.sesiMap.Isya)}</td>
+          `;
+
+        const statusBadge = s.sudahDiabsen
+          ? `<span class="badge green">✅ Sudah Diabsen</span>`
+          : `<span class="badge warn" style="background:#fef3c7;color:#92400e;font-weight:600">⏳ Belum Diabsen</span>`;
+
+        const ustadzBadge = s.ustadzSudahAbsen
+          ? `<span class="badge green" style="font-size:11px">Guru: Hadir</span>`
+          : `<span class="badge danger" style="font-size:11px">Guru: Belum Absen</span>`;
+
+        return `
+          <tr>
+            <td class="center" style="width:40px">${idx + 1}</td>
+            <td>
+              <b>${UI.esc(s.nama)}</b>
+              <div class="muted" style="font-size:11.5px">NIS: ${UI.esc(s.nis || '-')} · Kelas: ${UI.esc(s.kelas || '-')}</div>
+            </td>
+            <td>
+              <b>${UI.esc(s.halaqah)}</b>
+              <div class="muted" style="font-size:11.5px">Ustadz: ${UI.esc(s.pengampu)}</div>
+            </td>
+            ${sesiCells}
+            <td>${statusBadge}</td>
+            <td>${ustadzBadge}</td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <div class="clay-card mb" style="background:#fff">
+          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+            <div class="row center" style="gap:6px;flex-wrap:wrap">
+              <span class="muted" style="font-size:13px">Filter:</span>
+              <button class="clay-btn sm ${santriSubFilter === 'all' ? 'primary' : 'ghost'}" data-santri-filter="all">Semua Santri (${d.totalSantri})</button>
+              <button class="clay-btn sm ${santriSubFilter === 'sudah' ? 'primary' : 'ghost'}" data-santri-filter="sudah" style="color:${santriSubFilter === 'sudah' ? '#fff' : '#16a34a'}">✅ Sudah Diabsen (${d.santriDiabsen})</button>
+              <button class="clay-btn sm ${santriSubFilter === 'belum' ? 'secondary' : 'ghost'}" data-santri-filter="belum" style="color:${santriSubFilter === 'belum' ? '#fff' : '#d97706'}">⏳ Belum Diabsen (${d.santriBelum})</button>
+              <select class="clay-select sm" id="lm-santri-status-select" style="max-width:140px;padding:4px 8px;font-size:12px">
+                <option value="">Semua Status</option>
+                <option value="Hadir" ${santriStatusFilter === 'Hadir' ? 'selected' : ''}>Hadir</option>
+                <option value="Izin" ${santriStatusFilter === 'Izin' ? 'selected' : ''}>Izin</option>
+                <option value="Sakit" ${santriStatusFilter === 'Sakit' ? 'selected' : ''}>Sakit</option>
+                <option value="Alfa" ${santriStatusFilter === 'Alfa' ? 'selected' : ''}>Alfa</option>
+                <option value="Belum" ${santriStatusFilter === 'Belum' ? 'selected' : ''}>Belum Diabsen</option>
+              </select>
+            </div>
+            <div class="muted" style="font-size:12px">Menampilkan <b>${d.displaySantri.length}</b> santri</div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="clay-table">
+              <thead>
+                <tr>
+                  <th class="center" style="width:40px">No</th>
+                  <th>Nama Santri</th>
+                  <th>Halaqah &amp; Guru</th>
+                  ${currentSesi ? `<th>Sesi ${currentSesi}</th>` : `<th>Subuh</th><th>Ashar</th><th>Maghrib</th><th>Isya</th>`}
+                  <th>Status Santri</th>
+                  <th>Status Guru</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows || '<tr><td colspan="8" class="center"><div class="empty">Tidak ada data santri yang sesuai filter.</div></td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    /* ---------------- Tab 3: Setoran & Presentase ---------------- */
+    function renderTabSetoran(d) {
+      const rows = d.displaySetoran.map((s, idx) => {
+        const statusBadge = s.sudahSetor
+          ? `<span class="badge green">✅ Sudah Setoran (${s.items.length})</span>`
+          : `<span class="badge warn" style="background:#fef3c7;color:#92400e;font-weight:600">⏳ Belum Setoran</span>`;
+
+        const itemsHtml = s.items.length
+          ? s.items.map(it => `
+              <div style="margin-bottom:6px;padding:6px 8px;background:var(--bg);border-radius:8px;font-size:12px">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                  <span class="badge ${it.badgeClass}" style="font-size:11px">${UI.esc(it.tipe)}</span>
+                  <b>${UI.esc(it.desc)}</b>
+                  ${it.nilai && it.nilai !== '-' ? `<span class="badge green" style="font-size:11px">Nilai: ${UI.esc(it.nilai)}</span>` : ''}
+                </div>
+                <div class="muted" style="font-size:11px;margin-top:2px">
+                  Penyimak: <b>${UI.esc(it.ustadz)}</b> ${it.waktu && it.waktu !== '-' ? `· ${it.waktu}` : ''}
+                  ${it.catatan ? `· Catatan: <i>"${UI.esc(it.catatan)}"</i>` : ''}
+                </div>
+              </div>
+            `).join('')
+          : '<span class="muted" style="font-size:12px">Belum menyetorkan hafalan/tahsin hari ini</span>';
+
+        return `
+          <tr>
+            <td class="center" style="width:40px">${idx + 1}</td>
+            <td style="min-width:160px">
+              <b>${UI.esc(s.nama)}</b>
+              <div class="muted" style="font-size:11.5px">NIS: ${UI.esc(s.nis || '-')}</div>
+            </td>
+            <td style="min-width:140px"><b>${UI.esc(s.halaqah)}</b></td>
+            <td style="min-width:130px">${statusBadge}</td>
+            <td style="min-width:280px">${itemsHtml}</td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <!-- Banner Presentase Hari Ini -->
+        <div class="clay-card mb" style="background:linear-gradient(135deg, #f0fdf4, #eff6ff);border:1px solid #bbf7d0">
+          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#166534">📊 RINGKASAN SETORAN HARI INI (${UI.fmtDate(currentDate)})</div>
+              <div style="font-size:13.5px;margin-top:4px;color:#1e293b">
+                Presentase santri yang sudah setoran: <b style="font-size:18px;color:#16a34a">${d.persenSetoran}%</b> (${d.santriSudahSetor} dari ${d.totalSantri} santri).
+              </div>
+            </div>
+            <div class="row center" style="gap:8px;flex-wrap:wrap">
+              <span class="badge green">Ziyadah Hafalan: ${d.countHafalan}</span>
+              <span class="badge blue">Tahsin: ${d.countTahsin}</span>
+              <span class="badge purple">Mutqin: ${d.countMutqin}</span>
+              <span class="badge cream">Ziyadah Bacaan: ${d.countBacaan}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="clay-card mb" style="background:#fff">
+          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+            <div class="row center" style="gap:6px;flex-wrap:wrap">
+              <span class="muted" style="font-size:13px">Filter:</span>
+              <button class="clay-btn sm ${setoranSubFilter === 'all' ? 'primary' : 'ghost'}" data-setoran-filter="all">Semua Santri (${d.totalSantri})</button>
+              <button class="clay-btn sm ${setoranSubFilter === 'sudah' ? 'primary' : 'ghost'}" data-setoran-filter="sudah" style="color:${setoranSubFilter === 'sudah' ? '#fff' : '#16a34a'}">✅ Sudah Setoran (${d.santriSudahSetor})</button>
+              <button class="clay-btn sm ${setoranSubFilter === 'belum' ? 'danger' : 'ghost'}" data-setoran-filter="belum" style="color:${setoranSubFilter === 'belum' ? '#fff' : '#dc2626'}">⏳ Belum Setoran (${d.santriBelumSetor})</button>
+              <select class="clay-select sm" id="lm-setoran-type-select" style="max-width:160px;padding:4px 8px;font-size:12px">
+                <option value="">Semua Jenis Setoran</option>
+                <option value="Ziyadah Hafalan" ${setoranTypeFilter === 'Ziyadah Hafalan' ? 'selected' : ''}>Ziyadah Hafalan</option>
+                <option value="Tahsin" ${setoranTypeFilter === 'Tahsin' ? 'selected' : ''}>Tahsin</option>
+                <option value="Mutqin" ${setoranTypeFilter === 'Mutqin' ? 'selected' : ''}>Mutqin</option>
+                <option value="Ziyadah Bacaan" ${setoranTypeFilter === 'Ziyadah Bacaan' ? 'selected' : ''}>Ziyadah Bacaan</option>
+              </select>
+            </div>
+            <div class="muted" style="font-size:12px">Menampilkan <b>${d.displaySetoran.length}</b> santri</div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="clay-table">
+              <thead>
+                <tr>
+                  <th class="center" style="width:40px">No</th>
+                  <th>Nama Santri</th>
+                  <th>Halaqah</th>
+                  <th>Status Setoran</th>
+                  <th>Rincian Setoran Hari Ini</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows || '<tr><td colspan="5" class="center"><div class="empty">Tidak ada data setoran yang sesuai filter.</div></td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    /* ---------------- Tab 4: Ringkasan per Halaqah ---------------- */
+    function renderTabHalaqah(d) {
+      const cards = d.displayHalaqah.map(h => {
+        const ustadzAbsenBadge = h.ustadzAbsenCount > 0
+          ? `<span class="badge green">✅ Guru Hadir (${h.ustadzAbsenCount}/${h.hUstadzTotal})</span>`
+          : `<span class="badge danger">❌ Guru Belum Absen</span>`;
+
+        const belumSetorTags = h.belumSetorNames.length
+          ? `<div style="margin-top:8px;font-size:11.5px">
+              <span class="muted">Belum Setoran: </span>
+              ${h.belumSetorNames.slice(0, 5).map(nm => `<span class="badge gray" style="font-size:10.5px">${UI.esc(nm)}</span>`).join(' ')}
+              ${h.belumSetorNames.length > 5 ? `<span class="muted">+${h.belumSetorNames.length - 5} lainnya</span>` : ''}
+            </div>`
+          : '<div style="margin-top:8px;font-size:11.5px;color:#16a34a">🎉 Seluruh santri sudah setoran!</div>';
+
+        return `
+          <div class="clay-card pad-sm" style="background:#fff;border-top:4px solid ${h.persenSetor >= 70 ? '#16a34a' : (h.persenSetor >= 40 ? '#2563eb' : '#d97706')}">
+            <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:6px">
+              <b style="font-size:15px">${UI.esc(h.nama)}</b>
+              ${ustadzAbsenBadge}
+            </div>
+            <div class="muted" style="font-size:12px;margin:3px 0 10px">Pengampu: <b>${UI.esc(h.ustadzNames)}</b></div>
+
+            <div style="font-size:12px;margin-bottom:4px;display:flex;justify-content:space-between">
+              <span>Kehadiran Santri Diabsen:</span>
+              <b>${h.santriDiabsenCount}/${h.hSantriTotal} (${h.persenAbsen}%)</b>
+            </div>
+            <div class="live-bar-container" style="height:7px;margin:0 0 10px">
+              <div class="live-bar-seg" style="width:${h.persenAbsen}%;background:#9333ea"></div>
+            </div>
+
+            <div style="font-size:12px;margin-bottom:4px;display:flex;justify-content:space-between">
+              <span>Santri Sudah Setoran:</span>
+              <b style="color:#16a34a">${h.santriSetorCount}/${h.hSantriTotal} (${h.persenSetor}%)</b>
+            </div>
+            <div class="live-bar-container" style="height:7px;margin:0 0 6px">
+              <div class="live-bar-seg" style="width:${h.persenSetor}%;background:#16a34a"></div>
+            </div>
+
+            ${belumSetorTags}
+          </div>
+        `;
+      }).join('');
+
+      return `
+        <div class="grid cols-2" style="gap:16px">
+          ${cards || '<div class="empty" style="grid-column:span 2">Tidak ada data halaqah.</div>'}
+        </div>
+      `;
+    }
+
+    function bindEvents() {
+      // Date and filters
+      const dateInp = document.getElementById('lm-date');
+      if (dateInp) dateInp.onchange = () => { currentDate = dateInp.value; render(); };
+
+      const sesiSel = document.getElementById('lm-sesi');
+      if (sesiSel) sesiSel.onchange = () => { currentSesi = sesiSel.value; render(); };
+
+      const halaqahSel = document.getElementById('lm-halaqah');
+      if (halaqahSel) halaqahSel.onchange = () => { currentHalaqah = halaqahSel.value; render(); };
+
+      const searchInp = document.getElementById('lm-search');
+      if (searchInp) {
+        searchInp.oninput = () => { searchTerm = searchInp.value; render(); };
+      }
+
+      const btnToday = document.getElementById('lm-preset-today');
+      if (btnToday) btnToday.onclick = () => { currentDate = Store.todayStr(); render(); };
+
+      const btnYest = document.getElementById('lm-preset-yesterday');
+      if (btnYest) btnYest.onclick = () => {
+        const d = new Date(); d.setDate(d.getDate() - 1);
+        currentDate = d.toISOString().slice(0, 10);
+        render();
+      };
+
+      // Tab switcher
+      document.querySelectorAll('[data-lm-tab]').forEach(btn => {
+        btn.onclick = () => {
+          currentTab = btn.dataset.lmTab;
+          render();
+        };
+      });
+
+      // Sub-filters for Guru
+      document.querySelectorAll('[data-guru-filter]').forEach(b => {
+        b.onclick = () => { guruSubFilter = b.dataset.guruFilter; render(); };
+      });
+
+      // Sub-filters for Santri
+      document.querySelectorAll('[data-santri-filter]').forEach(b => {
+        b.onclick = () => { santriSubFilter = b.dataset.santriFilter; render(); };
+      });
+
+      const santriStatusSel = document.getElementById('lm-santri-status-select');
+      if (santriStatusSel) {
+        santriStatusSel.onchange = () => { santriStatusFilter = santriStatusSel.value; render(); };
+      }
+
+      // Sub-filters for Setoran
+      document.querySelectorAll('[data-setoran-filter]').forEach(b => {
+        b.onclick = () => { setoranSubFilter = b.dataset.setoranFilter; render(); };
+      });
+
+      const setoranTypeSel = document.getElementById('lm-setoran-type-select');
+      if (setoranTypeSel) {
+        setoranTypeSel.onchange = () => { setoranTypeFilter = setoranTypeSel.value; render(); };
+      }
+
+      // Auto-refresh controls
+      const btnToggle = document.getElementById('btn-toggle-refresh');
+      if (btnToggle) {
+        btnToggle.onclick = () => {
+          autoRefresh = !autoRefresh;
+          countdown = autoRefreshSeconds;
+          render();
+        };
+      }
+
+      const btnRefresh = document.getElementById('btn-refresh-now');
+      if (btnRefresh) {
+        btnRefresh.onclick = async () => {
+          btnRefresh.disabled = true;
+          btnRefresh.textContent = 'Memuat...';
+          await Store.load();
+          countdown = autoRefreshSeconds;
+          render();
+          UI.toast('Data Live Monitor diperbarui', 'info');
+        };
+      }
+
+      // Export XLSX
+      const btnXlsx = document.getElementById('btn-export-live-xlsx');
+      if (btnXlsx) {
+        btnXlsx.onclick = () => {
+          exportLiveExcel(computeData());
+        };
+      }
+    }
+
+    // Interval Timer for Live Auto-Refresh
+    if (timerId) clearInterval(timerId);
+    timerId = setInterval(async () => {
+      const root = document.getElementById('live-monitor-root');
+      if (!root) {
+        clearInterval(timerId);
+        timerId = null;
+        return;
+      }
+      if (!autoRefresh) return;
+      countdown--;
+      const cdEl = document.getElementById('lm-countdown');
+      if (cdEl) cdEl.textContent = `${countdown}s`;
+      if (countdown <= 0) {
+        countdown = autoRefreshSeconds;
+        try {
+          await Store.load();
+          render();
+        } catch (e) {
+          console.warn('Live monitor auto-refresh error', e);
+        }
+      }
+    }, 1000);
+
+    render();
   }
 
   /* ---------------- Santri ---------------- */
@@ -2584,6 +3627,19 @@ const Admin = (() => {
         </div>
         <div class="muted" style="font-size:12px;margin-top:8px">Tombol yang sama juga ada di kotak user pada sidebar.</div>
       </div>
+      <div class="clay-card mb">
+        <div class="row center" style="justify-content:space-between;align-items:center">
+          <div class="section-title" style="margin:0">Akun Pengawas (Supervisor)</div>
+          <button class="clay-btn sm primary" id="btn-tambah-pengawas" type="button">+ Tambah Pengawas</button>
+        </div>
+        <div class="muted" style="font-size:12px;margin:6px 0 12px">
+          Akun pengawas memiliki hak akses pantau khusus (Live Monitor, Dashboard, Rekap Kehadiran, Rekap Setoran, Absensi Ustadz, dan Laporan).
+        </div>
+        <div class="table-wrap"><table class="clay-table">
+          <thead><tr><th>Username</th><th>Peran</th><th>Aksi</th></tr></thead>
+          <tbody id="list-pengawas"></tbody>
+        </table></div>
+      </div>
       <div class="clay-card">
         <div class="row" style="align-items:center">
           <div class="section-title" style="margin:0">Data</div>
@@ -2757,8 +3813,113 @@ const Admin = (() => {
       document.querySelectorAll('[data-set-panel]').forEach(p => { p.style.display = p.dataset.setPanel === tab ? '' : 'none'; });
       // Log WhatsApp hanya perlu berjalan saat tabnya sedang dilihat.
       if (tab === 'wa') { renderWaLog(); startWaTimer(); } else stopWaTimer();
+      if (tab === 'akun') renderPengawasAccounts();
     }
     document.querySelectorAll('#set-tab-bar [data-set-tab]').forEach(b => b.onclick = () => showTab(b.dataset.setTab));
+
+    function renderPengawasAccounts() {
+      const pengawasUsers = (db.users || []).filter(u => u.role === 'pengawas');
+      const tbody = document.getElementById('list-pengawas');
+      if (!tbody) return;
+      tbody.innerHTML = pengawasUsers.length
+        ? pengawasUsers.map(u => `
+            <tr>
+              <td><b>${UI.esc(u.username)}</b></td>
+              <td><span class="badge blue">Pengawas</span></td>
+              <td>
+                <div class="row" style="gap:6px">
+                  <button class="clay-btn sm ghost" data-reset-pengawas="${u.id}">Reset Password</button>
+                  <button class="clay-btn sm danger" data-del-pengawas="${u.id}">Hapus</button>
+                </div>
+              </td>
+            </tr>
+          `).join('')
+        : '<tr><td colspan="3" class="center"><div class="empty">Belum ada akun pengawas. Klik "+ Tambah Pengawas" untuk membuat.</div></td></tr>';
+
+      document.querySelectorAll('[data-reset-pengawas]').forEach(btn => {
+        btn.onclick = () => {
+          const uId = btn.dataset.resetPengawas;
+          const uObj = db.users.find(x => x.id === uId);
+          if (!uObj) return;
+          UI.openModal({
+            title: 'Reset Password Pengawas: ' + uObj.username,
+            bodyHTML: `
+              <div class="field">
+                <label class="field-label">Password Baru</label>
+                <input type="password" class="clay-input" id="reset-p-pass" placeholder="Minimal 6 karakter" value="12345678">
+              </div>
+            `,
+            actions: [
+              { label: 'Batal', role: 'cancel' },
+              { label: 'Simpan', role: 'primary', onClick: async (modal) => {
+                const pass = modal.querySelector('#reset-p-pass').value;
+                if (!pass || pass.length < 6) { UI.toast('Password minimal 6 karakter', 'error'); return; }
+                uObj.password = pass;
+                await Store.save();
+                UI.closeModal();
+                UI.toast('Password pengawas berhasil diubah', 'success');
+              }}
+            ]
+          });
+        };
+      });
+
+      document.querySelectorAll('[data-del-pengawas]').forEach(btn => {
+        btn.onclick = () => {
+          const uId = btn.dataset.delPengawas;
+          const uObj = db.users.find(x => x.id === uId);
+          if (!uObj) return;
+          UI.confirmDialog('Hapus Akun Pengawas', `Yakin ingin menghapus akun pengawas <b>${UI.esc(uObj.username)}</b>?`, async () => {
+            db.users = db.users.filter(x => x.id !== uId);
+            await Store.save();
+            UI.toast('Akun pengawas dihapus', 'info');
+            renderPengawasAccounts();
+          });
+        };
+      });
+    }
+
+    const btnAddPengawas = document.getElementById('btn-tambah-pengawas');
+    if (btnAddPengawas) {
+      btnAddPengawas.onclick = () => {
+        UI.openModal({
+          title: 'Tambah Akun Pengawas',
+          bodyHTML: `
+            <div class="field">
+              <label class="field-label">Username</label>
+              <input class="clay-input" id="new-p-user" placeholder="Contoh: pengawas1" autocomplete="off">
+            </div>
+            <div class="field mt">
+              <label class="field-label">Password</label>
+              <input type="password" class="clay-input" id="new-p-pass" placeholder="Minimal 6 karakter" value="12345678">
+            </div>
+          `,
+          actions: [
+            { label: 'Batal', role: 'cancel' },
+            { label: 'Buat Akun', role: 'primary', onClick: async (modal) => {
+              const uName = modal.querySelector('#new-p-user').value.trim();
+              const uPass = modal.querySelector('#new-p-pass').value;
+              if (!uName) { UI.toast('Username wajib diisi', 'error'); return; }
+              if (!uPass || uPass.length < 6) { UI.toast('Password minimal 6 karakter', 'error'); return; }
+              if (db.users.some(x => x.username.toLowerCase() === uName.toLowerCase())) {
+                UI.toast('Username sudah digunakan', 'error'); return;
+              }
+              db.users.push({
+                id: Store.uid('usr'),
+                username: uName,
+                password: uPass,
+                role: 'pengawas',
+                refId: null
+              });
+              await Store.save();
+              UI.closeModal();
+              UI.toast('Akun pengawas berhasil dibuat', 'success');
+              renderPengawasAccounts();
+            }}
+          ]
+        });
+      };
+    }
 
     document.getElementById('btn-ganti-pass-admin').onclick = () => Shared.gantiPassModal();
     showTab('lembaga');
@@ -3658,5 +4819,5 @@ const Admin = (() => {
     renderLibur();
   }
 
-  return { nav, dashboard, santri, ustadz, halaqah, master, absensiUstadz, riwayat, laporan, rekapKehadiran, rekapSetoran, notif, talim, adminLibur, settings, importSantriDialog };
+  return { nav, dashboard, liveMonitor, santri, ustadz, halaqah, master, absensiUstadz, riwayat, laporan, rekapKehadiran, rekapSetoran, notif, talim, adminLibur, settings, importSantriDialog };
 })();

@@ -353,7 +353,7 @@ const Quran = (() => {
     const session = Store.getSession();
     if (session) {
       let nav = [];
-      if (session.role === 'admin') nav = Admin.nav('quran');
+      if (session.role === 'admin' || session.role === 'pengawas') nav = Admin.nav('quran');
       else if (session.role === 'ustadz') nav = Ustadz.nav('quran');
       else if (session.role === 'wali') nav = Wali.nav('quran');
       Shared.shell(session.role, nav, '');

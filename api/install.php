@@ -48,7 +48,7 @@ try {
             id VARCHAR(40) PRIMARY KEY,
             username VARCHAR(60) UNIQUE NOT NULL,
             password VARCHAR(255) NOT NULL,
-            role ENUM('admin','ustadz','wali') NOT NULL,
+            role ENUM('admin','ustadz','wali','pengawas') NOT NULL,
             refId VARCHAR(40) NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
         $p->exec("CREATE TABLE IF NOT EXISTS settings (
@@ -120,6 +120,7 @@ try {
     $adminPass = !empty($envVars['ADMIN_PASSWORD']) ? $envVars['ADMIN_PASSWORD'] : 'admin123';
     $users = [
         ['id' => uid('usr'), 'username' => 'admin', 'password' => password_hash($adminPass, PASSWORD_DEFAULT), 'role' => 'admin', 'refId' => null],
+        ['id' => uid('usr'), 'username' => 'pengawas', 'password' => password_hash($def, PASSWORD_DEFAULT), 'role' => 'pengawas', 'refId' => null],
         ['id' => uid('usr'), 'username' => 'ustadz1', 'password' => password_hash($def, PASSWORD_DEFAULT), 'role' => 'ustadz', 'refId' => $u1id],
         ['id' => uid('usr'), 'username' => 'ustadz2', 'password' => password_hash($def, PASSWORD_DEFAULT), 'role' => 'ustadz', 'refId' => $u2id],
         ['id' => uid('usr'), 'username' => '0812111111', 'password' => password_hash($def, PASSWORD_DEFAULT), 'role' => 'wali', 'refId' => $w1id],

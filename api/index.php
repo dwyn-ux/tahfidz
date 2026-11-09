@@ -70,7 +70,7 @@ switch ($action) {
 
     case 'report_data':
         $u = requireAuth();
-        if (!in_array($u['role'], ['admin', 'ustadz'], true)) err('Forbidden', 403);
+        if (!in_array($u['role'], ['admin', 'ustadz', 'pengawas'], true)) err('Forbidden', 403);
         NormalizedStore::ensureUpgrade();
         send(['rows' => laporanDataForUser($u, body())]);
         break;
@@ -98,6 +98,9 @@ switch ($action) {
         // Write operations (POST/PUT/DELETE): restrict by role
         if ($u['role'] === 'wali') {
             err('Forbidden: Wali tidak dapat mengubah data.', 403);
+        }
+        if ($u['role'] === 'pengawas') {
+            err('Forbidden: Akun pengawas bersifat pantau (read-only).', 403);
         }
         if ($u['role'] === 'ustadz' && !in_array($type, $ustadzWritable, true)) {
             err('Forbidden: Ustadz hanya dapat mengubah data pembelajaran.', 403);
@@ -165,6 +168,9 @@ switch ($action) {
         // membuat pemanggilan berikutnya tanpa biaya DDL.
         NormalizedStore::ensureUpgrade();
 
+        if ($u['role'] === 'pengawas') {
+            err('Forbidden: Akun pengawas bersifat pantau (read-only).', 403);
+        }
         if ($u['role'] === 'wali') {
             // Wali is read-only EXCEPT their own wali record (nama/noHp, Profil page).
             $waliRows = $b['changes']['records']['wali']['upsert'] ?? ($b['wali'] ?? null);

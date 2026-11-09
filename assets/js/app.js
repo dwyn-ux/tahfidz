@@ -5,6 +5,7 @@ const App = (() => {
   const routes = {
     // Admin
     admin_dashboard: () => Admin.dashboard(),
+    admin_live_monitor: () => Admin.liveMonitor(),
     admin_santri: () => Admin.santri(),
     admin_ustadz: () => Admin.ustadz(),
     admin_halaqah: () => Admin.halaqah(),
@@ -39,6 +40,7 @@ const App = (() => {
 
   const defaultRoute = {
     admin: 'admin_dashboard',
+    pengawas: 'admin_live_monitor',
     ustadz: 'ustadz_dashboard',
     wali: 'wali_dashboard'
   };
@@ -90,6 +92,9 @@ const App = (() => {
     if (view === 'quran') return true;
     if (!role) return false;
     if (role === 'admin') return view.startsWith('admin_');
+    if (role === 'pengawas') {
+      return ['admin_live_monitor', 'admin_dashboard', 'admin_rekap_kehadiran', 'admin_rekap_setoran', 'admin_absensi_ustadz', 'admin_riwayat', 'admin_laporan', 'admin_libur', 'admin_notif'].includes(view);
+    }
     return view.startsWith(role + '_');
   }
 

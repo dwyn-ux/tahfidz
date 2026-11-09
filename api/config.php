@@ -593,8 +593,8 @@ function bootstrapData($user) {
     NormalizedStore::ensureUpgrade();
     $settings = publicSettings(getSettings(), $user['role']);
 
-    // Admin: return everything (same as before)
-    if ($user['role'] === 'admin') {
+    // Admin & Pengawas: return everything
+    if ($user['role'] === 'admin' || $user['role'] === 'pengawas') {
         $db = [
             'settings' => $settings,
             'users' => [],

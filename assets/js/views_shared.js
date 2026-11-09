@@ -13,6 +13,7 @@ const Shared = (() => {
     const db = Store.get();
     let userName = 'Pengguna';
     if (role === 'admin') userName = 'Administrator';
+    else if (role === 'pengawas') userName = 'Pengawas';
     else if (role === 'ustadz') { const u = Store.findUstadz(session.refId); userName = u ? u.nama : 'Ustadz'; }
     else if (role === 'wali') { const w = Store.findWali(session.refId); userName = w ? w.nama : 'Wali'; }
 
