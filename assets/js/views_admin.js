@@ -3489,6 +3489,25 @@ const Admin = (() => {
         </div>
         <div class="muted" style="font-size:12px">Satu rekap diperbarui saat absensi dikoreksi, sehingga wali tidak menerima notifikasi ganda.</div>
       </div>
+      <div class="clay-card mb">
+        <div class="section-title">📲 Notifikasi Perangkat &amp; PWA</div>
+        <div class="muted" style="font-size:12px;margin-bottom:12px">
+          Aplikasi dapat dipasang di layar HP / Laptop (PWA) dan mengirimkan notifikasi sistem secara langsung saat ada setoran atau absensi baru.
+        </div>
+        <div class="row center" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9">
+          <span class="muted">Status PWA</span>
+          <b id="pwa-install-status">${(typeof PWA !== 'undefined' && PWA.isStandalone()) ? '<span class="badge green">Terpasang (Aplikasi PWA)</span>' : '<span class="badge blue">Berjalan di Browser</span>'}</b>
+        </div>
+        <div class="row center" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9">
+          <span class="muted">Izin Notifikasi Sistem</span>
+          <b id="pwa-perm-status">${(typeof PWA !== 'undefined' && PWA.getNotificationPermission() === 'granted') ? '<span class="badge green">Diizinkan</span>' : '<span class="badge warn">Belum Diizinkan</span>'}</b>
+        </div>
+        <div class="row mt" style="gap:8px;flex-wrap:wrap">
+          <button class="clay-btn sm primary" type="button" id="btn-set-request-notif">Aktifkan Notifikasi Perangkat</button>
+          <button class="clay-btn sm ghost" type="button" id="btn-set-test-notif">Kirim Tes Notifikasi</button>
+          <button class="clay-btn sm secondary pwa-install-btn" type="button" id="btn-set-install-pwa">📲 Pasang Aplikasi (PWA)</button>
+        </div>
+      </div>
       </div>
       <div data-set-panel="wa">
       <div class="clay-card mb">
@@ -3922,6 +3941,35 @@ const Admin = (() => {
     }
 
     document.getElementById('btn-ganti-pass-admin').onclick = () => Shared.gantiPassModal();
+
+    // Notifikasi & PWA in Settings
+    const btnSetReqNotif = document.getElementById('btn-set-request-notif');
+    if (btnSetReqNotif) {
+      btnSetReqNotif.onclick = async () => {
+        if (typeof PWA !== 'undefined') {
+          await PWA.requestNotificationPermission();
+          const permStatus = document.getElementById('pwa-perm-status');
+          if (permStatus) {
+            permStatus.innerHTML = PWA.getNotificationPermission() === 'granted'
+              ? '<span class="badge green">Diizinkan</span>'
+              : '<span class="badge warn">Belum Diizinkan</span>';
+          }
+        }
+      };
+    }
+    const btnSetTestNotif = document.getElementById('btn-set-test-notif');
+    if (btnSetTestNotif) {
+      btnSetTestNotif.onclick = () => {
+        if (typeof PWA !== 'undefined') PWA.testNotification();
+      };
+    }
+    const btnSetInstallPwa = document.getElementById('btn-set-install-pwa');
+    if (btnSetInstallPwa) {
+      btnSetInstallPwa.onclick = () => {
+        if (typeof PWA !== 'undefined') PWA.promptInstall();
+      };
+    }
+
     showTab('lembaga');
 
     document.getElementById('s-logo-upload').onchange = function(e) {

@@ -32,6 +32,7 @@ const Shared = (() => {
           <div class="user-box">
             <b>${UI.esc(userName)}</b>
             <span class="muted">${role.toUpperCase()}</span>
+            <button class="clay-btn primary sm pwa-install-btn" id="btn-pwa-install" style="width:100%;margin-top:8px;justify-content:center;display:none;background:#16a34a;color:#fff;border-color:#15803d">📲 Install Aplikasi</button>
             <button class="clay-btn ghost sm" id="btn-ganti-pass" style="width:100%;margin-top:8px;justify-content:center">Ganti Password</button>
             <button class="clay-btn ghost sm" id="btn-logout" style="width:100%;margin-top:6px;justify-content:center">Keluar</button>
           </div>
@@ -43,12 +44,50 @@ const Shared = (() => {
               <h1 id="page-title">Dashboard</h1>
               <div class="sub" id="page-sub">${UI.esc(db.settings.namaLembaga)}</div>
             </div>
-            <div class="actions" id="topbar-actions">
+            <div style="display:flex;align-items:center;gap:8px">
+              <button class="clay-btn sm ghost" id="btn-topbar-notif-perm" title="Notifikasi Sistem" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:5px 9px">
+                🔔 <span id="topbar-notif-label">Notif</span>
+              </button>
+              <div class="actions" id="topbar-actions"></div>
             </div>
           </div>
           <div id="view-content">${contentHTML}</div>
         </main>
       </div>`;
+
+    // PWA Install & Notifikasi
+    const pwaInstallBtn = document.getElementById('btn-pwa-install');
+    if (pwaInstallBtn) pwaInstallBtn.onclick = () => PWA.promptInstall();
+
+    const notifBtn = document.getElementById('btn-topbar-notif-perm');
+    const notifLabel = document.getElementById('topbar-notif-label');
+    const updateNotifBtnUI = () => {
+      if (!notifBtn || typeof PWA === 'undefined') return;
+      const perm = PWA.getNotificationPermission();
+      if (perm === 'granted') {
+        notifBtn.title = 'Notifikasi Perangkat: Aktif (Klik untuk tes)';
+        if (notifLabel) notifLabel.innerHTML = '<span style="color:#16a34a;font-weight:600">Aktif</span>';
+      } else if (perm === 'denied') {
+        notifBtn.title = 'Notifikasi Perangkat: Diblokir di browser';
+        if (notifLabel) notifLabel.innerHTML = '<span style="color:#dc2626">Mati</span>';
+      } else {
+        notifBtn.title = 'Aktifkan Notifikasi Perangkat';
+        if (notifLabel) notifLabel.textContent = 'Aktifkan';
+      }
+    };
+    if (notifBtn) {
+      notifBtn.onclick = async () => {
+        const perm = PWA.getNotificationPermission();
+        if (perm === 'granted') {
+          PWA.testNotification();
+        } else {
+          await PWA.requestNotificationPermission();
+          updateNotifBtnUI();
+        }
+      };
+      updateNotifBtnUI();
+    }
+    if (typeof PWA !== 'undefined' && PWA.renderInstallButtons) PWA.renderInstallButtons();
 
     document.getElementById('btn-logout').onclick = () => {
       Store.logout(); UI.toast('Berhasil keluar', 'info'); Auth.renderLogin();
@@ -1590,22 +1629,73 @@ function exportLaporanExcel(filters) {
   /* ---------- Notifikasi (shared) ---------- */
   function renderNotifikasi(userId) {
     const list = Store.notifFor(userId);
-    if (!list.length) return `<div class="empty">Belum ada notifikasi.</div>`;
-    const icon = { wali: '', ustadz: '', admin: '' };
-    return `<div class="clay-card" id="notif-card">
-      <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div class="section-title" style="margin:0">Notifikasi</div>
-        <button class="clay-btn sm ghost" id="clear-notif" style="color:var(--danger)">Hapus Semua</button>
+    const icon = { wali: '👨‍👩‍👧', ustadz: '👨‍🏫', admin: '⚙️' };
+    const perm = typeof PWA !== 'undefined' ? PWA.getNotificationPermission() : 'default';
+
+    const pwaBanner = `
+      <div class="clay-card pad-sm mb" style="background:#f0fdf4;border:1px solid #bbf7d0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:24px">🔔</span>
+          <div>
+            <b>Notifikasi Perangkat (PWA &amp; Device)</b>
+            <div class="muted" style="font-size:12px" id="pwa-notif-status-text">
+              ${perm === 'granted'
+                ? 'Status: <span style="color:#16a34a;font-weight:600">Aktif</span> — Anda menerima notifikasi langsung di layar HP/Laptop.'
+                : 'Status: <span style="color:#ca8a04;font-weight:600">Belum Aktif</span> — Izinkan notifikasi agar update setoran &amp; absensi muncul langsung.'}
+            </div>
+          </div>
+        </div>
+        <div class="row" style="gap:6px">
+          ${perm === 'granted'
+            ? '<button class="clay-btn sm ghost" id="btn-test-device-notif" style="color:#16a34a;border:1px solid #86efac">Kirim Tes Notifikasi</button>'
+            : '<button class="clay-btn sm primary" id="btn-enable-device-notif">Aktifkan Notifikasi</button>'}
+        </div>
       </div>
-      <div style="position:absolute;top:16px;right:16px;z-index:900" id="git-update-notif-container"></div>
-      ${list.map(n =>
-      `<div class="row center" style="justify-content:space-between;padding:12px 0;border-bottom:1px solid #eee">
-        <div class="row center" style="gap:10px"><span style="font-size:20px">${icon[n.tipe] || ''}</span>
-        <div><div>${n.html ? n.pesan : UI.esc(n.pesan)}</div><div class="muted" style="font-size:12px">${UI.fmtDateTime(n.tanggal)}</div></div></div>
-        ${n.read ? '' : '<span class="badge blue">Baru</span>'}
-      </div>`).join('')}
-    </div>`;
+    `;
+
+    if (!list.length) {
+      return `
+        ${pwaBanner}
+        <div class="empty">Belum ada notifikasi.</div>
+      `;
+    }
+
+    return `
+      ${pwaBanner}
+      <div class="clay-card" id="notif-card">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
+          <div class="section-title" style="margin:0">Notifikasi</div>
+          <button class="clay-btn sm ghost" id="clear-notif" style="color:var(--danger)">Hapus Semua</button>
+        </div>
+        <div style="position:absolute;top:16px;right:16px;z-index:900" id="git-update-notif-container"></div>
+        ${list.map(n =>
+        `<div class="row center" style="justify-content:space-between;padding:12px 0;border-bottom:1px solid #eee">
+          <div class="row center" style="gap:10px"><span style="font-size:20px">${icon[n.tipe] || '📢'}</span>
+          <div><div>${n.html ? n.pesan : UI.esc(n.pesan)}</div><div class="muted" style="font-size:12px">${UI.fmtDateTime(n.tanggal)}</div></div></div>
+          ${n.read ? '' : '<span class="badge blue">Baru</span>'}
+        </div>`).join('')}
+      </div>`;
   }
+
+  // Delegated click handler for notification banner buttons
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'btn-enable-device-notif') {
+      if (typeof PWA !== 'undefined') {
+        PWA.requestNotificationPermission().then(() => {
+          const session = Store.getSession();
+          if (session) {
+            const root = document.getElementById('view-content');
+            if (root && root.querySelector('#pwa-notif-status-text')) {
+              root.innerHTML = renderNotifikasi(session.userId);
+            }
+          }
+        });
+      }
+    }
+    if (e.target && e.target.id === 'btn-test-device-notif') {
+      if (typeof PWA !== 'undefined') PWA.testNotification();
+    }
+  });
 
   return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, loadLaporan, bindLaporanExport, exportLaporanExcel, htmlTableToSheet, downloadExcel, downloadXlsx, downloadTemplateExcel, bulanLabel, mondayOf, rekapSetoranRange, setRekapSetoranRange, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, kirimRekapOtomatis, ICONS, hafalanMapHTML };
 })();

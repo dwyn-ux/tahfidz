@@ -23,6 +23,7 @@ const Auth = (() => {
             Hubungi admin untuk mendapatkan akun.
           </div>
           <button class="clay-btn ghost" id="open-quran" style="width:100%;margin-top:14px;justify-content:center"> Baca Al-Qur'an (Mushaf & Terjemah)</button>
+          <button class="clay-btn primary pwa-install-btn" id="btn-login-install" style="width:100%;margin-top:10px;justify-content:center;display:none;background:#16a34a;color:#fff;border-color:#15803d">📲 Install Aplikasi Tahfidzku</button>
         </div>
       </div>`;
 
@@ -57,6 +58,10 @@ const Auth = (() => {
 
     const qBtn = app.querySelector('#open-quran');
     if (qBtn) qBtn.onclick = () => { App.navigate('quran'); };
+
+    const pwaInstallBtn = app.querySelector('#btn-login-install');
+    if (pwaInstallBtn) pwaInstallBtn.onclick = () => PWA.promptInstall();
+    if (typeof PWA !== 'undefined' && PWA.renderInstallButtons) PWA.renderInstallButtons();
   }
 
   return { renderLogin };

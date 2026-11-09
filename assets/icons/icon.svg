@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#22c55e" />
+      <stop offset="50%" stop-color="#16a34a" />
+      <stop offset="100%" stop-color="#15803d" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="100%" stop-color="#eab308" />
+    </linearGradient>
+    <linearGradient id="pageGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#f8fafc" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#052e16" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- Background Squircle -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+
+  <!-- Subtle Islamic Geometric Ornament Ring in Background -->
+  <circle cx="256" cy="256" r="185" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4" stroke-dasharray="10 8" />
+  <circle cx="256" cy="256" r="150" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2" />
+
+  <!-- Crescent & Star at the top center -->
+  <g transform="translate(256, 125) scale(0.9)" filter="url(#shadow)">
+    <!-- Crescent -->
+    <path d="M 0,-36 A 34 34 0 1 0 34,16 A 28 28 0 1 1 0,-36 Z" fill="url(#goldGrad)" transform="translate(-16, -5)" />
+    <!-- 8-point Star -->
+    <polygon points="12,-20 15,-13 22,-14 17,-8 21,-2 14,-3 11,3 9,-3 2,-2 6,-8 1,-14 8,-13" fill="url(#goldGrad)" />
+  </g>
+
+  <!-- Open Quran Book on Rehal -->
+  <g filter="url(#shadow)">
+    <!-- Book Spine & Binding Backing -->
+    <path d="M 120 325 C 200 345, 240 335, 256 322 C 272 335, 312 345, 392 325 L 392 345 C 312 365, 272 355, 256 342 C 240 355, 200 365, 120 345 Z" fill="#854d0e" opacity="0.9" />
+
+    <!-- Left Book Base / Cover -->
+    <path d="M 112 320 C 190 342, 236 332, 256 318 L 256 200 C 236 215, 190 225, 112 202 Z" fill="#ca8a04" />
+    <!-- Right Book Base / Cover -->
+    <path d="M 400 320 C 322 342, 276 332, 256 318 L 256 200 C 276 215, 322 225, 400 202 Z" fill="#ca8a04" />
+
+    <!-- Left Page Layers -->
+    <path d="M 116 312 C 192 334, 238 325, 256 312 L 256 195 C 238 208, 192 218, 116 196 Z" fill="#f1f5f9" />
+    <path d="M 120 306 C 194 327, 240 318, 256 306 L 256 188 C 240 200, 194 210, 120 188 Z" fill="url(#pageGrad)" />
+
+    <!-- Right Page Layers -->
+    <path d="M 396 312 C 320 334, 274 325, 256 312 L 256 195 C 274 208, 320 218, 396 196 Z" fill="#f1f5f9" />
+    <path d="M 392 306 C 318 327, 272 318, 256 306 L 256 188 C 272 200, 318 210, 392 188 Z" fill="url(#pageGrad)" />
+
+    <!-- Gold Page Inner Borders & Quran Calligraphy Lines -->
+    <!-- Left Page Ornament Lines -->
+    <line x1="148" y1="220" x2="236" y2="230" stroke="#cbd5e1" stroke-width="4.5" stroke-linecap="round" />
+    <line x1="148" y1="240" x2="236" y2="250" stroke="#cbd5e1" stroke-width="4.5" stroke-linecap="round" />
+    <line x1="148" y1="260" x2="236" y2="270" stroke="#cbd5e1" stroke-width="4.5" stroke-linecap="round" />
+    <line x1="160" y1="280" x2="225" y2="288" stroke="#cbd5e1" stroke-width="4.5" stroke-linecap="round" />
+
+    <!-- Right Page Ornament Lines -->
+    <line x1="276" y1="230" x2="364" y2="220" stroke="#cbd5e1" stroke-width="4.5" stroke-linecap="round" />
+    <line x1="276" y1="250" x2="364" y2="240" stroke="#cbd5e1" stroke-width="4.5" stroke-linecap="round" />
+    <line x1="276" y1="270" x2="364" y2="260" stroke="#cbd5e1" stroke-width="4.5" stroke-linecap="round" />
+    <line x1="287" y1="288" x2="352" y2="280" stroke="#cbd5e1" stroke-width="4.5" stroke-linecap="round" />
+
+    <!-- Page Center Crease / Spine Shadow -->
+    <path d="M 254 186 C 255 240, 255 280, 254 314 C 256 316, 258 316, 260 314 C 259 280, 259 240, 260 186 Z" fill="#94a3b8" opacity="0.6" />
+
+    <!-- Ribbon Bookmark (Red Ribbon hanging down) -->
+    <path d="M 252 200 Q 256 260 258 360 L 268 375 L 278 360 Q 262 260 260 200 Z" fill="#ef4444" />
+    <path d="M 252 200 Q 256 260 258 360 L 268 375 L 268 200 Z" fill="#dc2626" />
+
+    <!-- Rehal (Wooden Stand) Base Legs -->
+    <g stroke="#713f12" stroke-linecap="round" stroke-linejoin="round">
+      <!-- Left leg -->
+      <path d="M 170 330 L 130 405 C 125 415, 140 422, 150 415 L 230 345 Z" fill="#a16207" />
+      <!-- Right leg -->
+      <path d="M 342 330 L 382 405 C 387 415, 372 422, 362 415 L 282 345 Z" fill="#a16207" />
+      <!-- Rehal Joint / Shadow -->
+      <ellipse cx="256" cy="350" rx="14" ry="7" fill="#451a03" />
+    </g>
+  </g>
+</svg>

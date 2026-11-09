@@ -1,0 +1,64 @@
+{
+  "name": "Tahfidzku — Manajemen Tahfidz Al-Qur'an",
+  "short_name": "Tahfidzku",
+  "description": "Aplikasi Manajemen Pembelajaran Tahfidz Al-Qur'an",
+  "start_url": "./index.html",
+  "scope": "./",
+  "id": "tahfidzku-pwa-app",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#f8fafc",
+  "theme_color": "#16a34a",
+  "lang": "id",
+  "dir": "ltr",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "assets/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "assets/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Live Monitor",
+      "short_name": "Monitor",
+      "description": "Pantau absensi guru, santri, dan progres setoran harian",
+      "url": "./index.html#admin_live_monitor",
+      "icons": [{ "src": "assets/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Baca Al-Qur'an",
+      "short_name": "Al-Qur'an",
+      "description": "Mushaf Al-Qur'an standar Indonesia & terjemahan",
+      "url": "./index.html#quran",
+      "icons": [{ "src": "assets/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

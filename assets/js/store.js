@@ -1449,8 +1449,19 @@ const Store = (() => {
   }
 
   function addNotif(userId, tipe, pesan, persist = true) {
-    db.notifikasi.unshift({ id: uid('n'), userId, tipe, pesan, tanggal: nowISO(), read: false });
+    const item = { id: uid('n'), userId, tipe, pesan, tanggal: nowISO(), read: false };
+    db.notifikasi.unshift(item);
     if (persist) save();
+    try {
+      const sess = getSession();
+      if (sess && sess.userId === userId && typeof PWA !== 'undefined' && PWA.sendNotification) {
+        PWA.sendNotification('Tahfidzku', {
+          body: pesan,
+          tag: 'notif-' + item.id,
+          data: './index.html#' + (sess.role + '_notif')
+        });
+      }
+    } catch (e) {}
   }
   function notifFor(userId) { return db.notifikasi.filter(n => n.userId === userId); }
   function clearNotifs(userId) {
