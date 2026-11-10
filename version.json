@@ -1,5 +1,5 @@
 {
-    "hash": "66459e7",
-    "message": "feat: tambah fitur Setoran Maju (bayar di muka untuk besok) dan preset filter Minggu Ini di laporan",
-    "date": "2026-11-10T19:56:06+07:00"
+    "hash": "6c58820",
+    "message": "fix: perbaiki sistem notifikasi update aplikasi agar tersimpan di database dan tersebar ke ustadz serta role terkait",
+    "date": "2026-11-10T20:55:48+07:00"
 }
