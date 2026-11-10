@@ -1278,9 +1278,12 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
   function renderTahsin() {
     const db = Store.get();
     const santri = mySantri('Tahsin').filter(s => Store.santriHasProgram(s, 'Tahsin'));
+    const tmrw = Store.tambahHari(Store.todayStr(), 1);
     const rows = santri.map(s => {
       const rec = db.tahsin.filter(t => t.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
-      return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${rec ? 'Hal ' + rec.halAwal + '-' + rec.halAkhir : '<span class="muted">-</span>'}</td><td>${rec ? rec.nilai : '-'}</td><td><button class="clay-btn sm primary" data-input="${s.id}">+ Input</button></td></tr>`;
+      const tomorrowDone = db.tahsin.some(t => t.santriId === s.id && t.tanggal === tmrw);
+      const tmrwBadge = tomorrowDone ? ' <span class="badge purple" title="Sudah setor maju untuk besok">Besok ✓</span>' : '';
+      return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${rec ? 'Hal ' + rec.halAwal + '-' + rec.halAkhir : '<span class="muted">-</span>'}</td><td>${rec ? rec.nilai : '-'}</td><td><button class="clay-btn sm primary" data-input="${s.id}">+ Input</button>${tmrwBadge}</td></tr>`;
     }).join('');
     document.getElementById('tab-content').innerHTML = `
       <div class="clay-card">
@@ -1349,11 +1352,21 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     return update;
   }
 
-  function tahsinForm(santriId) {
+  function tahsinForm(santriId, tanggalTarget) {
     const s = Store.findSantri(santriId);
+    const today = Store.todayStr();
+    const tomorrow = Store.tambahHari(today, 1);
+    const initTgl = tanggalTarget || today;
     const body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
-      ${UI.field('Tanggal', `<input class="clay-input" id="f-tgl" type="date" value="${Store.todayStr()}">`)}
+      ${UI.field('Tanggal Setoran', `
+        <div class="row" style="gap:6px;margin-bottom:6px">
+          <button type="button" class="clay-btn sm ${initTgl === today ? 'primary' : 'ghost'}" id="btn-tgl-today">Hari Ini</button>
+          <button type="button" class="clay-btn sm ${initTgl === tomorrow ? 'primary' : 'ghost'}" id="btn-tgl-tomorrow">⏩ Besok (${UI.fmtDate(tomorrow)}) - Setoran Maju</button>
+        </div>
+        <input class="clay-input" id="f-tgl" type="date" value="${initTgl}">
+        <div id="tgl-info" class="muted" style="font-size:12px;margin-top:4px"></div>
+      `)}
       <div class="row">
         <div style="flex:1">${UI.field('Halaman Awal', `<input class="clay-input" id="f-ha" type="number" step="any" min="0.5" value="1">`)}</div>
         <div style="flex:1">${UI.field('Halaman Akhir', `<input class="clay-input" id="f-hk" type="number" step="any" min="0.5" value="2">`)}</div>
@@ -1363,36 +1376,66 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         <div style="flex:1">${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80">`)}</div>
       </div>
       ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat"></textarea>`)}`;
-    UI.openModal({
+    const modal = UI.openModal({
       title: 'Input Tahsin', bodyHTML: body,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
         { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
           const db = Store.get();
-          const session = Store.getSession();
-          db.tahsin.push({ id: Store.uid('ts'), santriId, ustadzId: ustadzIdFor(santriId, 'Tahsin'), tanggal: m.querySelector('#f-tgl').value, halAwal: +m.querySelector('#f-ha').value, halAkhir: +m.querySelector('#f-hk').value, pages: totalHlm, totalHafalan: totalHlm, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim() });
-          const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
-          if (wUser) Store.addNotif(wUser.id, 'wali', 'Nilai Tahsin baru: ' + s.nama);
+          const tglVal = m.querySelector('#f-tgl').value;
+          const isMaju = tglVal > today;
           const haVal = +m.querySelector('#f-ha').value;
           const hkVal = +m.querySelector('#f-hk').value;
           const totalHlm = (+m.querySelector('#f-total-hlm')?.value) || ((hkVal >= haVal) ? (hkVal - haVal + 1) : 0.5);
           const nilaiVal = +m.querySelector('#f-nilai').value;
           const catVal = m.querySelector('#f-cat').value.trim();
-          const tglVal = m.querySelector('#f-tgl').value;
+          db.tahsin.push({
+            id: Store.uid('ts'), santriId, ustadzId: ustadzIdFor(santriId, 'Tahsin'),
+            tanggal: tglVal, halAwal: haVal, halAkhir: hkVal,
+            pages: totalHlm, totalHafalan: totalHlm, nilai: nilaiVal,
+            catatan: (catVal + (isMaju ? ' (Setoran Maju)' : '')).trim(),
+            _created: Date.now()
+          });
+          const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
+          if (wUser) Store.addNotif(wUser.id, 'wali', (isMaju ? 'Setoran Maju ' : 'Nilai ') + 'Tahsin baru: ' + s.nama);
           const msg = formatPesanSetoranWA({
             santri: s,
             awal: 'Halaman ' + haVal,
             hingga: 'Halaman ' + hkVal,
             jumlah: totalHlm + ' hlm',
             nilai: nilaiVal,
-            keterangan: catVal || 'Tahsin',
+            keterangan: (catVal ? catVal + ' ' : '') + (isMaju ? '(Setoran Maju / Bayar di Muka)' : 'Tahsin'),
             tanggal: tglVal
           });
           waReport(santriId, msg);
-          if (!await Store.save()) return; Store.log('Input tahsin ' + s.nama); c(); UI.toast('Tersimpan', 'success'); renderTahsin();
+          if (!await Store.save()) return;
+          Store.log('Input tahsin ' + s.nama + (isMaju ? ' (Setoran Maju)' : ''));
+          c();
+          UI.toast(isMaju ? 'Setoran Maju Tahsin tersimpan' : 'Tersimpan', 'success');
+          renderTahsin();
         } }
       ]
     });
+    const tglInput = modal.modal.querySelector('#f-tgl');
+    const btnToday = modal.modal.querySelector('#btn-tgl-today');
+    const btnTomorrow = modal.modal.querySelector('#btn-tgl-tomorrow');
+    const tglInfo = modal.modal.querySelector('#tgl-info');
+    function updateTglUI() {
+      const val = tglInput.value;
+      if (btnToday) btnToday.className = 'clay-btn sm ' + (val === today ? 'primary' : 'ghost');
+      if (btnTomorrow) btnTomorrow.className = 'clay-btn sm ' + (val === tomorrow ? 'primary' : 'ghost');
+      if (val > today) {
+        tglInfo.innerHTML = `<span style="color:var(--primary);font-weight:600">⏩ Setoran Maju (Bayar di Muka untuk ${UI.fmtDate(val)})</span>`;
+      } else if (val < today) {
+        tglInfo.innerHTML = `<span style="color:var(--muted)">⏪ Pembayaran Setoran Tertinggal (${UI.fmtDate(val)})</span>`;
+      } else {
+        tglInfo.innerHTML = '';
+      }
+    }
+    if (btnToday) btnToday.onclick = () => { tglInput.value = today; updateTglUI(); };
+    if (btnTomorrow) btnTomorrow.onclick = () => { tglInput.value = tomorrow; updateTglUI(); };
+    if (tglInput) tglInput.onchange = updateTglUI;
+    updateTglUI();
   }
 
   /* ----- Ziyadah (Bacaan + Hafalan) ----- */
@@ -1400,14 +1443,17 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const db = Store.get();
     const santri = mySantri('Ziyadah').filter(s => Store.santriHasProgram(s, 'Ziyadah'));
     const t = Store.todayStr();
+    const tmrw = Store.tambahHari(t, 1);
     const rows = santri.map(s => {
       const last = Store.lastZiyadah(s.id);
       const totalH = Store.totalHafalanSantri(s.id);
       const bacaanToday = db.ziyadahBacaan.some(z => z.santriId === s.id && z.tanggal === t);
       const hafalanToday = db.ziyadahHafalan.some(z => z.santriId === s.id && z.tanggal === t);
+      const hafalanTomorrow = db.ziyadahHafalan.some(z => z.santriId === s.id && z.tanggal === tmrw);
       let badge = '';
       if (hafalanToday) badge = ' <span class="badge green">Selesai ✓</span>';
       else if (bacaanToday) badge = ' <span class="badge" style="background:var(--blue,#2196F3)">Bacaan ✓</span>';
+      if (hafalanTomorrow) badge += ' <span class="badge purple" title="Sudah setor maju untuk besok">Besok ✓</span>';
       return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${last ? getSurah(last.sAkhir).latin + ':' + last.aAkhir : '<span class="muted">-</span>'}</td><td>${totalH ? formatHafalan(totalH) : '-'}</td><td><button class="clay-btn sm primary" data-setoran="${s.id}">+ Setoran</button>${badge}</td></tr>`;
     }).join('');
     document.getElementById('tab-content').innerHTML = `
@@ -1421,14 +1467,16 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     document.querySelectorAll('[data-setoran]').forEach(b => b.onclick = () => ziyadahForm(b.dataset.setoran));
   }
 
-  function ziyadahForm(santriId) {
+  function ziyadahForm(santriId, tanggalTarget) {
     const s = Store.findSantri(santriId);
     const db = Store.get();
     const t = Store.todayStr();
+    const tomorrow = Store.tambahHari(t, 1);
+    const initTgl = tanggalTarget || t;
     const halaqah = Store.halaqahForSantriProgram(s, 'Ziyadah');
     const bacaanRequired = !!(halaqah && halaqah.setoranBacaan);
-    const bacaanToday = db.ziyadahBacaan.filter(z => z.santriId === santriId && z.tanggal === t).sort((a, b) => (b._created||0)-(a._created||0))[0];
-    const hafalanToday = db.ziyadahHafalan.some(z => z.santriId === santriId && z.tanggal === t);
+    const bacaanToday = db.ziyadahBacaan.filter(z => z.santriId === santriId && z.tanggal === initTgl).sort((a, b) => (b._created||0)-(a._created||0))[0];
+    const hafalanToday = db.ziyadahHafalan.some(z => z.santriId === santriId && z.tanggal === initTgl);
     const skipBacaan = bacaanRequired && !!bacaanToday && !hafalanToday;
     const hafalanReady = !bacaanRequired || skipBacaan;
 
@@ -1475,7 +1523,14 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
 
     const body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
-      ${UI.field('Tanggal', `<input class="clay-input" value="${t}" disabled>`)}
+      ${UI.field('Tanggal Setoran', `
+        <div class="row" style="gap:6px;margin-bottom:6px">
+          <button type="button" class="clay-btn sm ${initTgl === t ? 'primary' : 'ghost'}" id="btn-tgl-today">Hari Ini</button>
+          <button type="button" class="clay-btn sm ${initTgl === tomorrow ? 'primary' : 'ghost'}" id="btn-tgl-tomorrow">⏩ Besok (${UI.fmtDate(tomorrow)}) - Setoran Maju</button>
+        </div>
+        <input class="clay-input" id="f-tgl" type="date" value="${initTgl}">
+        <div id="tgl-info" class="muted" style="font-size:12px;margin-top:4px"></div>
+      `)}
       <hr style="border:none;border-top:1px solid var(--border,#ddd);margin:12px 0">
       <div id="sec-bacaan" class="clay-card pad-sm mb" style="display:${bacaanRequired ? 'block' : 'none'};background:var(--bg);${bacaanLocked}">
         <div class="section-title" style="font-size:14px;margin:0 0 8px 0">📖 Setoran Bacaan</div>
@@ -1526,6 +1581,28 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const refreshBacaanPreview = bacaanRequired ? bindSetoranPreview(modal.modal, 'b') : () => {};
     const refreshHafalanPreview = bindSetoranPreview(modal.modal, 'h');
 
+    const tglInput = modal.modal.querySelector('#f-tgl');
+    const btnToday = modal.modal.querySelector('#btn-tgl-today');
+    const btnTomorrow = modal.modal.querySelector('#btn-tgl-tomorrow');
+    const tglInfo = modal.modal.querySelector('#tgl-info');
+
+    function updateTglUI() {
+      const val = tglInput.value;
+      if (btnToday) btnToday.className = 'clay-btn sm ' + (val === t ? 'primary' : 'ghost');
+      if (btnTomorrow) btnTomorrow.className = 'clay-btn sm ' + (val === tomorrow ? 'primary' : 'ghost');
+      if (val > t) {
+        tglInfo.innerHTML = `<span style="color:var(--primary);font-weight:600">⏩ Setoran Maju (Bayar di Muka untuk ${UI.fmtDate(val)})</span>`;
+      } else if (val < t) {
+        tglInfo.innerHTML = `<span style="color:var(--muted)">⏪ Pembayaran Setoran Tertinggal (${UI.fmtDate(val)})</span>`;
+      } else {
+        tglInfo.innerHTML = '';
+      }
+    }
+    if (btnToday) btnToday.onclick = () => { tglInput.value = t; updateTglUI(); };
+    if (btnTomorrow) btnTomorrow.onclick = () => { tglInput.value = tomorrow; updateTglUI(); };
+    if (tglInput) tglInput.onchange = updateTglUI;
+    updateTglUI();
+
     setTimeout(() => {
       bindAyatMax('b-sa', 'b-aa,b-ak');
       bindAyatMax('b-sk', 'b-aa,b-ak');
@@ -1571,15 +1648,17 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       if (sAyah && +aaEl.value > sAyah.ayahs) { UI.toast('Awal ayat melebihi batas surat', 'error'); return; }
       if (sKyah && +akEl.value > sKyah.ayahs) { UI.toast('Akhir ayat melebihi batas surat', 'error'); return; }
 
+      const curTgl = document.getElementById('f-tgl') ? document.getElementById('f-tgl').value : t;
+      const isMaju = curTgl > t;
       const d = Store.get();
       d.ziyadahBacaan.push({
         id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId, 'Ziyadah'),
-        tanggal: Store.todayStr(), sAwal: sA, aAwal: +aaEl.value,
+        tanggal: curTgl, sAwal: sA, aAwal: +aaEl.value,
         sAkhir: sK, aAkhir: +akEl.value, _created: Date.now()
       });
       if (!await Store.save()) return;
-      Store.log('Setor ziyadah bacaan ' + s.nama);
-      UI.toast('Setoran bacaan tersimpan', 'success');
+      Store.log('Setor ziyadah bacaan ' + s.nama + (isMaju ? ' (Setoran Maju)' : ''));
+      UI.toast(isMaju ? 'Setoran Maju bacaan tersimpan' : 'Setoran bacaan tersimpan', 'success');
 
       document.getElementById('sec-bacaan').style.opacity = '0.5';
       document.getElementById('sec-bacaan').style.borderLeftColor = 'var(--muted)';
@@ -1631,36 +1710,39 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       const h = computeHafalan(sA, aA, sK, aK);
       if (!h) { UI.toast('Range ayat tidak valid', 'error'); return; }
 
+      const curTgl = document.getElementById('f-tgl') ? document.getElementById('f-tgl').value : t;
+      const isMaju = curTgl > t;
       const d = Store.get();
       const pagesVal = +document.getElementById('h-pages')?.value || h.pages;
       h.pages = pagesVal;
+      const catVal = document.getElementById('f-cat').value.trim();
       d.ziyadahHafalan.push({
         id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId, 'Ziyadah'),
-        tanggal: Store.todayStr(), sAwal: sA, aAwal: aA,
+        tanggal: curTgl, sAwal: sA, aAwal: aA,
         sAkhir: sK, aAkhir: aK, pages: pagesVal, nilai: +document.getElementById('f-nilai').value,
-        catatan: document.getElementById('f-cat').value.trim(), _created: Date.now()
+        catatan: (catVal + (isMaju ? ' (Setoran Maju)' : '')).trim(),
+        _created: Date.now()
       });
       const wUser = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);
-      if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
+      if (wUser) Store.addNotif(wUser.id, 'wali', (isMaju ? 'Setoran Maju: ' : 'Setoran baru: ') + s.nama + ' (' + formatHafalan(h) + ')');
       const awalSurah = 'Surat ' + (getSurah(sA) ? getSurah(sA).latin : sA) + ' Ayat ' + aA;
       const hinggaSurah = 'Surat ' + (getSurah(sK) ? getSurah(sK).latin : sK) + ' Ayat ' + aK;
       const nilaiVal = +document.getElementById('f-nilai').value;
-      const catVal = document.getElementById('f-cat').value.trim();
       const msg = formatPesanSetoranWA({
         santri: s,
         awal: awalSurah,
         hingga: hinggaSurah,
         jumlah: formatHafalan(h),
         nilai: nilaiVal,
-        keterangan: catVal || '-',
-        tanggal: Store.todayStr()
+        keterangan: (catVal ? catVal + ' ' : '') + (isMaju ? '(Setoran Maju / Bayar di Muka)' : (catVal ? '' : '-')),
+        tanggal: curTgl
       });
       waReport(santriId, msg);
       if (!await Store.save()) return;
-      Store.log('Setor ziyadah hafalan ' + s.nama);
+      Store.log('Setor ziyadah hafalan ' + s.nama + (isMaju ? ' (Setoran Maju)' : ''));
       if (hSlide) clearInterval(hSlide);
       modal.close();
-      UI.toast('Tersimpan · ' + formatHafalan(h), 'success');
+      UI.toast((isMaju ? 'Setoran Maju tersimpan · ' : 'Tersimpan · ') + formatHafalan(h), 'success');
       renderZiyadah();
     };
   }
@@ -1669,9 +1751,12 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
   function renderMutqin() {
     const db = Store.get();
     const santri = mySantri('Mutqin').filter(s => Store.santriHasProgram(s, 'Mutqin'));
+    const tmrw = Store.tambahHari(Store.todayStr(), 1);
     const rows = santri.map(s => {
       const rec = db.mutqin.filter(m => m.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
-      return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${rec ? getSurah(rec.sAkhir).latin + ':' + rec.aAkhir : '<span class="muted">-</span>'}</td><td>${rec ? rec.totalHafalan + ' hlm' : '-'}</td><td><button class="clay-btn sm primary" data-input="${s.id}">+ Murajaah</button></td></tr>`;
+      const tomorrowDone = db.mutqin.some(m => m.santriId === s.id && m.tanggal === tmrw);
+      const tmrwBadge = tomorrowDone ? ' <span class="badge purple" title="Sudah murajaah maju untuk besok">Besok ✓</span>' : '';
+      return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${rec ? getSurah(rec.sAkhir).latin + ':' + rec.aAkhir : '<span class="muted">-</span>'}</td><td>${rec ? rec.totalHafalan + ' hlm' : '-'}</td><td><button class="clay-btn sm primary" data-input="${s.id}">+ Murajaah</button>${tmrwBadge}</td></tr>`;
     }).join('');
     document.getElementById('tab-content').innerHTML = `
       <div class="clay-card">
@@ -1684,11 +1769,22 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     document.querySelectorAll('[data-input]').forEach(b => b.onclick = () => mutqinForm(b.dataset.input));
   }
 
-  function mutqinForm(santriId) {
+  function mutqinForm(santriId, tanggalTarget) {
     const s = Store.findSantri(santriId);
+    const today = Store.todayStr();
+    const tomorrow = Store.tambahHari(today, 1);
+    const initTgl = tanggalTarget || today;
     function surahLabel(n) { const s = getSurah(n); return s ? s.n + '. ' + s.latin : n; }
     const body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
+      ${UI.field('Tanggal Setoran', `
+        <div class="row" style="gap:6px;margin-bottom:6px">
+          <button type="button" class="clay-btn sm ${initTgl === today ? 'primary' : 'ghost'}" id="btn-tgl-today">Hari Ini</button>
+          <button type="button" class="clay-btn sm ${initTgl === tomorrow ? 'primary' : 'ghost'}" id="btn-tgl-tomorrow">⏩ Besok (${UI.fmtDate(tomorrow)}) - Setoran Maju</button>
+        </div>
+        <input class="clay-input" id="f-tgl" type="date" value="${initTgl}">
+        <div id="tgl-info" class="muted" style="font-size:12px;margin-top:4px"></div>
+      `)}
       <div class="row">
         <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="m-sa" list="dl-surah" type="text" value="${surahLabel(2)}" autocomplete="off">`)}</div>
         <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="m-aa" type="number" min="1" max="286" value="1">`)}</div>
@@ -1713,14 +1809,21 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           const sAyh = getSurah(sA); const sKyh = getSurah(sK);
           if (sAyh && +m.querySelector('#m-aa').value > sAyh.ayahs) { UI.toast('Awal ayat melebihi batas surat', 'error'); return; }
           if (sKyh && +m.querySelector('#m-ak').value > sKyh.ayahs) { UI.toast('Akhir ayat melebihi batas surat', 'error'); return; }
-          db.mutqin.push({ id: Store.uid('m'), santriId, ustadzId: ustadzIdFor(santriId, 'Mutqin'), tanggal: Store.todayStr(), sAwal: sA, aAwal: +m.querySelector('#m-aa').value, sAkhir: sK, aAkhir: +m.querySelector('#m-ak').value, nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(), totalHafalan: +m.querySelector('#m-total').value, _created: Date.now() });
-          const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
-          if (wUser) Store.addNotif(wUser.id, 'wali', 'Murajaah Mutqin: ' + s.nama);
+          const curTgl = m.querySelector('#f-tgl') ? m.querySelector('#f-tgl').value : today;
+          const isMaju = curTgl > today;
           const aaVal = +m.querySelector('#m-aa').value;
           const akVal = +m.querySelector('#m-ak').value;
           const totalVal = +m.querySelector('#m-total').value;
           const nilaiVal = +m.querySelector('#f-nilai').value;
           const catVal = m.querySelector('#f-cat').value.trim();
+          db.mutqin.push({
+            id: Store.uid('m'), santriId, ustadzId: ustadzIdFor(santriId, 'Mutqin'),
+            tanggal: curTgl, sAwal: sA, aAwal: aaVal, sAkhir: sK, aAkhir: akVal,
+            nilai: nilaiVal, catatan: (catVal + (isMaju ? ' (Setoran Maju)' : '')).trim(),
+            totalHafalan: totalVal, _created: Date.now()
+          });
+          const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
+          if (wUser) Store.addNotif(wUser.id, 'wali', (isMaju ? 'Setoran Maju Murajaah Mutqin: ' : 'Murajaah Mutqin: ') + s.nama);
           const awalSurah = 'Surat ' + (getSurah(sA) ? getSurah(sA).latin : sA) + ' Ayat ' + aaVal;
           const hinggaSurah = 'Surat ' + (getSurah(sK) ? getSurah(sK).latin : sK) + ' Ayat ' + akVal;
           const msg = formatPesanSetoranWA({
@@ -1729,15 +1832,39 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
             hingga: hinggaSurah,
             jumlah: totalVal + ' hlm',
             nilai: nilaiVal,
-            keterangan: catVal ? ('Murajaah Mutqin - ' + catVal) : 'Murajaah Mutqin',
-            tanggal: Store.todayStr()
+            keterangan: (catVal ? 'Murajaah Mutqin - ' + catVal : 'Murajaah Mutqin') + (isMaju ? ' (Setoran Maju / Bayar di Muka)' : ''),
+            tanggal: curTgl
           });
           waReport(santriId, msg);
-          if (!await Store.save()) return; Store.log('Input mutqin ' + s.nama); c(); UI.toast('Tersimpan', 'success'); renderMutqin();
+          if (!await Store.save()) return;
+          Store.log('Input mutqin ' + s.nama + (isMaju ? ' (Setoran Maju)' : ''));
+          c();
+          UI.toast(isMaju ? 'Setoran Maju Mutqin tersimpan' : 'Tersimpan', 'success');
+          renderMutqin();
         } }
       ]
     });
     setTimeout(() => { bindAyatMax('m-sa', 'm-aa'); bindAyatMax('m-sk', 'm-ak'); }, 50);
+    const tglInput = modal.modal.querySelector('#f-tgl');
+    const btnToday = modal.modal.querySelector('#btn-tgl-today');
+    const btnTomorrow = modal.modal.querySelector('#btn-tgl-tomorrow');
+    const tglInfo = modal.modal.querySelector('#tgl-info');
+    function updateTglUI() {
+      const val = tglInput.value;
+      if (btnToday) btnToday.className = 'clay-btn sm ' + (val === today ? 'primary' : 'ghost');
+      if (btnTomorrow) btnTomorrow.className = 'clay-btn sm ' + (val === tomorrow ? 'primary' : 'ghost');
+      if (val > today) {
+        tglInfo.innerHTML = `<span style="color:var(--primary);font-weight:600">⏩ Setoran Maju (Bayar di Muka untuk ${UI.fmtDate(val)})</span>`;
+      } else if (val < today) {
+        tglInfo.innerHTML = `<span style="color:var(--muted)">⏪ Pembayaran Setoran Tertinggal (${UI.fmtDate(val)})</span>`;
+      } else {
+        tglInfo.innerHTML = '';
+      }
+    }
+    if (btnToday) btnToday.onclick = () => { tglInput.value = today; updateTglUI(); };
+    if (btnTomorrow) btnTomorrow.onclick = () => { tglInput.value = tomorrow; updateTglUI(); };
+    if (tglInput) tglInput.onchange = updateTglUI;
+    updateTglUI();
   }
 
   /* ---------------- Riwayat ---------------- */
@@ -1845,6 +1972,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         </div>
         <div class="row mt">
           <button class="clay-btn ghost" data-ul-preset="week">7 Hari</button>
+          <button class="clay-btn ghost" data-ul-preset="thisweek">Minggu Ini</button>
           <button class="clay-btn ghost" data-ul-preset="month">Bulan Ini</button>
           <button class="clay-btn ghost" data-ul-preset="lastmonth">Bulan Lalu</button>
         </div>
@@ -1875,6 +2003,10 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       const preset = button.dataset.ulPreset;
       let dari = today, sampai = today;
       if (preset === 'week') dari = Store.tambahHari(today, -6);
+      if (preset === 'thisweek') {
+        dari = Shared.mondayOf(today);
+        sampai = today;
+      }
       if (preset === 'month') dari = today.slice(0, 8) + '01';
       if (preset === 'lastmonth') {
         const awal = new Date(today.slice(0, 8) + '01T12:00:00');
@@ -1960,15 +2092,16 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const santri = Store.findSantri(santriId);
     const activePrograms = [...new Set(programs || [])].filter(program => santri && Store.santriHasProgram(santri, program));
     if (!santri || !activePrograms.length) { UI.toast('Jenis setoran santri tidak ditemukan', 'error'); return; }
+    const isMaju = tanggal > Store.todayStr();
     const openInput = program => umumInput(santriId, program, tanggal, () => {
       if (typeof onSaved === 'function') onSaved();
       else laporan();
     });
     if (activePrograms.length === 1) { openInput(activePrograms[0]); return; }
     UI.openModal({
-      title: 'Bayar Setoran Tertinggal',
-      sub: santri.nama + ' · ' + UI.fmtDate(tanggal),
-      bodyHTML: '<div class="muted">Pilih jenis setoran yang akan dicatat untuk tanggal tersebut.</div>',
+      title: isMaju ? 'Setoran Maju (Bayar di Muka)' : 'Bayar Setoran Tertinggal',
+      sub: santri.nama + ' · ' + UI.fmtDate(tanggal) + (isMaju ? ' (Besok/Maju)' : ''),
+      bodyHTML: `<div class="muted">Pilih jenis setoran yang akan dicatat untuk tanggal <b>${UI.esc(UI.fmtDate(tanggal))}</b>.</div>`,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
         ...activePrograms.map(program => ({
@@ -1986,8 +2119,12 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const level = selectedProgram || s.level;
     if (!Store.santriHasProgram(s, level)) { UI.toast('Program santri tidak aktif', 'error'); return; }
     const programHalaqah = Store.halaqahForSantriProgram(s, level);
-    const tanggalSetoran = /^\d{4}-\d{2}-\d{2}$/.test(tanggalTarget || '') ? tanggalTarget : Store.todayStr();
-    const isSusulan = tanggalSetoran !== Store.todayStr();
+    const today = Store.todayStr();
+    const tomorrow = Store.tambahHari(today, 1);
+    const tanggalSetoran = /^\d{4}-\d{2}-\d{2}$/.test(tanggalTarget || '') ? tanggalTarget : today;
+    const isTargetSpecific = !!tanggalTarget;
+    const isMaju = tanggalSetoran > today;
+    const isSusulan = tanggalSetoran < today;
     const refreshSetoranView = () => typeof onSaved === 'function' ? onSaved() : renderUmum();
     let bacaanRequired = false;
     let skipBacaan = false;
@@ -1996,11 +2133,28 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     let surahLabel = n => String(n);
     let lanjutanLabel = '';
     
+    let tglField = '';
+    if (isTargetSpecific) {
+      const lockNote = isMaju
+        ? `<div class="muted" style="font-size:12px;margin-top:4px;color:var(--primary)">⏩ Tanggal diset untuk <b>Setoran Maju (Bayar di Muka)</b>.</div>`
+        : (isSusulan ? `<div class="muted" style="font-size:12px;margin-top:4px">Tanggal dikunci karena ini pembayaran setoran tertinggal (susulan).</div>` : '');
+      tglField = `${UI.field('Tanggal', `<input class="clay-input" id="f-tgl" type="date" value="${tanggalSetoran}" disabled>${lockNote}`)}`;
+    } else {
+      tglField = `${UI.field('Tanggal Setoran', `
+        <div class="row" style="gap:6px;margin-bottom:6px">
+          <button type="button" class="clay-btn sm primary" id="btn-tgl-today">Hari Ini</button>
+          <button type="button" class="clay-btn sm ghost" id="btn-tgl-tomorrow">⏩ Besok (${UI.fmtDate(tomorrow)}) - Setoran Maju</button>
+        </div>
+        <input class="clay-input" id="f-tgl" type="date" value="${today}">
+        <div id="tgl-info" class="muted" style="font-size:12px;margin-top:4px"></div>
+      `)}`;
+    }
+
     let body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
       ${UI.field('Kelas', `<input class="clay-input" value="${UI.esc(Store.educationLabel(s))}" disabled>`)}
       ${UI.field('Halaqah', `<input class="clay-input" value="${UI.esc(programHalaqah ? programHalaqah.nama : '-') }" disabled>`)}
-       ${UI.field('Tanggal', `<input class="clay-input" id="f-tgl" type="date" value="${tanggalSetoran}" ${isSusulan ? 'disabled' : ''}>${isSusulan ? '<div class="muted" style="font-size:12px;margin-top:4px">Tanggal dikunci karena ini pembayaran setoran tertinggal.</div>' : ''}`)}`;
+      ${tglField}`;
     
     if (level === 'Tahsin') {
       body += `
@@ -2107,8 +2261,8 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     }
 
     const modal = UI.openModal({
-      title: (isSusulan ? 'Bayar Setoran ' : 'Input ') + level + ' - ' + s.nama,
-      sub: Store.educationLabel(s) + ' · ' + (programHalaqah ? programHalaqah.nama : '-') + (isSusulan ? ' · ' + UI.fmtDate(tanggalSetoran) : ''),
+      title: (isMaju ? 'Setoran Maju (Bayar di Muka) ' : (isSusulan ? 'Bayar Setoran ' : 'Input ')) + level + ' - ' + s.nama,
+      sub: Store.educationLabel(s) + ' · ' + (programHalaqah ? programHalaqah.nama : '-') + (isTargetSpecific ? ' · ' + UI.fmtDate(tanggalSetoran) + (isMaju ? ' (Besok/Maju)' : '') : ''),
       bodyHTML: body,
       actions: level === 'Ziyadah'
         ? [{ label: 'Tutup', cls: 'ghost', onClick: (m, c) => c() }]
@@ -2116,6 +2270,8 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
         { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
           const d = Store.get();
+          const curTgl = m.querySelector('#f-tgl').value;
+          const isMajuRec = curTgl > today;
 
           if (level === 'Tahsin') {
             const haVal = +m.querySelector('#f-ha').value;
@@ -2123,10 +2279,12 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
             const totalHlmVal = (+m.querySelector('#f-total-hlm')?.value) || ((hkVal >= haVal) ? (hkVal - haVal + 1) : 0.5);
             const record = {
               id: Store.uid('ts'), santriId, ustadzId: ustadzIdFor(santriId, 'Tahsin'),
-              tanggal: m.querySelector('#f-tgl').value,
+              tanggal: curTgl,
               halAwal: haVal, halAkhir: hkVal,
               pages: totalHlmVal, totalHafalan: totalHlmVal,
-              nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim()
+              nilai: +m.querySelector('#f-nilai').value,
+              catatan: (m.querySelector('#f-cat').value.trim() + (isMajuRec ? ' (Setoran Maju)' : '')).trim(),
+              _created: Date.now()
             };
             d.tahsin.push(record);
           } else if (level === 'Mutqin') {
@@ -2134,10 +2292,11 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
             const sK = parseInt(m.querySelector('#f-sk').value) || 2;
             const record = {
               id: Store.uid('m'), santriId, ustadzId: ustadzIdFor(santriId, 'Mutqin'),
-              tanggal: m.querySelector('#f-tgl').value,
+              tanggal: curTgl,
               sAwal: sA, aAwal: +m.querySelector('#f-aa').value,
               sAkhir: sK, aAkhir: +m.querySelector('#f-ak').value,
-              nilai: +m.querySelector('#f-nilai').value, catatan: m.querySelector('#f-cat').value.trim(),
+              nilai: +m.querySelector('#f-nilai').value,
+              catatan: (m.querySelector('#f-cat').value.trim() + (isMajuRec ? ' (Setoran Maju)' : '')).trim(),
               totalHafalan: +m.querySelector('#f-total').value, _created: Date.now()
             };
             d.mutqin.push(record);
@@ -2146,7 +2305,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           }
 
           const w = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);
-          if (w) Store.addNotif(w.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + level + ')');
+          if (w) Store.addNotif(w.id, 'wali', (isMajuRec ? 'Setoran Maju: ' : 'Setoran baru: ') + s.nama + ' (' + level + ')');
           let awalText = '-', hinggaText = '-', jmlText = '-', nilaiVal = 0, ketText = '-';
           if (level === 'Tahsin') {
             const ha = +m.querySelector('#f-ha').value;
@@ -2156,7 +2315,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
             awalText = 'Halaman ' + ha;
             hinggaText = 'Halaman ' + hk;
             jmlText = ((hk >= ha) ? (hk - ha + 1) : 1) + ' hlm';
-            ketText = cat || 'Tahsin';
+            ketText = (cat || 'Tahsin') + (isMajuRec ? ' (Setoran Maju / Bayar di Muka)' : '');
           } else if (level === 'Mutqin') {
             const sA = parseInt(m.querySelector('#f-sa').value) || 2;
             const sK = parseInt(m.querySelector('#f-sk').value) || 2;
@@ -2168,7 +2327,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
             awalText = 'Surat ' + (getSurah(sA) ? getSurah(sA).latin : sA) + ' Ayat ' + aA;
             hinggaText = 'Surat ' + (getSurah(sK) ? getSurah(sK).latin : sK) + ' Ayat ' + aK;
             jmlText = totalHlm + ' hlm';
-            ketText = cat ? ('Murajaah Mutqin - ' + cat) : 'Murajaah Mutqin';
+            ketText = (cat ? ('Murajaah Mutqin - ' + cat) : 'Murajaah Mutqin') + (isMajuRec ? ' (Setoran Maju / Bayar di Muka)' : '');
           }
           const msg = formatPesanSetoranWA({
             santri: s,
@@ -2177,17 +2336,40 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
             jumlah: jmlText,
             nilai: nilaiVal,
             keterangan: ketText,
-            tanggal: m.querySelector('#f-tgl').value
+            tanggal: curTgl
           });
           waReport(santriId, msg);
           if (!await Store.save()) return;
-          Store.log('Input umum: ' + s.nama + ' (' + level + ')');
+          Store.log('Input umum: ' + s.nama + ' (' + level + ')' + (isMajuRec ? ' (Setoran Maju)' : ''));
           c();
-          UI.toast('Setoran ' + level + ' tersimpan', 'success');
+          UI.toast((isMajuRec ? 'Setoran Maju ' : 'Setoran ') + level + ' tersimpan', 'success');
           refreshSetoranView();
         } }
       ]
     });
+
+    if (!isTargetSpecific) {
+      const tglInput = modal.modal.querySelector('#f-tgl');
+      const btnToday = modal.modal.querySelector('#btn-tgl-today');
+      const btnTomorrow = modal.modal.querySelector('#btn-tgl-tomorrow');
+      const tglInfo = modal.modal.querySelector('#tgl-info');
+      function updateTglUI() {
+        const val = tglInput.value;
+        if (btnToday) btnToday.className = 'clay-btn sm ' + (val === today ? 'primary' : 'ghost');
+        if (btnTomorrow) btnTomorrow.className = 'clay-btn sm ' + (val === tomorrow ? 'primary' : 'ghost');
+        if (val > today) {
+          tglInfo.innerHTML = `<span style="color:var(--primary);font-weight:600">⏩ Setoran Maju (Bayar di Muka untuk ${UI.fmtDate(val)})</span>`;
+        } else if (val < today) {
+          tglInfo.innerHTML = `<span style="color:var(--muted)">⏪ Pembayaran Setoran Tertinggal (${UI.fmtDate(val)})</span>`;
+        } else {
+          tglInfo.innerHTML = '';
+        }
+      }
+      if (btnToday) btnToday.onclick = () => { tglInput.value = today; updateTglUI(); };
+      if (btnTomorrow) btnTomorrow.onclick = () => { tglInput.value = tomorrow; updateTglUI(); };
+      if (tglInput) tglInput.onchange = updateTglUI;
+      updateTglUI();
+    }
 
     if (level === 'Ziyadah') {
       const modalContent = modal.modal;
@@ -2242,15 +2424,17 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         if (sAyah && +aaEl.value > sAyah.ayahs) { UI.toast('Awal ayat melebihi batas surat', 'error'); return; }
         if (sKyah && +akEl.value > sKyah.ayahs) { UI.toast('Akhir ayat melebihi batas surat', 'error'); return; }
 
+        const curTgl = modalContent.querySelector('#f-tgl') ? modalContent.querySelector('#f-tgl').value : tanggalSetoran;
+        const isMajuRec = curTgl > today;
         const d = Store.get();
         d.ziyadahBacaan.push({
           id: Store.uid('zb'), santriId, ustadzId: ustadzIdFor(santriId, 'Ziyadah'),
-          tanggal: tanggalSetoran, sAwal: sA, aAwal: +aaEl.value,
+          tanggal: curTgl, sAwal: sA, aAwal: +aaEl.value,
           sAkhir: sK, aAkhir: +akEl.value, _created: Date.now()
         });
         if (!await Store.save()) return;
-        Store.log('Setor ziyadah bacaan ' + s.nama);
-        UI.toast('Setoran bacaan tersimpan', 'success');
+        Store.log('Setor ziyadah bacaan ' + s.nama + (isMajuRec ? ' (Setoran Maju)' : ''));
+        UI.toast(isMajuRec ? 'Setoran Maju bacaan tersimpan' : 'Setoran bacaan tersimpan', 'success');
 
         modalContent.querySelector('#sec-bacaan').style.opacity = '0.5';
         modalContent.querySelector('#sec-bacaan').style.borderLeftColor = 'var(--muted)';
@@ -2300,36 +2484,38 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         const h = computeHafalan(sA, aA, sK, aK);
         if (!h) { UI.toast('Range ayat tidak valid', 'error'); return; }
 
+        const curTgl = modalContent.querySelector('#f-tgl') ? modalContent.querySelector('#f-tgl').value : tanggalSetoran;
+        const isMajuRec = curTgl > today;
         const d = Store.get();
         const pagesVal = +modalContent.querySelector('#h-pages')?.value || h.pages;
         h.pages = pagesVal;
+        const catVal = modalContent.querySelector('#f-cat').value.trim();
         d.ziyadahHafalan.push({
           id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId, 'Ziyadah'),
-          tanggal: tanggalSetoran, sAwal: sA, aAwal: aA,
+          tanggal: curTgl, sAwal: sA, aAwal: aA,
           sAkhir: sK, aAkhir: aK, pages: pagesVal, nilai: +modalContent.querySelector('#f-nilai').value,
-          catatan: modalContent.querySelector('#f-cat').value.trim(), _created: Date.now()
+          catatan: (catVal + (isMajuRec ? ' (Setoran Maju)' : '')).trim(), _created: Date.now()
         });
         const wUser = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);
-        if (wUser) Store.addNotif(wUser.id, 'wali', 'Setoran baru: ' + s.nama + ' (' + formatHafalan(h) + ')');
+        if (wUser) Store.addNotif(wUser.id, 'wali', (isMajuRec ? 'Setoran Maju: ' : 'Setoran baru: ') + s.nama + ' (' + formatHafalan(h) + ')');
         const awalSurah = 'Surat ' + (getSurah(sA) ? getSurah(sA).latin : sA) + ' Ayat ' + aA;
         const hinggaSurah = 'Surat ' + (getSurah(sK) ? getSurah(sK).latin : sK) + ' Ayat ' + aK;
         const nilaiVal = +modalContent.querySelector('#f-nilai').value;
-        const catVal = modalContent.querySelector('#f-cat').value.trim();
         const msg = formatPesanSetoranWA({
           santri: s,
           awal: awalSurah,
           hingga: hinggaSurah,
           jumlah: formatHafalan(h),
           nilai: nilaiVal,
-          keterangan: catVal || '-',
-          tanggal: tanggalSetoran
+          keterangan: (catVal ? catVal + ' ' : '') + (isMajuRec ? '(Setoran Maju / Bayar di Muka)' : (catVal ? '' : '-')),
+          tanggal: curTgl
         });
         waReport(santriId, msg);
         if (!await Store.save()) return;
-        Store.log('Setor ziyadah hafalan ' + s.nama);
+        Store.log('Setor ziyadah hafalan ' + s.nama + (isMajuRec ? ' (Setoran Maju)' : ''));
         if (hSlide) clearInterval(hSlide);
         modal.close();
-        UI.toast('Tersimpan · ' + formatHafalan(h), 'success');
+        UI.toast((isMajuRec ? 'Setoran Maju tersimpan · ' : 'Tersimpan · ') + formatHafalan(h), 'success');
         refreshSetoranView();
       };
     }

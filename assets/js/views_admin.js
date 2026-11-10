@@ -2345,6 +2345,7 @@ const Admin = (() => {
         </div>
         <div class="row mt">
           <button class="clay-btn ghost" data-lap-preset="week">7 Hari</button>
+          <button class="clay-btn ghost" data-lap-preset="thisweek">Minggu Ini</button>
           <button class="clay-btn ghost" data-lap-preset="month">Bulan Ini</button>
           <button class="clay-btn ghost" data-lap-preset="lastmonth">Bulan Lalu</button>
         </div>
@@ -2369,6 +2370,10 @@ const Admin = (() => {
       const preset = button.dataset.lapPreset;
       let dari = today, sampai = today;
       if (preset === 'week') dari = Store.tambahHari(today, -6);
+      if (preset === 'thisweek') {
+        dari = Shared.mondayOf(today);
+        sampai = today;
+      }
       if (preset === 'month') dari = today.slice(0, 8) + '01';
       if (preset === 'lastmonth') {
         const awal = new Date(today.slice(0, 8) + '01T12:00:00');
@@ -2421,6 +2426,7 @@ const Admin = (() => {
         <div class="row mt">
           <button class="clay-btn ghost" data-rk-preset="today">Hari Ini</button>
           <button class="clay-btn ghost" data-rk-preset="week">7 Hari</button>
+          <button class="clay-btn ghost" data-rk-preset="thisweek">Minggu Ini</button>
           <button class="clay-btn ghost" data-rk-preset="month">Bulan Ini</button>
           <button class="clay-btn ghost" data-rk-preset="lastmonth">Bulan Lalu</button>
           <button class="clay-btn secondary" id="rk-export">Export Excel</button>
@@ -2595,6 +2601,10 @@ const Admin = (() => {
       const preset = button.dataset.rkPreset;
       let dari = today, sampai = today;
       if (preset === 'week') dari = Store.tambahHari(today, -6);
+      if (preset === 'thisweek') {
+        dari = Shared.mondayOf(today);
+        sampai = today;
+      }
       if (preset === 'month') dari = today.slice(0, 8) + '01';
       if (preset === 'lastmonth') {
         const awal = new Date(today.slice(0, 8) + '01T12:00:00');
@@ -2755,6 +2765,7 @@ const Admin = (() => {
           <button class="clay-btn secondary" id="au-export">Export Excel</button>
           <button class="clay-btn ghost" data-au-preset="today">Hari Ini</button>
           <button class="clay-btn ghost" data-au-preset="7">7 Hari</button>
+          <button class="clay-btn ghost" data-au-preset="thisweek">Minggu Ini</button>
           <button class="clay-btn ghost" data-au-preset="30">30 Hari</button>
           <button class="clay-btn ghost" data-au-preset="month">Bulan Ini</button>
         </div>
@@ -2921,6 +2932,7 @@ const Admin = (() => {
         const today = Store.todayStr();
         const preset = button.dataset.auPreset;
         if (preset === 'today') return setRange(today, today);
+        if (preset === 'thisweek') return setRange(Shared.mondayOf(today), today);
         if (preset === 'month') return setRange(today.slice(0, 8) + '01', today);
         const days = parseInt(preset, 10) || 7;
         setRange(auAddDays(today, -(days - 1)), today);
@@ -2981,6 +2993,7 @@ const Admin = (() => {
         <div class="row mt">
           <button class="clay-btn ghost" data-rs-preset="today">Hari Ini</button>
           <button class="clay-btn ghost" data-rs-preset="week">7 Hari</button>
+          <button class="clay-btn ghost" data-rs-preset="thisweek">Minggu Ini</button>
           <button class="clay-btn ghost" data-rs-preset="month">Bulan Ini</button>
           <button class="clay-btn ghost" data-rs-preset="lastmonth">Bulan Lalu</button>
         </div>
@@ -3008,6 +3021,10 @@ const Admin = (() => {
       const preset = button.dataset.rsPreset;
       let dari = today, sampai = today;
       if (preset === 'week') dari = Store.tambahHari(today, -6);
+      if (preset === 'thisweek') {
+        dari = Shared.mondayOf(today);
+        sampai = today;
+      }
       if (preset === 'month') dari = today.slice(0, 8) + '01';
       if (preset === 'lastmonth') {
         const awal = new Date(today.slice(0, 8) + '01T12:00:00');

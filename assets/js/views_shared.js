@@ -1273,8 +1273,11 @@ function exportLaporanExcel(filters) {
         const relevantTypes = jenisSetoranUntukProgram(programs);
         const cells = days.map(day => {
           const items = (setoran.get(s.id + '|' + day.tanggal) || []).filter(item => relevantTypes.includes(item.type));
+          if (items.length) {
+            const isMaju = day.tanggal > today;
+            return { status: 'submitted', types: items.map(it => it.type), records: items, isMaju };
+          }
           if (day.tanggal > today) return { status: 'future', types: [], records: [] };
-          if (items.length) return { status: 'submitted', types: items.map(it => it.type), records: items };
           const isWeekend = (new Date(day.tanggal + 'T12:00:00')).getDay() === 0 || (new Date(day.tanggal + 'T12:00:00')).getDay() === 6;
           const isLembagaLibur = Store.isLiburLembaga ? Store.isLiburLembaga(day.tanggal) : false;
           const santriDayAbsensi = (db.kehadiran || []).filter(k => k.santriId === s.id && k.tanggal === day.tanggal);
@@ -1323,10 +1326,19 @@ function exportLaporanExcel(filters) {
     const groups = recap.groups.map(group => {
       const body = group.rows.map((row, index) => {
         const cells = row.cells.map((cell, dayIndex) => {
-          if (cell.status === 'future') return '<td class="center"><span class="badge gray">—</span></td>';
+          if (cell.status === 'future') {
+            if (allowMakeup) {
+              const tanggal = recap.days[dayIndex].tanggal;
+              return `<td class="center" title="Setoran Maju untuk ${UI.esc(UI.fmtDate(tanggal))}"><button class="clay-btn sm ghost" data-bayar-setoran data-santri-id="${UI.esc(row.s.id)}" data-tanggal="${UI.esc(tanggal)}" data-programs="${UI.esc(row.programs.join(','))}" style="padding:2px 5px;font-size:10px;color:var(--primary);border-color:var(--primary)" title="Klik untuk catat Setoran Maju (Bayar di Muka)">+ Maju</button></td>`;
+            }
+            return '<td class="center"><span class="badge gray">—</span></td>';
+          }
           if (cell.status === 'submitted') {
-            const shortInfo = (cell.records || []).map(r => formatSetoranShort(r.record, r.type)).join('\n') || cell.types.map(type => JENIS_SETORAN[type]).join(', '); const fullDetail = (cell.records || []).map(r => formatSetoranDetail(r.record, r.type)).join('\n\n') || shortInfo;
-            return `<td class="center" title="${UI.esc(shortInfo)}"><span class="badge green setoran-check-badge" title="${UI.esc(shortInfo)}" data-setoran-info="${UI.esc(fullDetail)}" data-santri-nama="${UI.esc(row.s.nama)}" data-tanggal="${UI.esc(recap.days[dayIndex].tanggal)}" style="cursor:pointer;user-select:none;-webkit-user-select:none">✓</span></td>`;
+            const shortInfo = (cell.records || []).map(r => formatSetoranShort(r.record, r.type)).join('\n') || cell.types.map(type => JENIS_SETORAN[type]).join(', ');
+            const fullDetail = (cell.records || []).map(r => formatSetoranDetail(r.record, r.type)).join('\n\n') || shortInfo;
+            const majuBadge = cell.isMaju ? ' <span style="font-size:9px;background:var(--primary);color:#fff;padding:1px 3px;border-radius:3px">Maju</span>' : '';
+            const majuTitle = cell.isMaju ? ' [Setoran Maju/Di Muka]\n' : '';
+            return `<td class="center" title="${UI.esc(majuTitle + shortInfo)}"><span class="badge green setoran-check-badge" title="${UI.esc(majuTitle + shortInfo)}" data-setoran-info="${UI.esc((cell.isMaju ? '⏩ [SETORAN MAJU / DI MUKA]\n\n' : '') + fullDetail)}" data-santri-nama="${UI.esc(row.s.nama)}" data-tanggal="${UI.esc(recap.days[dayIndex].tanggal)}" style="cursor:pointer;user-select:none;-webkit-user-select:none">✓${majuBadge}</span></td>`;
           }
           if (cell.status === 'libur') {
             return '<td class="center" title="Halaqah Libur"><span class="badge purple" style="font-size:10px;padding:2px 6px">Libur</span></td>';
@@ -1385,7 +1397,7 @@ function exportLaporanExcel(filters) {
     }).join('');
     const jumlahHari = recap.days.length;
     return `<div class="mb">
-      <div class="muted" style="font-size:13px;margin:0 0 12px">Periode ${UI.esc(UI.fmtDate(recap.period.dari))} – ${UI.esc(UI.fmtDate(recap.period.sampai))} (${jumlahHari} hari). <span class="badge green">✓</span> sudah setoran; <span class="badge blue">Sakit</span> absen sakit; <span class="badge warn">Izin</span> izin; <span class="badge purple">Libur</span> libur; <span class="badge danger">Belum</span> belum setoran.${allowMakeup ? ' Klik <b>Bayar</b> untuk mencatat setoran pada tanggal yang terlewat.' : ''} Setoran dihitung dari Tahsin, Ziyadah Bacaan, Ziyadah Hafalan, dan Mutqin.</div>
+      <div class="muted" style="font-size:13px;margin:0 0 12px">Periode ${UI.esc(UI.fmtDate(recap.period.dari))} – ${UI.esc(UI.fmtDate(recap.period.sampai))} (${jumlahHari} hari). <span class="badge green">✓</span> sudah setoran; <span class="badge blue">Sakit</span> absen sakit; <span class="badge warn">Izin</span> izin; <span class="badge purple">Libur</span> libur; <span class="badge danger">Belum</span> belum setoran.${allowMakeup ? ' Klik <b>Bayar</b> untuk setoran tertinggal, atau <b>+ Maju</b> untuk setoran di muka (esok hari).' : ''} Setoran dihitung dari Tahsin, Ziyadah Bacaan, Ziyadah Hafalan, dan Mutqin.</div>
       ${groups || '<div class="empty">Tidak ada halaqah yang sesuai dengan filter.</div>'}
     </div>`;
   }
