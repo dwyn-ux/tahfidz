@@ -89,7 +89,7 @@ const Wali = (() => {
     const items = list.slice(0, 10).map(n => `
       <div class="notif-item ${n.tipe === 'wali' ? 'notif-warn' : ''}" style="padding:8px 0;border-bottom:1px solid rgba(0,0,0,.06)">
         <div>${UI.esc(n.pesan)}</div>
-        <div class="muted" style="font-size:11px;margin-top:2px">${UI.fmtDateTime(n.waktu || n.createdAt || '')}</div>
+        <div class="muted" style="font-size:11px;margin-top:2px">${UI.fmtDateTime(n.tanggal || n.waktu || n.createdAt || '')}</div>
       </div>`).join('');
     return `
       <div class="clay-card mt">

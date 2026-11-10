@@ -4,6 +4,9 @@
 const Ustadz = (() => {
 
   function nav(active) {
+    const session = Store.getSession();
+    const unreadCount = session ? Store.notifFor(session.userId).filter(n => !n.read).length : 0;
+    const notifLabel = 'Notifikasi' + (unreadCount > 0 ? ` <span class="badge blue" style="font-size:10px;padding:2px 6px;margin-left:4px">${unreadCount}</span>` : '');
     return [
       { view: 'ustadz_dashboard', label: 'Dashboard', active: active === 'ustadz_dashboard' },
       { view: 'ustadz_absensi', label: 'Absensi', active: active === 'ustadz_absensi' },
@@ -11,7 +14,7 @@ const Ustadz = (() => {
       { view: 'ustadz_pembelajaran', label: 'Pembelajaran', active: active === 'ustadz_pembelajaran' },
       { view: 'ustadz_riwayat', label: 'Riwayat', active: active === 'ustadz_riwayat' },
       { view: 'ustadz_laporan', label: 'Laporan', active: active === 'ustadz_laporan' },
-      { view: 'ustadz_notif', label: 'Notifikasi', active: active === 'ustadz_notif' },
+      { view: 'ustadz_notif', label: notifLabel, active: active === 'ustadz_notif' },
       { view: 'quran', label: 'Al-Qur\'an', active: active === 'quran' }
     ];
   }

@@ -53,13 +53,23 @@ switch ($action) {
 
     /* ---------------- VERSION (latest git commit) ---------------- */
     case 'version':
+        syncGitUpdateNotifications();
         $commitMsg = '';
         $commitHash = '';
         if (is_dir(dirname(__DIR__) . '/.git')) {
             $commitHash = trim(@exec('git log -1 --format="%h"'));
             $commitMsg = trim(@exec('git log -1 --format="%s"'));
         }
-        send(['hash' => $commitHash, 'message' => $commitMsg]);
+        if (empty($commitHash)) {
+            $verFile = dirname(__DIR__) . '/version.json';
+            if (file_exists($verFile)) {
+                $verData = json_decode(file_get_contents($verFile), true);
+                $commitHash = $verData['hash'] ?? '';
+                $commitMsg = $verData['message'] ?? '';
+            }
+        }
+        $targetRoles = determineUpdateTargetRoles($commitMsg);
+        send(['hash' => $commitHash, 'message' => $commitMsg, 'targetRoles' => $targetRoles]);
         break;
 
     /* ---------------- BOOTSTRAP (all data, role-filtered) ---------------- */

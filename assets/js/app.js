@@ -149,10 +149,19 @@ const App = (() => {
         const v = await Store.api('version');
         if (v && v.hash) {
           const lastHash = localStorage.getItem('tahfidz_last_commit');
-          if (lastHash && lastHash !== v.hash) {
-            const msg = `Aplikasi diperbarui (v.${v.hash}): ${v.message || 'Pembaruan sistem'}`;
-            UI.toast('Update Baru: ' + (v.message || v.hash), 'info');
-            Store.addNotif(session.userId, 'admin', msg);
+          const cleanMsg = (v.message || '').replace(/^(feat|fix|refactor|perf|chore|docs|style)(\([^)]+\))?:\s*/i, '');
+          const isTargetRole = !v.targetRoles || v.targetRoles.includes(role);
+
+          if (isTargetRole && lastHash && lastHash !== v.hash) {
+            const msg = `Update Baru (v.${v.hash}): ${cleanMsg || v.hash}`;
+            UI.toast(msg, 'info', 6000);
+            if (typeof PWA !== 'undefined' && PWA.sendNotification) {
+              PWA.sendNotification('Tahfidzku Diperbarui', {
+                body: cleanMsg || ('Pembaruan sistem versi ' + v.hash),
+                tag: 'update-' + v.hash,
+                data: './index.html#' + (role + '_notif')
+              });
+            }
           }
           localStorage.setItem('tahfidz_last_commit', v.hash);
         }

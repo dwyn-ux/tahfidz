@@ -1640,9 +1640,21 @@ function exportLaporanExcel(filters) {
 
   /* ---------- Notifikasi (shared) ---------- */
   function renderNotifikasi(userId) {
-    const list = Store.notifFor(userId);
-    const icon = { wali: '👨‍👩‍👧', ustadz: '👨‍🏫', admin: '⚙️' };
+    const list = Store.notifFor(userId).slice().sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
+    const icon = { wali: '👨‍👩‍👧', ustadz: '👨‍🏫', admin: '⚙️', pengawas: '🔍', update: '🚀' };
     const perm = typeof PWA !== 'undefined' ? PWA.getNotificationPermission() : 'default';
+
+    // Tandai notifikasi sebagai sudah dibaca
+    setTimeout(() => {
+      let updated = false;
+      list.forEach(n => {
+        if (!n.read) {
+          n.read = true;
+          updated = true;
+        }
+      });
+      if (updated) Store.save();
+    }, 1500);
 
     const pwaBanner = `
       <div class="clay-card pad-sm mb" style="background:#f0fdf4;border:1px solid #bbf7d0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
@@ -1679,10 +1691,9 @@ function exportLaporanExcel(filters) {
           <div class="section-title" style="margin:0">Notifikasi</div>
           <button class="clay-btn sm ghost" id="clear-notif" style="color:var(--danger)">Hapus Semua</button>
         </div>
-        <div style="position:absolute;top:16px;right:16px;z-index:900" id="git-update-notif-container"></div>
         ${list.map(n =>
         `<div class="row center" style="justify-content:space-between;padding:12px 0;border-bottom:1px solid #eee">
-          <div class="row center" style="gap:10px"><span style="font-size:20px">${icon[n.tipe] || '📢'}</span>
+          <div class="row center" style="gap:10px"><span style="font-size:20px">${n.kategori === 'update' || n.commitHash ? '🚀' : (icon[n.tipe] || '📢')}</span>
           <div><div>${n.html ? n.pesan : UI.esc(n.pesan)}</div><div class="muted" style="font-size:12px">${UI.fmtDateTime(n.tanggal)}</div></div></div>
           ${n.read ? '' : '<span class="badge blue">Baru</span>'}
         </div>`).join('')}

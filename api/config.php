@@ -587,10 +587,147 @@ function publicUser($u) {
     return ['id' => $u['id'], 'username' => $u['username'], 'role' => $u['role'], 'refId' => $u['refId']];
 }
 
+/* ---------------- Git Commit & Version Notifications ---------------- */
+function determineUpdateTargetRoles(string $commitMsg): array {
+    $msgLower = strtolower($commitMsg);
+
+    // Admin & Pengawas always receive update notifications
+    $roles = ['admin', 'pengawas'];
+
+    // Keywords relevant to Ustadz
+    $ustadzKeywords = [
+        'setoran', 'maju', 'bayar', 'hafalan', 'bacaan', 'mutqin', 'tahsin',
+        'absensi', 'halaqah', 'talim', 'ta’lim', 'ta\'lim', 'santri',
+        'laporan', 'rekap', 'jurnal', 'ustadz', 'guru', 'kelas', 'quran',
+        'minggu ini', 'pembelajaran', 'kehadiran'
+    ];
+    $isUstadz = false;
+    foreach ($ustadzKeywords as $kw) {
+        if (strpos($msgLower, $kw) !== false) {
+            $isUstadz = true;
+            break;
+        }
+    }
+    // General user-facing changes (feat, ui, pwa, update, etc.) are also relevant to ustadz
+    if ($isUstadz || preg_match('/^(feat|ui)(\([^)]+\))?:/i', $commitMsg) || strpos($msgLower, 'pwa') !== false) {
+        $roles[] = 'ustadz';
+    }
+
+    // Keywords relevant to Wali
+    $waliKeywords = ['wali', 'ortu', 'orang tua', 'rekap orang tua'];
+    foreach ($waliKeywords as $kw) {
+        if (strpos($msgLower, $kw) !== false) {
+            $roles[] = 'wali';
+            break;
+        }
+    }
+
+    return array_values(array_unique($roles));
+}
+
+function syncGitUpdateNotifications(): void {
+    static $alreadyRun = false;
+    if ($alreadyRun) return;
+    $alreadyRun = true;
+
+    $commits = [];
+    $repoDir = dirname(__DIR__);
+    if (is_dir($repoDir . '/.git')) {
+        $lines = [];
+        @exec('git log -5 --format="%h||%s"', $lines);
+        foreach ($lines as $line) {
+            $parts = explode('||', trim($line), 2);
+            if (count($parts) === 2 && !empty($parts[0])) {
+                $commits[] = ['hash' => trim($parts[0]), 'message' => trim($parts[1])];
+            }
+        }
+        // Keep version.json in sync for environments without .git or exec
+        if (!empty($commits[0]['hash'])) {
+            $latestDate = trim(@exec('git log -1 --format="%cI"'));
+            @file_put_contents($repoDir . '/version.json', json_encode([
+                'hash' => $commits[0]['hash'],
+                'message' => $commits[0]['message'],
+                'date' => $latestDate ?: date('c')
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        }
+    }
+    if (empty($commits)) {
+        $verFile = $repoDir . '/version.json';
+        if (file_exists($verFile)) {
+            $data = json_decode(file_get_contents($verFile), true);
+            if (!empty($data['hash'])) {
+                $commits[] = ['hash' => $data['hash'], 'message' => $data['message'] ?? ''];
+            }
+        }
+    }
+    if (empty($commits)) return;
+
+    // Get current synced commit hashes from settings
+    $settings = getSettings();
+    $syncedCommits = $settings['syncedGitCommits'] ?? [];
+    if (!is_array($syncedCommits)) $syncedCommits = [];
+
+    // Filter commits that have not been broadcasted
+    $newCommits = [];
+    foreach ($commits as $c) {
+        if (!in_array($c['hash'], $syncedCommits, true)) {
+            $newCommits[] = $c;
+        }
+    }
+    if (empty($newCommits)) return;
+
+    $stmt = pdo()->query('SELECT id, role FROM users');
+    $allUsers = $stmt->fetchAll();
+    if (empty($allUsers)) return;
+
+    $newSyncedHashes = [];
+    foreach ($newCommits as $c) {
+        $hash = $c['hash'];
+        $msg = $c['message'];
+        if (empty($hash) || empty($msg)) continue;
+        if (stripos($msg, 'Merge ') === 0) {
+            $newSyncedHashes[] = $hash;
+            continue;
+        }
+
+        $targetRoles = determineUpdateTargetRoles($msg);
+        $targetUsers = array_filter($allUsers, fn($u) => in_array($u['role'], $targetRoles, true));
+
+        $cleanMsg = preg_replace('/^(feat|fix|refactor|perf|chore|docs|style)(\([^)]+\))?:\s*/i', '', $msg);
+        $cleanMsg = ucfirst(trim($cleanMsg));
+
+        foreach ($targetUsers as $user) {
+            $notifId = 'notif_git_' . $hash . '_' . $user['id'];
+            $existing = getRecord('notifikasi', $notifId);
+            if (!$existing) {
+                putRecord('notifikasi', $notifId, [
+                    'id' => $notifId,
+                    'userId' => $user['id'],
+                    'tipe' => $user['role'],
+                    'kategori' => 'update',
+                    'pesan' => "🚀 Update Aplikasi (v.{$hash}): {$cleanMsg}",
+                    'commitHash' => $hash,
+                    'tanggal' => date('c'),
+                    'updatedAt' => date('c'),
+                    'read' => false,
+                ]);
+            }
+        }
+        $newSyncedHashes[] = $hash;
+    }
+
+    if (!empty($newSyncedHashes)) {
+        $merged = array_values(array_slice(array_unique(array_merge($syncedCommits, $newSyncedHashes)), -30));
+        $settings['syncedGitCommits'] = $merged;
+        saveSettings($settings);
+    }
+}
+
 /* ---------------- Bootstrap (role-filtered data for current user) ---------------- */
 function bootstrapData($user) {
     // Terapkan kolom/tabel baru (mis. absensi ustadz) sebelum data dibaca.
     NormalizedStore::ensureUpgrade();
+    syncGitUpdateNotifications();
     $settings = publicSettings(getSettings(), $user['role']);
 
     // Admin & Pengawas: return everything
