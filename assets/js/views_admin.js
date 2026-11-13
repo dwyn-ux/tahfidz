@@ -3611,6 +3611,7 @@ const Admin = (() => {
           <button class="clay-btn ghost" id="btn-wa-test">Tes Koneksi</button>
           <button class="clay-btn ghost" id="btn-wa-test-recap" style="border:1.5px solid #2563eb;color:#1d4ed8;font-weight:600;background:#eff6ff">Tes Kirim Rekap (Pilih Santri)</button>
           <button class="clay-btn primary" id="btn-wa-recap">Kirim Rekap Sekarang (Semua)</button>
+          <button class="clay-btn ghost" id="btn-wa-logout" style="border:1.5px solid #ef4444;color:#dc2626;font-weight:600">Logout WhatsApp</button>
         </div>
         <div id="wa-status" class="mt" style="font-size:13px"></div>
 
@@ -4110,6 +4111,25 @@ const Admin = (() => {
           ? '<span style="color:var(--success)">✓ Pesan masuk antrian bridge.</span>'
           : '<span style="color:var(--danger)">Gagal mengirim. Lihat Log WhatsApp di bawah.</span>';
       });
+    };
+
+    document.getElementById('btn-wa-logout').onclick = async () => {
+      if (!confirm('Logout WhatsApp? Sesi akan dihapus dan QR baru akan muncul untuk scan ulang.')) return;
+      if (waBelumTersimpan()) { waMintaSimpan(); return; }
+      waStatusEl.innerHTML = '<span class="muted">Memproses logout...</span>';
+      try {
+        const res = await Store.waLogout();
+        const ok = res && (res.ok || (res.data && res.data.ok));
+        const msg = (res && res.data && res.data.message) || (res && res.detail) || '';
+        if (ok) {
+          waStatusEl.innerHTML = '<span style="color:var(--warn)">✓ Logout berhasil. Bridge restart — tekan <b>Cek Status</b> beberapa detik lagi untuk scan QR baru.</span>';
+          UI.toast('Logout WhatsApp berhasil. Scan QR baru untuk menghubungkan.', 'warn');
+        } else {
+          waStatusEl.innerHTML = '<span style="color:var(--danger)">Gagal logout: ' + UI.esc(msg || 'Error tidak diketahui') + '</span>';
+        }
+      } catch (e) {
+        waStatusEl.innerHTML = '<span style="color:var(--danger)">Gagal: ' + UI.esc(e.message) + '</span>';
+      }
     };
 
     // Jalankan rekap terjadwal sekarang juga, untuk mencoba tanpa menunggu

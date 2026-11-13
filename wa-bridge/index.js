@@ -319,6 +319,21 @@ ${state.lastError ? `<p style="margin:8px 0 0;color:#ef4444;font-size:12px">${st
     });
   }
 
+  if (pathname === '/logout') {
+    if (req.method !== 'POST') return json(405, { error: 'POST only' });
+    console.log('[WA] Logout diminta oleh admin. Membersihkan sesi...');
+    queue.splice(0, queue.length);
+    stopRequested = true;
+    if (sock) {
+      try { await sock.logout(); } catch (_) {}
+      sock = null;
+    }
+    try { fs.rmSync(SESSION_DIR, { recursive: true, force: true }); } catch (_) {}
+    state = { connected: false, phone: null, qr: null, status: 'logged_out', lastError: null };
+    setTimeout(startWA, 2000); // restart agar QR baru langsung muncul
+    return json(200, { ok: true, message: 'Sesi WhatsApp dihapus. Scan QR baru untuk menghubungkan.' });
+  }
+
   if (pathname === '/stop' || pathname === '/clear') {
     const cancelled = queue.length;
     queue.splice(0, queue.length);

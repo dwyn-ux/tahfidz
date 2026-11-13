@@ -498,6 +498,10 @@ const Store = (() => {
     return api('wa&op=stop');
   }
 
+  function waLogout() {
+    return api('wa&op=logout', { method: 'POST' });
+  }
+
   function waPreviewTest(payload) {
     return api('wa_preview_test', { method: 'POST', body: payload || {} }).catch(e => ({
       ok: false,
@@ -1579,7 +1583,7 @@ const Store = (() => {
     simpanTingkat, hapusTingkat, simpanKelas, hapusKelas, tingkatAda, kelasDipakaiDiTalim, jumlahSantriKelas, naturalKelasSort,
     uploadKitab, talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
     waSend, waLog, waReady, waAutoEnabled, waSendWali, waNomorWali, waCleanPhone, healWaliRelations, waStatus, waQrDataUrl, waLogServer,
-    waAutoTriggerSettings, waReportContentSettings, waAutoHour, waAutoReminder, waQueueStatus, waStopQueue, waPreviewTest, waSendTestRecap, waAbsensiMessage,
+    waAutoTriggerSettings, waReportContentSettings, waAutoHour, waAutoReminder, waQueueStatus, waStopQueue, waLogout, waPreviewTest, waSendTestRecap, waAbsensiMessage,
     lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, kehadiranRentang, dedupeKehadiran,
     setoranRentang, avgNilaiRentang, padaRentang, juzHafalanDisplay,
     absensiUstadzOf, absensiUstadzRow, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,

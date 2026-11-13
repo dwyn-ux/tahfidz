@@ -786,6 +786,21 @@ function waJalankanReminder(?DateTimeImmutable $now = null): array {
                     $nomor = waNomorWali($row, $waliRecords);
                     if ($nomor === '') continue;
 
+                    // Mingguan & bulanan: hanya kirim jika ada setoran di periode tersebut (≥ 1 kali).
+                    if ($trigger !== 'harian') {
+                        $sId = (string)($row['id'] ?? '');
+                        $setoranDiPeriode = false;
+                        foreach ($setoranRecords as $z) {
+                            if ((string)($z['santriId'] ?? '') !== $sId) continue;
+                            $tgl = (string)($z['tanggal'] ?? '');
+                            if ($tgl >= $periode['dari'] && $tgl <= $periode['sampai']) { $setoranDiPeriode = true; break; }
+                        }
+                        if (!$setoranDiPeriode) {
+                            waCatatLog($nomor, 'skipped', 'Tidak ada setoran di periode ' . $periode['dari'] . ' s.d. ' . $periode['sampai'] . ', laporan ' . $trigger . ' dilewati.', '');
+                            continue;
+                        }
+                    }
+
                     $rekap = waRekapSantri($kehadiran, (string)($row['id'] ?? ''), $periode['dari'], $periode['sampai']);
                     $pesan = waPesanRekap($row, $rekap, $periode, $namaLembaga, $trigger, $setoranRecords, $contentFlags);
 

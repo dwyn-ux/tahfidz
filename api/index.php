@@ -341,9 +341,8 @@ switch ($action) {
         $waUser = requireAuth();
         $waIsAdmin = ($waUser['role'] ?? '') === 'admin';
         $waOp = $_GET['op'] ?? 'status';
-        if (!in_array($waOp, ['status', 'qr', 'send', 'log'], true)) err('Unknown wa op', 400);
-        // Cek koneksi dan QR hanya untuk admin: keduanya menyangkut nomor
-        // bridge dan kuncinya, bukan data wali.
+        if (!in_array($waOp, ['status', 'qr', 'send', 'log', 'logout'], true)) err('Unknown wa op', 400);
+        // Cek koneksi, QR, dan logout hanya untuk admin.
         if ($waOp !== 'send' && !$waIsAdmin) err('Method not allowed', 403);
 
         $waSettings = getSettings();
@@ -378,12 +377,15 @@ switch ($action) {
         elseif ($waOp === 'send') $waPath = '/send';
         elseif ($waOp === 'queue') $waPath = '/queue';
         elseif ($waOp === 'stop') $waPath = '/stop';
+        elseif ($waOp === 'logout') $waPath = '/logout';
 
         $waPayload = null;
         if ($waOp === 'send') {
             $waPayload = json_encode(['to' => $to, 'message' => $message]);
         } elseif ($waOp === 'stop') {
             $waPayload = json_encode(['stop' => true]);
+        } elseif ($waOp === 'logout') {
+            $waPayload = json_encode(['logout' => true]);
         }
         $r = waBridgeCall($waUrl, $waKey, $waPath, $waPayload);
 
@@ -398,7 +400,7 @@ switch ($action) {
             echo $r['body'];
             exit;
         }
-        if ($waOp === 'status' || $waOp === 'queue' || $waOp === 'stop') {
+        if ($waOp === 'status' || $waOp === 'queue' || $waOp === 'stop' || $waOp === 'logout') {
             send(['ok' => $r['ok'], 'status' => $r['status'], 'data' => $r['data'], 'detail' => $r['detail']]);
         }
         send(['ok' => $r['ok'], 'status' => $r['status'], 'detail' => $r['detail']]);
