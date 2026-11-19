@@ -13,12 +13,16 @@ Sangat mudah di-deploy di shared hosting.
 
 - **Admin**: dashboard, manajemen santri/ustadz/wali/halaqah (satu halaqah dapat diampu beberapa ustadz), perpindahan santri antar-halaqah,
   rekap setoran mingguan per ustadz, pengaturan lembaga, reset data.
-- **Ustadz**: input ziyadah hafalan, tahsin, kehadiran, catatan, serta rekap setoran mingguan dan laporan per santri.
-- **Wali**: pantau progress hafalan & kehadiran anak, lihat notifikasi, edit profil & ganti password.
+- **Ustadz**: input ziyadah hafalan, tahsin, murojaah, kehadiran, catatan, serta rekap setoran mingguan dan laporan per santri.
+- **Wali**: pantau progress hafalan & kehadiran anak (termasuk murojaah), lihat notifikasi, edit profil & ganti password.
 - **Perhitungan otomatis**: total hafalan (juz/halaman/ayat), rata-rata nilai, kehadiran bulanan,
   konversi ayat ↔ halaman ↔ juz berdasarkan peta mushaf 604 halaman.
   **Satu halaman hanya dihitung setelah seluruh ayat di halaman itu selesai disetor** — boleh
   terkumpul dari beberapa kali setoran; setoran yang baru sebagian tidak menambah angka halaman.
+- **Murojaah bebas**: tersedia untuk semua santri tanpa terikat program/urutan hafalan, boleh
+  beberapa kali sehari, nilai opsional. Cara hitung halamannya sama dengan ziyadah (cakupan ayat
+  penuh), tetapi **tidak menambah total hafalan** dan punya **menu laporan tersendiri** yang
+  terpisah dari rekap setoran. Mutqin tetap dipertahankan apa adanya.
 - **WhatsApp otomatis**: laporan capaian (tahsin/ziyadah/mutqin) terkirim otomatis ke WhatsApp wali
   via WA Bridge (sesi WA admin, aman dari banned dengan delay antar pesan).
 

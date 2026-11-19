@@ -43,6 +43,7 @@ const Store = (() => {
   let hafalanRecordsBySantri = null;
   let gradeRecordsBySantri = null;
   let totalHafalanCache = new Map();
+  let murojaahTotals = new Map();
   let attendanceBySantri = null;
   let missedSetoranDays = null;
   let missedAttendanceDays = null;
@@ -52,6 +53,7 @@ const Store = (() => {
     hafalanRecordsBySantri = null;
     gradeRecordsBySantri = null;
     totalHafalanCache.clear();
+    murojaahTotals.clear();
     attendanceBySantri = null;
     missedSetoranDays = null;
     missedAttendanceDays = null;
@@ -98,7 +100,7 @@ const Store = (() => {
   // hanya mengirim perubahan, bukan menimpa seluruh database dengan cache
   // yang mungkin sudah tertinggal dari perangkat lain.
   let persisted = null;
-  const recordTypes = ['santri', 'wali', 'ustadz', 'halaqah', 'kehadiran', 'absensiUstadz', 'jurnalTalim', 'tahsin', 'ziyadahBacaan', 'ziyadahHafalan', 'mutqin', 'catatan', 'notifikasi', 'logAktivitas', 'logWa'];
+  const recordTypes = ['santri', 'wali', 'ustadz', 'halaqah', 'kehadiran', 'absensiUstadz', 'jurnalTalim', 'tahsin', 'ziyadahBacaan', 'ziyadahHafalan', 'mutqin', 'murojaah', 'catatan', 'notifikasi', 'logAktivitas', 'logWa'];
 
   function defaultDB() {
     return {
@@ -121,7 +123,7 @@ const Store = (() => {
       users: [], santri: [], wali: [], ustadz: [], halaqah: [],
       tingkat: DEFAULT_TINGKAT.slice(), kelas: [],
       levelTahfidz: ['Tahsin', 'Ziyadah', 'Mutqin'],
-      kehadiran: [], absensiUstadz: [], jurnalTalim: [], tahsin: [], ziyadahBacaan: [], ziyadahHafalan: [], mutqin: [], catatan: [],
+      kehadiran: [], absensiUstadz: [], jurnalTalim: [], tahsin: [], ziyadahBacaan: [], ziyadahHafalan: [], mutqin: [], murojaah: [], catatan: [],
       tahunAjaran: ['2024/2025', '2025/2026', '2026/2027'], semester: ['Ganjil', 'Genap'],
       notifikasi: [], logAktivitas: [], logWa: [], setoranNotif: []
     };
@@ -1027,6 +1029,40 @@ const Store = (() => {
     return result;
   }
 
+  // Murojaah memakai cara hitung halaman yang sama dengan ziyadah (memakai
+  // cakupanHalaman), TAPI sengaja tidak ikut masuk total hafalan dan peta
+  // hafalan. Nilainya juga tidak memengaruhi rata-rata nilai setoran.
+  function totalMurojaahSantri(santriId, dari, sampai) {
+    const key = santriId + '|' + (dari || '') + '|' + (sampai || '');
+    if (murojaahTotals.has(key)) return murojaahTotals.get(key);
+    const records = (db.murojaah || []).filter(r => r && r.santriId === santriId &&
+      (!dari || String(r.tanggal || '') >= dari) &&
+      (!sampai || String(r.tanggal || '') <= sampai));
+    if (!records.length) {
+      murojaahTotals.set(key, null);
+      return null;
+    }
+    const cakupan = cakupanHalaman(records);
+    const ayahs = cakupan.merged.reduce((n, r) => n + (r[1] - r[0] + 1), 0);
+    const touched = [...cakupan.touched];
+    const juzStart = touched.length ? pageToJuz(Math.min(...touched)) : 1;
+    const juzEnd = touched.length ? pageToJuz(Math.max(...touched)) : 1;
+    const nilaiList = records
+      .map(r => Number(r.nilai))
+      .filter(n => Number.isFinite(n) && n > 0);
+    const result = {
+      ayahs, pages: cakupan.full.size, juzStart, juzEnd,
+      juzRange: Math.max(1, juzEnd - juzStart + 1),
+      fullPages: cakupan.full, partPages: cakupan.part,
+      setoran: records.length,
+      nilaiRata: nilaiList.length
+        ? Math.round(nilaiList.reduce((a, b) => a + b, 0) / nilaiList.length) : null,
+      terakhir: records.slice().sort((a, b) => String(b.tanggal || '').localeCompare(String(a.tanggal || '')))[0]
+    };
+    murojaahTotals.set(key, result);
+    return result;
+  }
+
   function avgNilai(santriId) {
     const records = getGradeRecordsBySantri().get(santriId) || [];
     if (!records.length) return 0;
@@ -1580,7 +1616,7 @@ const Store = (() => {
     uploadKitab, talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
     waSend, waLog, waReady, waAutoEnabled, waSendWali, waNomorWali, waCleanPhone, healWaliRelations, waStatus, waQrDataUrl, waLogServer,
     waAutoTriggerSettings, waReportContentSettings, waAutoHour, waAutoReminder, waQueueStatus, waStopQueue, waLogout, waPreviewTest, waSendTestRecap, waAbsensiMessage,
-    lastZiyadah, lastHafalan, totalHafalanSantri, avgNilai, kehadiranBulan, kehadiranRentang, dedupeKehadiran,
+    lastZiyadah, lastHafalan, totalHafalanSantri, totalMurojaahSantri, avgNilai, kehadiranBulan, kehadiranRentang, dedupeKehadiran,
     setoranRentang, avgNilaiRentang, padaRentang, juzHafalanDisplay,
     absensiUstadzOf, absensiUstadzRow, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,
     liburkanHalaqah, batalkanLiburHalaqah, halaqahLiburInfo, getLiburLembaga, isLiburLembaga, getLiburLembagaInfo, tambahLiburLembaga, hapusLiburLembaga, terapkanLiburLembaga,

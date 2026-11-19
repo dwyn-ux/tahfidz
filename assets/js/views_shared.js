@@ -331,6 +331,13 @@ const Shared = (() => {
         hapus: (session && (session.role === 'ustadz' || session.role === 'admin')) ? `<button class="clay-btn sm ghost" data-hapus="mutqin" data-id="${m.id}" style="padding:2px 8px;font-size:11px;color:var(--danger)">Hapus</button>` : ''
       });
     });
+    (db.murojaah || []).filter(m => m.santriId === santriId).forEach(m => {
+      const h = computeHafalan(m.sAwal, m.aAwal, m.sAkhir, m.aAkhir);
+      items.push({
+        t: m.tanggal, html: `<span class="badge purple" style="padding:2px 7px;font-size:10px">Murojaah</span> — ${getSurah(m.sAwal).latin}:${m.aAwal} → ${getSurah(m.sAkhir).latin}:${m.aAkhir} · <b>${formatHafalan(h)}</b>${m.nilai === null || m.nilai === undefined || m.nilai === '' ? '' : ' · Nilai ' + m.nilai}<div class="muted">${UI.esc(m.catatan || '')}</div>`,
+        hapus: (session && (session.role === 'ustadz' || session.role === 'admin')) ? `<button class="clay-btn sm ghost" data-hapus="murojaah" data-id="${m.id}" style="padding:2px 8px;font-size:11px;color:var(--danger)">Hapus</button>` : ''
+      });
+    });
     db.kehadiran.filter(k => k.santriId === santriId).forEach(k => {
       const ket = k.keterangan || k.catatan || '';
       items.push({
@@ -1122,6 +1129,146 @@ function exportLaporanExcel(filters) {
     return rekapSetoranRange();
   }
 
+  /* ---------- Laporan Murojaah (sengaja terpisah dari laporan setoran) ----------
+     Murojaah tidak masuk JENIS_SETORAN maupun rekap setoran. Halamannya tetap
+     dihitung dengan cakupan ayat penuh seperti ziyadah, tetapi angkanya tidak
+     ikut total hafalan. */
+  function renderLaporanMurojaah(container, options) {
+    if (!container) return;
+    const opt = options || {};
+    const daftarSantri = opt.santriList || Store.get().santri || [];
+    const awal = rekapSetoranRange();
+    const state = { dari: awal.dari, sampai: awal.sampai, cari: '' };
+
+    function presetRange(preset) {
+      const today = Store.todayStr();
+      if (preset === 'week') return { dari: Store.tambahHari(today, -6), sampai: today };
+      if (preset === 'thisweek') return { dari: mondayOf(today), sampai: today };
+      if (preset === 'month') return { dari: today.slice(0, 8) + '01', sampai: today };
+      if (preset === 'lastmonth') {
+        const start = new Date(today.slice(0, 8) + '01T12:00:00');
+        start.setMonth(start.getMonth() - 1);
+        const end = new Date(start.getFullYear(), start.getMonth() + 1, 0);
+        return {
+          dari: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-01`,
+          sampai: `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+        };
+      }
+      return { dari: today, sampai: today };
+    }
+
+    function kumpulkan() {
+      const db = Store.get();
+      const recs = (db.murojaah || []).filter(r =>
+        (!state.dari || String(r.tanggal || '') >= state.dari) &&
+        (!state.sampai || String(r.tanggal || '') <= state.sampai));
+      const term = state.cari.trim().toLowerCase();
+      const rows = [];
+      daftarSantri.forEach(s => {
+        if (term && !s.nama.toLowerCase().includes(term) && !String(s.nis || '').includes(term)) return;
+        const list = recs.filter(r => r.santriId === s.id);
+        if (!list.length) return;
+        const total = Store.totalMurojaahSantri(s.id, state.dari, state.sampai);
+        if (!total) return;
+        rows.push({ s, list, total });
+      });
+      rows.sort((a, b) => String(a.s.nama).localeCompare(String(b.s.nama), 'id', { numeric: true }));
+      return rows;
+    }
+
+    function paint() {
+      const rows = kumpulkan();
+      const totSetoran = rows.reduce((n, r) => n + r.list.length, 0);
+      const totHalaman = rows.reduce((n, r) => n + r.total.pages, 0);
+      const totAyat = rows.reduce((n, r) => n + r.total.ayahs, 0);
+      const body = container.querySelector('#laporan-murojaah-body');
+      if (!body) return;
+      body.innerHTML = `
+        <div class="grid kpi">
+          ${statCard('', rows.length, 'Santri Murojaah', '#7E22CE')}
+          ${statCard('', totSetoran, 'Setoran Murojaah', '#3B82F6')}
+          ${statCard('', totHalaman, 'Halaman Penuh', '#16A34A')}
+          ${statCard('', totAyat, 'Total Ayat', '#F59E0B')}
+        </div>
+        <div class="clay-card mt">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <div class="section-title" style="margin:0">Rekap Murojaah per Santri</div>
+            <button class="clay-btn ghost sm" id="lm-export">⬇ Unduh Excel</button>
+          </div>
+          <div class="muted" style="font-size:12px;margin:6px 0">Halaman penuh = seluruh ayat di halaman itu sudah dimurojaah, boleh terkumpul dari beberapa setoran. Tidak termasuk total hafalan ziyadah.</div>
+          <div class="table-wrap"><table class="clay-table">
+            <thead><tr><th>No</th><th>Santri</th><th>Kelas</th><th>Setoran</th><th>Ayat</th><th>Halaman Penuh</th><th>Juz</th><th>Nilai Rata²</th><th>Terakhir</th></tr></thead>
+            <tbody>${rows.map((r, i) => `<tr>
+              <td class="center">${i + 1}</td>
+              <td><b>${UI.esc(r.s.nama)}</b><div class="muted" style="font-size:11px">${UI.esc(Store.halaqahSummaryForSantri(r.s))}</div></td>
+              <td>${UI.esc(Store.educationLabel(r.s))}</td>
+              <td class="center">${r.list.length}</td>
+              <td class="center">${r.total.ayahs}</td>
+              <td class="center"><span class="badge purple">${r.total.pages} hlm</span></td>
+              <td class="center">${r.total.juzRange === 1 ? 'Juz ' + r.total.juzStart : 'Juz ' + r.total.juzStart + '–' + r.total.juzEnd}</td>
+              <td class="center">${r.total.nilaiRata === null ? '-' : r.total.nilaiRata}</td>
+              <td class="center" style="font-size:12px">${r.total.terakhir ? UI.esc(formatSetoranLabel(r.total.terakhir)) : '-'}</td>
+            </tr>`).join('') || '<tr><td colspan="9"><div class="empty">Belum ada setoran murojaah pada periode ini.</div></td></tr>'}</tbody>
+          </table></div>
+        </div>
+        ${rows.length ? `<div class="clay-card mt">
+          <div class="section-title">Rincian Setoran per Santri</div>
+          ${rows.map(r => `<details style="margin-bottom:8px">
+            <summary style="cursor:pointer;font-size:13px"><b>${UI.esc(r.s.nama)}</b> — ${r.list.length} setoran · ${r.total.pages} halaman penuh</summary>
+            <div class="table-wrap mt"><table class="clay-table">
+              <thead><tr><th>Tanggal</th><th>Rentang Ayat</th><th>Capaian</th><th>Nilai</th><th>Catatan</th></tr></thead>
+              <tbody>${r.list.slice().sort((a, b) => String(b.tanggal || '').localeCompare(String(a.tanggal || ''))).map(m => {
+                const h = computeHafalan(m.sAwal, m.aAwal, m.sAkhir, m.aAkhir);
+                return `<tr><td>${UI.esc(UI.fmtDate(m.tanggal))}</td><td>${UI.esc(formatSetoranLabel(m))}</td><td>${formatHafalan(h)}</td><td>${m.nilai === null || m.nilai === undefined || m.nilai === '' ? '-' : m.nilai}</td><td class="muted">${UI.esc(m.catatan || '')}</td></tr>`;
+              }).join('')}</tbody>
+            </table></div>
+          </details>`).join('')}
+        </div>` : ''}`;
+
+      container.querySelector('#lm-export').onclick = () => {
+        const head = '<thead><tr><th>No</th><th>Santri</th><th>NIS</th><th>Setoran</th><th>Ayat</th><th>Halaman Penuh</th><th>Juz</th><th>Nilai Rata²</th><th>Terakhir</th></tr></thead>';
+        const isi = rows.map((r, i) => `<tr><td>${i + 1}</td><td>${UI.esc(r.s.nama)}</td><td>${UI.esc(r.s.nis || '')}</td><td>${r.list.length}</td><td>${r.total.ayahs}</td><td>${r.total.pages}</td><td>${r.total.juzRange === 1 ? 'Juz ' + r.total.juzStart : 'Juz ' + r.total.juzStart + '-' + r.total.juzEnd}</td><td>${r.total.nilaiRata === null ? '' : r.total.nilaiRata}</td><td>${r.total.terakhir ? UI.esc(UI.fmtDate(r.total.terakhir.tanggal)) : ''}</td></tr>`).join('');
+        downloadExcel('Laporan Murojaah ' + (state.dari || '') + ' s.d. ' + (state.sampai || ''), '<table>' + head + '<tbody>' + isi + '</tbody></table>');
+      };
+    }
+
+    container.innerHTML = `
+      <div class="clay-card mb">
+        <div class="section-title">Filter Laporan Murojaah</div>
+        <div class="row">
+          <div style="flex:1">${UI.field('Dari Tanggal', `<input type="date" class="clay-input" id="lm-dari" value="${state.dari}">`)}</div>
+          <div style="flex:1">${UI.field('Sampai Tanggal', `<input type="date" class="clay-input" id="lm-sampai" value="${state.sampai}">`)}</div>
+        </div>
+        <div class="row mt">
+          <button class="clay-btn ghost" data-lm-preset="week">7 Hari</button>
+          <button class="clay-btn ghost" data-lm-preset="thisweek">Minggu Ini</button>
+          <button class="clay-btn ghost" data-lm-preset="month">Bulan Ini</button>
+          <button class="clay-btn ghost" data-lm-preset="lastmonth">Bulan Lalu</button>
+        </div>
+        <div class="mt">${UI.field('Cari Santri', `<input class="clay-input" id="lm-cari" type="search" placeholder="Nama atau NIS..." autocomplete="off">`)}</div>
+      </div>
+      <div id="laporan-murojaah-body"></div>`;
+
+    const dariEl = container.querySelector('#lm-dari');
+    const sampaiEl = container.querySelector('#lm-sampai');
+    const cariEl = container.querySelector('#lm-cari');
+    const apply = () => {
+      state.dari = dariEl.value;
+      state.sampai = sampaiEl.value;
+      setRekapSetoranRange(state.dari, state.sampai);
+      paint();
+    };
+    dariEl.onchange = apply;
+    sampaiEl.onchange = apply;
+    bindSearchInput(cariEl, () => { state.cari = cariEl.value; paint(); });
+    container.querySelectorAll('[data-lm-preset]').forEach(button => button.onclick = () => {
+      const r = presetRange(button.dataset.lmPreset);
+      dariEl.value = r.dari; sampaiEl.value = r.sampai;
+      apply();
+    });
+    paint();
+  }
+
   // Periode rekap setoran: rentang tanggal bebas. Nilai `week` (mingguan lama)
   // masih diterima supaya tautan atau pemanggilan sebelumnya tidak rusak.
   function depositPeriod(filters) {
@@ -1624,7 +1771,7 @@ function exportLaporanExcel(filters) {
     }
   });
 
-  return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, loadLaporan, bindLaporanExport, exportLaporanExcel, htmlTableToSheet, downloadExcel, downloadXlsx, downloadTemplateExcel, bulanLabel, mondayOf, rekapSetoranRange, setRekapSetoranRange, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, kirimRekapOtomatis, ICONS, hafalanMapHTML };
+  return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, renderLaporanMurojaah, loadLaporan, bindLaporanExport, exportLaporanExcel, htmlTableToSheet, downloadExcel, downloadXlsx, downloadTemplateExcel, bulanLabel, mondayOf, rekapSetoranRange, setRekapSetoranRange, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, kirimRekapOtomatis, ICONS, hafalanMapHTML };
 })();
 
 // Detail info saat centang setoran di-hover (desktop) atau di-tap/hold (HP)

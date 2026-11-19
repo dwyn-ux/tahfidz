@@ -113,10 +113,14 @@ const Wali = (() => {
     const ziy = db.ziyadahHafalan.filter(z => z.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal));
     // Mutqin
     const mut = db.mutqin.filter(m => m.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+    // Murojaah bebas — dihitung terpisah, tidak masuk total hafalan di atas.
+    const muro = (db.murojaah || []).filter(m => m.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal));
+    const totalMuro = Store.totalMurojaahSantri(s.id);
 
     const tahsinRows = tahsin.map(t => `<tr><td>${UI.fmtDate(t.tanggal)}</td><td>Hal ${t.halAwal}-${t.halAkhir}</td><td>${t.nilai}</td><td class="muted">${UI.esc(t.catatan || '')}</td></tr>`).join('');
     const ziyRows = ziy.map(z => `<tr><td>${UI.fmtDate(z.tanggal)}</td><td>${getSurah(z.sAwal).latin}:${z.aAwal} → ${getSurah(z.sAkhir).latin}:${z.aAkhir}</td><td>${formatHafalan(computeHafalan(z.sAwal, z.aAwal, z.sAkhir, z.aAkhir))}</td><td>${z.nilai}</td></tr>`).join('');
     const mutRows = mut.map(m => `<tr><td>${UI.fmtDate(m.tanggal)}</td><td>${getSurah(m.sAwal).latin}:${m.aAwal} → ${getSurah(m.sAkhir).latin}:${m.aAkhir}</td><td>${m.totalHafalan} hlm</td><td>${m.nilai}</td></tr>`).join('');
+    const muroRows = muro.map(m => `<tr><td>${UI.fmtDate(m.tanggal)}</td><td>${getSurah(m.sAwal).latin}:${m.aAwal} → ${getSurah(m.sAkhir).latin}:${m.aAkhir}</td><td>${formatHafalan(computeHafalan(m.sAwal, m.aAwal, m.sAkhir, m.aAkhir))}</td><td>${m.nilai === null || m.nilai === undefined || m.nilai === '' ? '-' : m.nilai}</td></tr>`).join('');
 
     // grafik perkembangan: halaman penuh yang sudah selesai sampai tiap tanggal
     const urutSetoran = [...ziy, ...mut].sort((a, b) => String(a.tanggal).localeCompare(String(b.tanggal)));
@@ -130,6 +134,7 @@ const Wali = (() => {
         ${Shared.statCard('', h ? h.pages + ' hlm' : '-', 'Total Hafalan', '#16A34A')}
         ${Shared.statCard('', ziy.length, 'Setoran Ziyadah', '#3B82F6')}
         ${Shared.statCard('', mut.length, 'Murajaah Mutqin', '#FACC15')}
+        ${Shared.statCard('', totalMuro ? totalMuro.pages + ' hlm' : '-', 'Murojaah (terpisah)', '#7E22CE')}
         ${Shared.statCard('', Store.avgNilai(s.id) || '-', 'Rata² Nilai', '#22C55E')}
       </div>
       <div class="clay-card mt">
@@ -152,6 +157,11 @@ const Wali = (() => {
       <div class="clay-card mt">
         <div class="section-title"> Mutqin</div>
         <div class="table-wrap"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Murajaah</th><th>Total</th><th>Nilai</th></tr></thead><tbody>${mutRows || '<tr><td colspan="4"><div class="empty">Belum ada.</div></td></tr>'}</tbody></table></div>
+      </div>
+      <div class="clay-card mt">
+        <div class="section-title"> Murojaah (Bebas)</div>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">${totalMuro ? `${muro.length} setoran · ${totalMuro.ayahs} ayat · <b>${totalMuro.pages} halaman penuh</b>` : 'Belum ada setoran murojaah.'} Angka ini tidak menambah Total Hafalan di atas.</div>
+        <div class="table-wrap"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Setoran</th><th>Capaian</th><th>Nilai</th></tr></thead><tbody>${muroRows || '<tr><td colspan="4"><div class="empty">Belum ada.</div></td></tr>'}</tbody></table></div>
       </div>`;
   }
 

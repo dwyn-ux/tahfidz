@@ -93,7 +93,7 @@ switch ($action) {
 
         // Define allowed record types per role
         NormalizedStore::ensureUpgrade();
-        $ustadzWritable = ['kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
+        $ustadzWritable = ['kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','murojaah','catatan','notifikasi','logAktivitas','logWa'];
 
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             if ($u['role'] === 'wali') {
@@ -171,8 +171,8 @@ switch ($action) {
         $b = body();
 
         // Define allowed types per role
-        $adminTypes = ['santri','wali','ustadz','halaqah','kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
-        $ustadzTypes = ['kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','catatan','notifikasi','logAktivitas','logWa'];
+        $adminTypes = ['santri','wali','ustadz','halaqah','kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','murojaah','catatan','notifikasi','logAktivitas','logWa'];
+        $ustadzTypes = ['kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','murojaah','catatan','notifikasi','logAktivitas','logWa'];
 
         // Basis data lama bisa belum punya kolom/tabel terbaru. Penanda upgrade
         // membuat pemanggilan berikutnya tanpa biaya DDL.

@@ -124,6 +124,7 @@ const Admin = (() => {
         { view: 'admin_absensi_ustadz', label: 'Absensi Ustadz', active: active === 'admin_absensi_ustadz' },
         { view: 'admin_riwayat', label: 'Riwayat', active: active === 'admin_riwayat' },
         { view: 'admin_laporan', label: 'Laporan', active: active === 'admin_laporan' },
+        { view: 'admin_laporan_murojaah', label: 'Laporan Murojaah', active: active === 'admin_laporan_murojaah' },
         { view: 'admin_libur', label: 'Kalender Libur', active: active === 'admin_libur' },
         { view: 'admin_notif', label: notifLabel, active: active === 'admin_notif' },
         { view: 'quran', label: 'Al-Qur\'an', active: active === 'quran' }
@@ -140,6 +141,7 @@ const Admin = (() => {
       { view: 'admin_libur', label: 'Kalender Libur', active: active === 'admin_libur' },
       { view: 'admin_riwayat', label: 'Riwayat', active: active === 'admin_riwayat' },
       { view: 'admin_laporan', label: 'Laporan', active: active === 'admin_laporan' },
+      { view: 'admin_laporan_murojaah', label: 'Laporan Murojaah', active: active === 'admin_laporan_murojaah' },
       { view: 'admin_rekap_kehadiran', label: 'Rekap Kehadiran', active: active === 'admin_rekap_kehadiran' },
       { view: 'admin_rekap_setoran', label: 'Rekap Setoran', active: active === 'admin_rekap_setoran' },
       { view: 'admin_notif', label: notifLabel, active: active === 'admin_notif' },
@@ -160,6 +162,7 @@ const Admin = (() => {
       { view: 'ustadz_pembelajaran', label: 'Pembelajaran', active: active === 'ustadz_pembelajaran' },
       { view: 'ustadz_riwayat', label: 'Riwayat', active: active === 'ustadz_riwayat' },
       { view: 'ustadz_laporan', label: 'Laporan', active: active === 'ustadz_laporan' },
+      { view: 'ustadz_laporan_murojaah', label: 'Laporan Murojaah', active: active === 'ustadz_laporan_murojaah' },
       { view: 'ustadz_notif', label: notifLabel, active: active === 'ustadz_notif' },
       { view: 'quran', label: 'Al-Qur\'an', active: active === 'quran' }
     ];
@@ -473,6 +476,7 @@ const Admin = (() => {
       const zBacaan = (db.ziyadahBacaan || []).filter(b => b.tanggal === currentDate);
       const tahsin = (db.tahsin || []).filter(t => t.tanggal === currentDate);
       const mutqin = (db.mutqin || []).filter(m => m.tanggal === currentDate);
+      const murojaah = (db.murojaah || []).filter(m => m.tanggal === currentDate);
 
       // 1. Process Guru data
       const guruList = activeUstadz.map(u => {
@@ -595,6 +599,17 @@ const Admin = (() => {
             badgeClass: 'purple',
             desc: `Juz ${m.juz || '-'} ${surahObj ? surahObj.latin : ''} (Ayat ${m.ayat || '-'})`,
             nilai: m.nilai || '-',
+            catatan: m.catatan || '',
+            ustadz: ustadzNameById(m.ustadzId),
+            waktu: m._created ? UI.fmtDateTime(m._created) : '-'
+          });
+        });
+        murojaah.filter(m => m.santriId === s.id).forEach(m => {
+          items.push({
+            tipe: 'Murojaah',
+            badgeClass: 'purple',
+            desc: (typeof formatSetoranLabel === 'function' ? formatSetoranLabel(m) : `${m.sAwal || ''}:${m.aAwal || ''}`),
+            nilai: m.nilai === null || m.nilai === undefined || m.nilai === '' ? '-' : m.nilai,
             catatan: m.catatan || '',
             ustadz: ustadzNameById(m.ustadzId),
             waktu: m._created ? UI.fmtDateTime(m._created) : '-'
@@ -2313,6 +2328,7 @@ const Admin = (() => {
             else if (type === 'ziyadahBacaan') db.ziyadahBacaan = db.ziyadahBacaan.filter(x => x.id !== id);
             else if (type === 'ziyadahHafalan') db.ziyadahHafalan = db.ziyadahHafalan.filter(x => x.id !== id);
             else if (type === 'mutqin') db.mutqin = db.mutqin.filter(x => x.id !== id);
+            else if (type === 'murojaah') db.murojaah = (db.murojaah || []).filter(x => x.id !== id);
             Store.save(); UI.toast('Setoran dihapus', 'success');
             document.getElementById('riwayat-content').innerHTML = Shared.renderRiwayat(selectedSantriId);
             bindActions();
@@ -2407,6 +2423,13 @@ const Admin = (() => {
     };
     ['f-dari', 'f-sampai', 'f-halaqah', 'f-level', 'f-kelas', 'f-status'].forEach(id => document.getElementById(id).onchange = apply);
     apply();
+  }
+
+  /* ---------------- Laporan Murojaah (terpisah dari setoran) ---------------- */
+  function laporanMurojaah() {
+    Shared.shell('admin', nav('admin_laporan_murojaah'), '');
+    Shared.setHeader('Laporan Murojaah', 'Rekap murojaah seluruh santri');
+    Shared.renderLaporanMurojaah(document.getElementById('view-content'), { santriList: Store.get().santri || [] });
   }
 
   /* ---------------- Rekap Kehadiran ----------------
@@ -4909,5 +4932,5 @@ const Admin = (() => {
     renderLibur();
   }
 
-  return { nav, dashboard, liveMonitor, santri, ustadz, halaqah, master, absensiUstadz, riwayat, laporan, rekapKehadiran, rekapSetoran, notif, talim, adminLibur, settings, importSantriDialog };
+  return { nav, dashboard, liveMonitor, santri, ustadz, halaqah, master, absensiUstadz, riwayat, laporan, laporanMurojaah, rekapKehadiran, rekapSetoran, notif, talim, adminLibur, settings, importSantriDialog };
 })();

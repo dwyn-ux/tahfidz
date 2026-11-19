@@ -13,6 +13,7 @@ const App = (() => {
     admin_absensi_ustadz: () => Admin.absensiUstadz(),
     admin_riwayat: () => Admin.riwayat(),
     admin_laporan: () => Admin.laporan(),
+    admin_laporan_murojaah: () => Admin.laporanMurojaah(),
     admin_rekap_kehadiran: () => Admin.rekapKehadiran(),
     admin_rekap_setoran: () => Admin.rekapSetoran(),
     admin_notif: () => Admin.notif(),
@@ -27,6 +28,7 @@ const App = (() => {
     ustadz_pembelajaran: () => Ustadz.pembelajaran(),
     ustadz_riwayat: () => Ustadz.riwayat(),
     ustadz_laporan: () => Ustadz.laporan(),
+    ustadz_laporan_murojaah: () => Ustadz.laporanMurojaah(),
     ustadz_notif: () => Ustadz.notif(),
     // Wali
     wali_dashboard: () => Wali.dashboard(),
@@ -93,7 +95,7 @@ const App = (() => {
     if (!role) return false;
     if (role === 'admin') return view.startsWith('admin_');
     if (role === 'pengawas') {
-      return ['admin_live_monitor', 'admin_dashboard', 'admin_rekap_kehadiran', 'admin_rekap_setoran', 'admin_absensi_ustadz', 'admin_riwayat', 'admin_laporan', 'admin_libur', 'admin_notif'].includes(view);
+      return ['admin_live_monitor', 'admin_dashboard', 'admin_rekap_kehadiran', 'admin_rekap_setoran', 'admin_absensi_ustadz', 'admin_riwayat', 'admin_laporan', 'admin_laporan_murojaah', 'admin_libur', 'admin_notif'].includes(view);
     }
     return view.startsWith(role + '_');
   }

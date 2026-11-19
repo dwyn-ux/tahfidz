@@ -12,7 +12,7 @@ final class NormalizedStore {
     // dinaikkan setiap kali ada tabel baru; ensureSchema() bersifat
     // idempotent (CREATE TABLE IF NOT EXISTS + kolom aditif), jadi instalasi
     // lama otomatis mendapat tabel baru tanpa kehilangan data.
-    public const UPGRADE_NAME = '2026_10_wa_auto_log';
+    public const UPGRADE_NAME = '2026_11_murojaah_table';
 
     /**
      * Pemetaan nama rekaman yang dipakai frontend ke tabel dan kolom SQL.
@@ -140,6 +140,21 @@ final class NormalizedStore {
                     'aAkhir' => ['ayat_akhir', $integer], 'nilai' => ['nilai', $integer],
                     'catatan' => ['catatan', $text], 'totalHafalan' => ['total_hafalan', $integer],
                     '_created' => ['created_ms', $integer],
+                ],
+                'indexes' => [['santri_id', 'tanggal'], ['ustadz_id', 'tanggal']],
+            ],
+            // Murojaah bebas (semua santri, boleh beberapa kali sehari, nilai
+            // opsional). Tidak punya totalHafalan manual: halaman penuh dihitung
+            // dari cakupan ayat seperti ziyadah. Sengaja tidak masuk rata-rata
+            // nilai setoran di gradeScores().
+            'murojaah' => [
+                'table' => 'murojaah',
+                'fields' => [
+                    'santriId' => ['santri_id', $short], 'ustadzId' => ['ustadz_id', $short],
+                    'tanggal' => ['tanggal', $date], 'sAwal' => ['surat_awal', $integer],
+                    'aAwal' => ['ayat_awal', $integer], 'sAkhir' => ['surat_akhir', $integer],
+                    'aAkhir' => ['ayat_akhir', $integer], 'nilai' => ['nilai', $integer],
+                    'catatan' => ['catatan', $text], '_created' => ['created_ms', $integer],
                 ],
                 'indexes' => [['santri_id', 'tanggal'], ['ustadz_id', 'tanggal']],
             ],

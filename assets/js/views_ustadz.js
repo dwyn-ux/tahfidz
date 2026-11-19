@@ -14,6 +14,7 @@ const Ustadz = (() => {
       { view: 'ustadz_pembelajaran', label: 'Pembelajaran', active: active === 'ustadz_pembelajaran' },
       { view: 'ustadz_riwayat', label: 'Riwayat', active: active === 'ustadz_riwayat' },
       { view: 'ustadz_laporan', label: 'Laporan', active: active === 'ustadz_laporan' },
+      { view: 'ustadz_laporan_murojaah', label: 'Laporan Murojaah', active: active === 'ustadz_laporan_murojaah' },
       { view: 'ustadz_notif', label: notifLabel, active: active === 'ustadz_notif' },
       { view: 'quran', label: 'Al-Qur\'an', active: active === 'quran' }
     ];
@@ -1241,12 +1242,13 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const c = ctx(); _scope = c.scope;
     const navItems = (c.role === 'admin') ? Admin.nav('ustadz_pembelajaran') : nav('ustadz_pembelajaran');
     Shared.shell(c.role, navItems, '');
-    Shared.setHeader('Pembelajaran', 'Tahsin · Ziyadah · Mutqin · Umum');
+    Shared.setHeader('Pembelajaran', 'Tahsin · Ziyadah · Mutqin · Murojaah · Umum');
     document.getElementById('view-content').innerHTML = `
       <div class="pill-tabs" id="tabs">
         <button class="pill active" data-tab="tahsin"> Tahsin</button>
         <button class="pill" data-tab="ziyadah"> Ziyadah</button>
         <button class="pill" data-tab="mutqin"> Mutqin</button>
+        <button class="pill" data-tab="murojaah"> Murojaah</button>
         <button class="pill" data-tab="umum"> Umum</button>
       </div>
       <div id="tab-content"></div>`;
@@ -1256,6 +1258,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       if (tab === 'tahsin') renderTahsin();
       else if (tab === 'ziyadah') renderZiyadah();
       else if (tab === 'mutqin') renderMutqin();
+      else if (tab === 'murojaah') renderMurojaah();
       else renderUmum();
     };
     tabs.querySelectorAll('.pill').forEach(p => p.onclick = () => render(p.dataset.tab));
@@ -1859,6 +1862,127 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     updateTglUI();
   }
 
+  /* ----- Murojaah -----
+     Bebas untuk semua santri: tidak terikat program/urutan hafalan, boleh
+     beberapa kali sehari, nilai opsional. Cara hitung halaman tetap sama dengan
+     ziyadah (cakupan ayat penuh), tapi angkanya tidak masuk total hafalan. */
+  function renderMurojaah() {
+    const db = Store.get();
+    const santri = mySantri();
+    const t = Store.todayStr();
+    const rows = santri.map(s => {
+      const semua = (db.murojaah || []).filter(m => m.santriId === s.id);
+      const rec = semua.slice().sort((a, b) => String(b.tanggal || '').localeCompare(String(a.tanggal || '')))[0];
+      const total = Store.totalMurojaahSantri(s.id);
+      const hariIni = semua.filter(m => m.tanggal === t).length;
+      return `<tr>
+        <td><b>${UI.esc(s.nama)}</b><div class="muted" style="font-size:11px">${UI.esc(Store.programSummaryForSantri(s))}</div></td>
+        <td>${rec ? UI.esc(formatSetoranLabel(rec)) : '<span class="muted">-</span>'}</td>
+        <td>${total ? `<span class="badge purple">${total.pages} hlm penuh</span>` : '<span class="muted">-</span>'}</td>
+        <td class="center">${hariIni ? `<span class="badge green">${hariIni}× hari ini</span>` : '-'}</td>
+        <td><button class="clay-btn sm primary" data-murojaah="${s.id}">+ Murojaah</button></td>
+      </tr>`;
+    }).join('');
+    document.getElementById('tab-content').innerHTML = `
+      <div class="clay-card">
+        <div class="section-title"> Input Murojaah</div>
+        <div class="muted" style="font-size:12px;margin-bottom:8px">Bebas untuk semua santri: pilih surat/ayat mana saja, boleh beberapa kali sehari, nilai boleh kosong. Satu halaman dihitung setelah seluruh ayatnya selesai dimurojaah (boleh terkumpul dari beberapa setoran).</div>
+        <div class="table-wrap"><table class="clay-table">
+          <thead><tr><th>Santri</th><th>Terakhir</th><th>Total Murojaah</th><th>Hari Ini</th><th></th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="5"><div class="empty">Tidak ada santri.</div></td></tr>'}</tbody>
+        </table></div>
+      </div>`;
+    document.querySelectorAll('[data-murojaah]').forEach(b => b.onclick = () => murojaahForm(b.dataset.murojaah));
+  }
+
+  function murojaahForm(santriId) {
+    const s = Store.findSantri(santriId);
+    if (!s) return;
+    const today = Store.todayStr();
+    const parseSurah = value => parseInt(String(value || '').match(/^\d+/)?.[0] || '0');
+    function surahLabel(n) { const item = getSurah(n); return item ? item.n + '. ' + item.latin : n; }
+    const body = `
+      ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
+      ${UI.field('Tanggal Murojaah', `<input class="clay-input" id="mr-tgl" type="date" value="${today}">`)}
+      <div class="row">
+        <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="mr-sa" list="dl-surah" type="text" value="${surahLabel(1)}" autocomplete="off">`)}</div>
+        <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="mr-aa" type="number" min="1" max="286" value="1">`)}</div>
+      </div>
+      <div class="row">
+        <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="mr-sk" list="dl-surah" type="text" value="${surahLabel(1)}" autocomplete="off">`)}</div>
+        <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="mr-ak" type="number" min="1" max="286" value="7">`)}</div>
+      </div>
+      <button class="clay-btn ghost sm setoran-quran-btn" id="mr-open-quran" type="button" hidden>📖 Buka Al-Qur’an</button>
+      <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg);font-size:13px"></div>
+      ${UI.field('Nilai (opsional)', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" placeholder="Kosongkan bila tidak dinilai">`)}
+      ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat"></textarea>`)}`;
+    const modal = UI.openModal({
+      title: 'Input Murojaah', bodyHTML: body,
+      actions: [
+        { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
+        { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
+          const sA = parseSurah(m.querySelector('#mr-sa').value);
+          const sK = parseSurah(m.querySelector('#mr-sk').value);
+          const aA = +m.querySelector('#mr-aa').value;
+          const aK = +m.querySelector('#mr-ak').value;
+          const sAyh = getSurah(sA), sKyh = getSurah(sK);
+          if (!sAyh || !sKyh) { UI.toast('Surat tidak valid', 'error'); return; }
+          if (aA < 1 || aA > sAyh.ayahs || aK < 1 || aK > sKyh.ayahs) {
+            UI.toast('Batas ayat tidak valid untuk surat yang dipilih', 'error'); return;
+          }
+          const h = computeHafalan(sA, aA, sK, aK);
+          if (!h) { UI.toast('Range ayat tidak valid', 'error'); return; }
+          const tglVal = m.querySelector('#mr-tgl').value || today;
+          const nilaiRaw = m.querySelector('#f-nilai').value;
+          const nilaiVal = nilaiRaw === '' ? null : +nilaiRaw;
+          const catVal = m.querySelector('#f-cat').value.trim();
+          const db = Store.get();
+          db.murojaah = db.murojaah || [];
+          db.murojaah.push({
+            id: Store.uid('mr'), santriId, ustadzId: ustadzIdFor(santriId),
+            tanggal: tglVal, sAwal: sA, aAwal: aA, sAkhir: sK, aAkhir: aK,
+            nilai: nilaiVal, catatan: catVal, _created: Date.now()
+          });
+          const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
+          if (wUser) Store.addNotif(wUser.id, 'wali', 'Murojaah: ' + s.nama);
+          const jumlah = h.pages >= 1 ? h.pages + ' halaman penuh' : h.ayahs + ' ayat';
+          waReport(santriId, formatPesanSetoranWA({
+            santri: s,
+            awal: 'Surat ' + (getSurah(sA) ? getSurah(sA).latin : sA) + ' Ayat ' + aA,
+            hingga: 'Surat ' + (getSurah(sK) ? getSurah(sK).latin : sK) + ' Ayat ' + aK,
+            jumlah,
+            nilai: nilaiRaw,
+            keterangan: catVal ? 'Murojaah - ' + catVal : 'Murojaah',
+            tanggal: tglVal
+          }));
+          if (!await Store.save()) return;
+          Store.log('Input murojaah ' + s.nama);
+          c();
+          UI.toast('Murojaah tersimpan', 'success');
+          renderMurojaah();
+        } }
+      ]
+    });
+    const modalEl = modal.modal;
+    setTimeout(() => {
+      bindAyatMax('mr-sa', 'mr-aa');
+      bindAyatMax('mr-sk', 'mr-ak');
+      bindSetoranPreview(modalEl, 'mr');
+    }, 50);
+    const calc = () => {
+      const h = computeHafalan(parseInt(modalEl.querySelector('#mr-sa').value) || 0,
+        +modalEl.querySelector('#mr-aa').value,
+        parseInt(modalEl.querySelector('#mr-sk').value) || 0,
+        +modalEl.querySelector('#mr-ak').value);
+      const box = modalEl.querySelector('#calc-preview');
+      if (box) box.innerHTML = h
+        ? `<b> Auto Hitung:</b> ${h.ayahs} ayat · ${h.pages >= 1 ? '✓ ' + h.pages + ' halaman penuh' : 'baru sebagian halaman'} · Juz ${h.juzStart}${h.juzRange > 1 ? '-' + h.juzEnd : ''}`
+        : '<span class="muted">Range belum valid.</span>';
+    };
+    modalEl.querySelectorAll('#mr-sa,#mr-aa,#mr-sk,#mr-ak').forEach(el => el.addEventListener('input', calc));
+    calc();
+  }
+
   /* ---------------- Riwayat ---------------- */
   function riwayat() {
     const c = ctx(); _scope = c.scope;
@@ -1933,6 +2057,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
             else if (type === 'ziyadahBacaan') db.ziyadahBacaan = db.ziyadahBacaan.filter(x => x.id !== id);
             else if (type === 'ziyadahHafalan') db.ziyadahHafalan = db.ziyadahHafalan.filter(x => x.id !== id);
             else if (type === 'mutqin') db.mutqin = db.mutqin.filter(x => x.id !== id);
+            else if (type === 'murojaah') db.murojaah = (db.murojaah || []).filter(x => x.id !== id);
             Store.save(); UI.toast('Setoran dihapus', 'success');
             document.getElementById('riwayat-content').innerHTML = Shared.renderRiwayat(selectedSantriId);
             bindActions();
@@ -2015,6 +2140,14 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     apply();
   }
 
+  /* ---------------- Laporan Murojaah (terpisah dari setoran) ---------------- */
+  function laporanMurojaah() {
+    const c = ctx(); _scope = c.scope;
+    Shared.shell(c.role, nav('ustadz_laporan_murojaah'), '');
+    Shared.setHeader('Laporan Murojaah', 'Rekap murojaah seluruh santri yang Anda ampu');
+    Shared.renderLaporanMurojaah(document.getElementById('view-content'), { santriList: mySantri() });
+  }
+
   /* ---------------- Umum (Semua kelas) ---------------- */
   function renderUmum() {
     const db = Store.get();
@@ -2052,16 +2185,19 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           const cls = program === 'Ziyadah' ? 'secondary' : program === 'Mutqin' ? 'success' : 'primary';
           return `<button class="clay-btn sm ${cls}" data-input="${s.id}" data-program="${UI.esc(program)}">${label}</button>`;
         }).join(' ');
+        // Murojaah tersedia untuk semua santri, irrespective of program.
+        const murojaahAction = `<button class="clay-btn sm ghost" data-murojaah="${s.id}" style="color:#7e22ce;border-color:#d8b4fe">+ Murojaah</button>`;
         return `<tr>
           <td><b>${UI.esc(s.nama)}</b><div class="muted" style="font-size:12px">${UI.esc(s.nis)}</div></td>
           <td>${UI.esc(Store.educationLabel(s))}</td>
           <td>${badges || '<span class="muted">-</span>'}</td>
           <td>${totalH ? formatHafalan(totalH) : '<span class="muted">-</span>'}</td>
           <td>${avg ? '<b>' + avg + '</b>' : '<span class="muted">-</span>'}</td>
-          <td>${actions}</td>
+          <td>${actions} ${murojaahAction}</td>
         </tr>`;
       }).join('');
       body.querySelectorAll('[data-input]').forEach(b => b.onclick = () => umumInput(b.dataset.input, b.dataset.program));
+      body.querySelectorAll('[data-murojaah]').forEach(b => b.onclick = () => murojaahForm(b.dataset.murojaah));
     }
 
     const input = document.getElementById('cari-santri');
@@ -2522,5 +2658,5 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     };
   }
 
-  return { nav, dashboard, absensi, talim, pembelajaran, riwayat, laporan, notif, sesiSaatIni, formatPesanSetoranWA, bayarSetoran, umumInput };
+  return { nav, dashboard, absensi, talim, pembelajaran, riwayat, laporan, laporanMurojaah, notif, sesiSaatIni, formatPesanSetoranWA, bayarSetoran, umumInput, murojaahForm };
 })();
