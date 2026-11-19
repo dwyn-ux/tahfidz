@@ -570,7 +570,7 @@ const Admin = (() => {
           items.push({
             tipe: 'Ziyadah Hafalan',
             badgeClass: 'green',
-            desc: (typeof formatSetoranLabel === 'function' ? formatSetoranLabel(z) : `${z.sAwal || ''}:${z.aAwal || ''}`) + (z.pages ? ` (${z.pages} hlm)` : ''),
+            desc: (typeof formatSetoranLabel === 'function' ? formatSetoranLabel(z) : `${z.sAwal || ''}:${z.aAwal || ''}`),
             nilai: z.nilai || '-',
             catatan: z.catatan || '',
             ustadz: ustadzNameById(z.ustadzId),

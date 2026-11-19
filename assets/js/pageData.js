@@ -608,3 +608,79 @@ const PAGE_START = {
     603: [109, 1],
     604: [112, 1],
 };
+
+/* ---------- Hitung halaman dari cakupan ayat ----------
+   Satu halaman dihitung penuh hanya jika SELURUH ayat di halaman itu sudah
+   disetorkan (boleh terkumpul dari beberapa kali setoran). Setoran yang cuma
+   menyentuh sebagian halaman tidak langsung dihitung satu halaman. */
+
+/* Rank ayat secara global (1..6236), urut dari Al-Fatihah 1:1. */
+const AYAT_CUM = (() => {
+  const cum = [0];
+  for (let i = 1; i <= 114; i++) cum[i] = cum[i - 1] + getSurah(i).ayahs;
+  return cum;
+})();
+function ayatRank(surah, ayah) {
+  return AYAT_CUM[Number(surah) - 1] + Number(ayah);
+}
+
+/* Batas rank ayat di setiap halaman mushaf, dihitung sekali saat load. */
+const PAGE_AYAT_RANGES = (() => {
+  const out = [];
+  for (let g = 1; g <= MUSHAF_PAGES; g++) {
+    const st = PAGE_START[g];
+    if (!st) { out.push(null); continue; }
+    const lo = ayatRank(st[0], st[1]);
+    const nx = PAGE_START[g + 1];
+    const hi = nx ? ayatRank(nx[0], nx[1]) - 1 : ayatRank(114, getSurah(114).ayahs);
+    out.push(hi >= lo ? [lo, hi] : null);
+  }
+  return out;
+})();
+function pageAyatRange(g) { return PAGE_AYAT_RANGES[g - 1] || null; }
+
+/* Halaman mushaf tempat sebuah ayat berada. */
+function pageOfAyat(surah, ayah) {
+  const r = ayatRank(surah, ayah);
+  for (let g = 1; g <= MUSHAF_PAGES; g++) {
+    const pr = PAGE_AYAT_RANGES[g - 1];
+    if (pr && r >= pr[0] && r <= pr[1]) return g;
+  }
+  return 1;
+}
+
+/* Gabungkan rentang ayat yang tumpang tindih/bersebelahan supaya setoran yang
+   dipecah beberapa kali tetap dihitung sebagai satu cakupan. */
+function mergeAyatRanges(ranges) {
+  const sorted = ranges.slice().sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  sorted.forEach(r => {
+    if (!merged.length) { merged.push([r[0], r[1]]); return; }
+    const last = merged[merged.length - 1];
+    if (r[0] <= last[1] + 1) last[1] = Math.max(last[1], r[1]);
+    else merged.push([r[0], r[1]]);
+  });
+  return merged;
+}
+
+/* Dari catatan setoran ({sAwal,aAwal,sAkhir,aAkhir}), hasilkan:
+   - full  : halaman yang seluruh ayatnya sudah disetor
+   - part  : halaman yang baru sebagian ayatnya disetor
+   - touched: gabungan keduanya
+   - merged: rentang ayat yang sudah tergabung */
+function cakupanHalaman(records) {
+  const ranges = (records || []).map(r => {
+    const lo = ayatRank(r.sAwal, r.aAwal);
+    const hi = ayatRank(r.sAkhir, r.aAkhir);
+    return lo <= hi ? [lo, hi] : [hi, lo];
+  });
+  const merged = mergeAyatRanges(ranges);
+  const full = new Set(), part = new Set();
+  for (let g = 1; g <= MUSHAF_PAGES; g++) {
+    const pr = pageAyatRange(g);
+    if (!pr) continue;
+    if (merged.some(r => r[0] <= pr[0] && r[1] >= pr[1])) full.add(g);
+    else if (merged.some(r => r[1] >= pr[0] && r[0] <= pr[1])) part.add(g);
+  }
+  return { full, part, touched: new Set([...full, ...part]), merged };
+}

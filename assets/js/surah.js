@@ -134,18 +134,6 @@ function surahEndPage(n) {
   return SURAHS[idx + 1].page - 1;
 }
 
-/* Mapping ayat -> halaman (interpolasi linear dalam satu surat) */
-function ayahToPage(surahNum, ayah) {
-  const s = getSurah(surahNum);
-  if (!s) return 1;
-  ayah = Math.max(1, Math.min(ayah, s.ayahs));
-  const start = s.page;
-  const end = surahEndPage(s.n);
-  if (s.ayahs <= 1) return start;
-  const ratio = (ayah - 1) / (s.ayahs - 1);
-  return Math.round(start + ratio * (end - start));
-}
-
 /* Halaman -> Juz */
 function pageToJuz(page) {
   let juz = 1;
@@ -195,7 +183,7 @@ function juzForHafalanPosition(surah, ayah) {
   for (const [juz, range] of Object.entries(JUZ_SURAH_RANGE)) {
     if (surah >= range[0] && surah <= range[1]) return Number(juz);
   }
-  return pageToJuz(ayahToPage(surah, ayah));
+  return pageToJuz(pageOfAyat(surah, ayah));
 }
 
 /* Cari posisi auto-fill selanjutnya berdasarkan urutan juz */
@@ -220,15 +208,6 @@ function nextHafalanPosition(lastSurah, lastAyah, juzOrder) {
   return { surah: firstSurahOfJuz(next), ayah: 1 };
 }
 
-function rankOfSurahAyah(s, a) {
-  let r = 0;
-  for (let i = 1; i < Number(s); i++) {
-    const item = getSurah(i);
-    if (item) r += item.ayahs;
-  }
-  return r + Number(a);
-}
-
 /* Hitung total hafalan dari range surat:ayat -> surat:ayat
    Mengembalikan { ayahs, pages, juzStart, juzEnd, juzRange } */
 function computeHafalan(startSurah, startAyah, endSurah, endAyah) {
@@ -248,52 +227,28 @@ function computeHafalan(startSurah, startAyah, endSurah, endAyah) {
     for (let n = startSurah + 1; n < endSurah; n++) ayahs += getSurah(n).ayahs; // surat tengah
     ayahs += endAyah;                            // surat akhir
   }
-  const pStart = ayahToPage(startSurah, startAyah);
-  const pEnd = ayahToPage(endSurah, endAyah);
-  let pages = Math.max(1, pEnd - pStart + 1);
-
-  if (typeof PAGE_START !== 'undefined') {
-    const lo = rankOfSurahAyah(startSurah, startAyah);
-    const hi = rankOfSurahAyah(endSurah, endAyah);
-    let sPage = 1, ePage = 1;
-    for (let p = 604; p >= 1; p--) {
-      const st = PAGE_START[p];
-      if (st && rankOfSurahAyah(st[0], st[1]) <= lo) { sPage = p; break; }
-    }
-    for (let p = 604; p >= 1; p--) {
-      const st = PAGE_START[p];
-      if (st && rankOfSurahAyah(st[0], st[1]) <= hi) { ePage = p; break; }
-    }
-    let totalP = 0;
-    for (let p = sPage; p <= ePage; p++) {
-      const st = PAGE_START[p];
-      if (!st) continue;
-      const pLo = rankOfSurahAyah(st[0], st[1]);
-      const nx = PAGE_START[p + 1];
-      const pHi = nx ? rankOfSurahAyah(nx[0], nx[1]) - 1 : 6236;
-      const pageCount = pHi - pLo + 1;
-      const oLo = Math.max(lo, pLo);
-      const oHi = Math.min(hi, pHi);
-      if (oLo <= oHi) {
-        totalP += (oHi - oLo + 1) / pageCount;
-      }
-    }
-    pages = Math.max(0.5, Math.round(totalP * 2) / 2);
-  }
-
-  const juzStart = pageToJuz(pStart);
-  const juzEnd = pageToJuz(pEnd);
+  // Halaman dihitung dari cakupan ayat, bukan dari halaman awal/akhir yang
+  // disentuh. Setoran yang baru mengisi sebagian halaman = 0 halaman penuh.
+  const cakupan = cakupanHalaman([{
+    sAwal: startSurah, aAwal: startAyah, sAkhir: endSurah, aAkhir: endAyah
+  }]);
+  const pages = cakupan.full.size;
+  const touched = cakupan.touched.size ? [...cakupan.touched] : [1];
+  const juzStart = pageToJuz(Math.min(...touched));
+  const juzEnd = pageToJuz(Math.max(...touched));
   const juzRange = juzEnd - juzStart + 1;
-  return { ayahs, pages, juzStart, juzEnd, juzRange };
+  return { ayahs, pages, juzStart, juzEnd, juzRange, fullPages: cakupan.full, partPages: cakupan.part };
 }
 
 /* Format ringkas total hafalan */
 function formatHafalan(h) {
   if (!h) return '-';
   let parts = [];
-  if (h.pages > 0) parts.push(h.pages + ' halaman');
+  // Halaman hanya ditampilkan kalau sudah penuh; kalau belum, tampilkan
+  // jumlah ayat saja agar setoran sebagian tidak dibaca sebagai 1 halaman.
+  if (h.pages >= 1) parts.push(h.pages + ' halaman');
+  else parts.push(h.ayahs + ' ayat');
   if (h.juzRange >= 1) parts.push((h.juzRange === 1 ? 'Juz ' + h.juzStart : h.juzRange + ' juz'));
-  if (!parts.length) parts.push(h.ayahs + ' ayat');
   return parts.join(' • ');
 }
 

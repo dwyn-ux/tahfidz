@@ -1562,10 +1562,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         </div>
         <button class="clay-btn ghost sm setoran-quran-btn" id="h-open-quran" type="button" hidden>📖 Buka Al-Qur’an</button>
         <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg);font-size:13px"></div>
-        <div class="row" style="gap:10px">
-          <div style="flex:1">${UI.field('Jumlah Halaman', `<input class="clay-input" id="h-pages" type="number" step="0.5" min="0.5" value="0.5" ${hafalanDisabled}>`)}</div>
-          <div style="flex:1">${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80" ${hafalanDisabled}>`)}</div>
-        </div>
+        ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80" ${hafalanDisabled}>`)}
         ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat" ${hafalanDisabled}></textarea>`)}
         <button class="clay-btn primary" id="btn-simpan-hafalan" style="margin-top:8px" ${btnHafalanDisabled}>💾 Simpan Hafalan</button>
       </div>
@@ -1624,15 +1621,9 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           const hak = +document.getElementById('h-ak').value;
           const hh = computeHafalan(hsa, haa, hsk, hak);
           document.getElementById('calc-preview').innerHTML = hh
-            ? `<b> Auto Hitung:</b> ${hh.ayahs} ayat · ${hh.pages} halaman · Juz ${hh.juzStart}${hh.juzRange > 1 ? '-' + hh.juzEnd : ''}`
+            ? `<b> Auto Hitung:</b> ${hh.ayahs} ayat · Juz ${hh.juzStart}${hh.juzRange > 1 ? '-' + hh.juzEnd : ''}${hh.pages ? ' · ✓ ' + hh.pages + ' halaman penuh' : ' · baru sebagian halaman'}`
             : '<span class="muted">Range belum valid.</span>';
-          const pagesInp = document.getElementById('h-pages');
-          if (pagesInp && !pagesInp._userEdited) {
-            pagesInp.value = hh ? hh.pages : 0.5;
-          }
         };
-        const pagesInputEl = document.getElementById('h-pages');
-        if (pagesInputEl) pagesInputEl.oninput = () => { pagesInputEl._userEdited = true; };
         document.querySelectorAll('#h-sa,#h-aa,#h-sk,#h-ak').forEach(el => el.oninput = calc);
         calc();
         hSlide = setInterval(calc, 300);
@@ -1690,7 +1681,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         const hak = +document.getElementById('h-ak').value;
         const hh = computeHafalan(hsa, haa, hsk, hak);
         document.getElementById('calc-preview').innerHTML = hh
-          ? `<b> Auto Hitung:</b> ${hh.ayahs} ayat · ${hh.pages} halaman · Juz ${hh.juzStart}${hh.juzRange > 1 ? '-' + hh.juzEnd : ''}`
+          ? `<b> Auto Hitung:</b> ${hh.ayahs} ayat · Juz ${hh.juzStart}${hh.juzRange > 1 ? '-' + hh.juzEnd : ''}${hh.pages ? ' · ✓ ' + hh.pages + ' halaman penuh' : ' · baru sebagian halaman'}`
           : '<span class="muted">Range belum valid.</span>';
       };
       document.querySelectorAll('#h-sa,#h-aa,#h-sk,#h-ak').forEach(el => el.oninput = calc);
@@ -1716,13 +1707,11 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       const curTgl = document.getElementById('f-tgl') ? document.getElementById('f-tgl').value : t;
       const isMaju = curTgl > t;
       const d = Store.get();
-      const pagesVal = +document.getElementById('h-pages')?.value || h.pages;
-      h.pages = pagesVal;
       const catVal = document.getElementById('f-cat').value.trim();
       d.ziyadahHafalan.push({
         id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId, 'Ziyadah'),
         tanggal: curTgl, sAwal: sA, aAwal: aA,
-        sAkhir: sK, aAkhir: aK, pages: pagesVal, nilai: +document.getElementById('f-nilai').value,
+        sAkhir: sK, aAkhir: aK, nilai: +document.getElementById('f-nilai').value,
         catatan: (catVal + (isMaju ? ' (Setoran Maju)' : '')).trim(),
         _created: Date.now()
       });
@@ -2088,7 +2077,10 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
 
   function formatHafalan(h) {
     if (!h) return '-';
-    return `${h.ayahs} ayat · ${h.pages} hlm`;
+    // Sama seperti format global: halaman hanya ditampilkan kalau sudah penuh.
+    const parts = [h.pages >= 1 ? h.pages + ' halaman' : h.ayahs + ' ayat'];
+    if (h.juzRange >= 1) parts.push(h.juzRange === 1 ? 'Juz ' + h.juzStart : h.juzRange + ' juz');
+    return parts.join(' • ');
   }
 
   function bayarSetoran(santriId, tanggal, programs, onSaved) {
@@ -2235,10 +2227,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           </div>
           <button class="clay-btn ghost sm setoran-quran-btn" id="h-open-quran" type="button" hidden>📖 Buka Al-Qur’an</button>
           <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg);font-size:13px"></div>
-          <div class="row" style="gap:10px">
-            <div style="flex:1">${UI.field('Jumlah Halaman', `<input class="clay-input" id="h-pages" type="number" step="0.5" min="0.5" value="0.5" ${hafalanDisabled}>`)}</div>
-            <div style="flex:1">${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80" ${hafalanDisabled}>`)}</div>
-          </div>
+          ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80" ${hafalanDisabled}>`)}
           ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat" ${hafalanDisabled}></textarea>`)}
           <button class="clay-btn primary" id="btn-simpan-hafalan" style="margin-top:8px" ${btnHafalanDisabled}>💾 Simpan Hafalan</button>
         </div>`;
@@ -2400,15 +2389,9 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
             const hak = +document.getElementById('h-ak').value;
             const hh = computeHafalan(hsa, haa, hsk, hak);
             document.getElementById('calc-preview').innerHTML = hh
-              ? `<b> Auto Hitung:</b> ${hh.ayahs} ayat · ${hh.pages} halaman · Juz ${hh.juzStart}${hh.juzRange > 1 ? '-' + hh.juzEnd : ''}`
+              ? `<b> Auto Hitung:</b> ${hh.ayahs} ayat · Juz ${hh.juzStart}${hh.juzRange > 1 ? '-' + hh.juzEnd : ''}${hh.pages ? ' · ✓ ' + hh.pages + ' halaman penuh' : ' · baru sebagian halaman'}`
               : '<span class="muted">Range belum valid.</span>';
-            const pagesInp = document.getElementById('h-pages');
-            if (pagesInp && !pagesInp._userEdited) {
-              pagesInp.value = hh ? hh.pages : 0.5;
-            }
           };
-          const pagesInpEl = document.getElementById('h-pages');
-          if (pagesInpEl) pagesInpEl.oninput = () => { pagesInpEl._userEdited = true; };
           document.querySelectorAll('#h-sa,#h-aa,#h-sk,#h-ak').forEach(el => el.oninput = calc);
           calc();
           hSlide = setInterval(calc, 300);
@@ -2466,7 +2449,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           const hak = +document.getElementById('h-ak').value;
           const hh = computeHafalan(hsa, haa, hsk, hak);
           document.getElementById('calc-preview').innerHTML = hh
-            ? `<b> Auto Hitung:</b> ${hh.ayahs} ayat · ${hh.pages} halaman · Juz ${hh.juzStart}${hh.juzRange > 1 ? '-' + hh.juzEnd : ''}`
+            ? `<b> Auto Hitung:</b> ${hh.ayahs} ayat · Juz ${hh.juzStart}${hh.juzRange > 1 ? '-' + hh.juzEnd : ''}${hh.pages ? ' · ✓ ' + hh.pages + ' halaman penuh' : ' · baru sebagian halaman'}`
             : '<span class="muted">Range belum valid.</span>';
         };
         document.querySelectorAll('#h-sa,#h-aa,#h-sk,#h-ak').forEach(el => el.oninput = calc);
@@ -2490,13 +2473,11 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         const curTgl = modalContent.querySelector('#f-tgl') ? modalContent.querySelector('#f-tgl').value : tanggalSetoran;
         const isMajuRec = curTgl > today;
         const d = Store.get();
-        const pagesVal = +modalContent.querySelector('#h-pages')?.value || h.pages;
-        h.pages = pagesVal;
         const catVal = modalContent.querySelector('#f-cat').value.trim();
         d.ziyadahHafalan.push({
           id: Store.uid('zh'), santriId, ustadzId: ustadzIdFor(santriId, 'Ziyadah'),
           tanggal: curTgl, sAwal: sA, aAwal: aA,
-          sAkhir: sK, aAkhir: aK, pages: pagesVal, nilai: +modalContent.querySelector('#f-nilai').value,
+          sAkhir: sK, aAkhir: aK, nilai: +modalContent.querySelector('#f-nilai').value,
           catatan: (catVal + (isMajuRec ? ' (Setoran Maju)' : '')).trim(), _created: Date.now()
         });
         const wUser = d.users.find(u => u.role === 'wali' && u.refId === s.waliId);

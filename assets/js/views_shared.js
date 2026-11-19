@@ -269,125 +269,32 @@ const Shared = (() => {
     </div>`;
   }
 
-  /* ---------- Peta hafalan (shared: ustadz & wali) ---------- */
-  // Rank global ayat (1..total) dari surat:ayat — basis deteksi penuh/sebagian. real dari PAGE_START.
-  const _rankOf = (() => {
-    let cum = [0];
-    for (let i = 1; i <= 114; i++) cum[i] = cum[i - 1] + getSurah(i).ayahs;
-    return (s, a) => cum[Number(s) - 1] + Number(a);
-  })(); /*
-  })();
-
-// Detail info saat centang setoran di-hover (desktop) atau di-tap/hold (HP)
-if (typeof document !== 'undefined' && !document._setoranDetailBound) {
-  document._setoranDetailBound = true;
-  let holdTimer = null;
-  let didHold = false;
-
-  function openSetoranInfo(el) {
-    const info = el.getAttribute('data-setoran-info');
-    if (!info) return;
-    const nama = el.getAttribute('data-santri-nama') || 'Santri';
-    const tgl = el.getAttribute('data-tanggal') || '';
-    UI.openModal({
-      title: 'Detail Setoran · ' + nama,
-      sub: tgl ? ('Tanggal: ' + UI.fmtDate(tgl)) : '',
-      bodyHTML: `<div class="clay-card pad-sm" style="white-space:pre-line;line-height:1.7;font-size:14px;background:var(--bg)">${UI.esc(info)}</div>`,
-      actions: [{ label: 'Tutup', cls: 'primary', onClick: (m, c) => c() }]
-    });
-  }
-
-  document.addEventListener('touchstart', e => {
-    const badge = e.target.closest('.setoran-check-badge');
-    if (!badge) return;
-    didHold = false;
-    holdTimer = setTimeout(() => {
-      didHold = true;
-      openSetoranInfo(badge);
-    }, 350);
-  }, { passive: true });
-
-  document.addEventListener('touchend', () => {
-    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
-  });
-
-  document.addEventListener('touchmove', () => {
-    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
-  });
-
-  document.addEventListener('click', e => {
-    const badge = e.target.closest('.setoran-check-badge');
-    if (!badge) return;
-    if (didHold) { didHold = false; return; }
-    openSetoranInfo(badge);
-  });
-
-  document.addEventListener('contextmenu', e => {
-    if (e.target.closest('.setoran-check-badge')) {
-      e.preventDefault();
-    }
-  });
-}
-
-  // Rentang rank ayat sebuah halaman g: [start, end] dari peta halaman↔ayat nyata.
-  */ function pageRankRange(g) {
-    const st = PAGE_START[g];
-    if (!st) return null;
-    const lo = _rankOf(st[0], st[1]);
-    const nx = PAGE_START[g + 1];
-    const hi = nx ? _rankOf(nx[0], nx[1]) - 1 : _rankOf(114, getSurah(114).ayahs);
-    return [lo, hi];
-  }
-
-  // Gabungkan rentang yang bersinggungan/bersebelahan. Satu halaman sering
-  // disetor bertahap (Al-Mujadila 1-3 hari ini, 4-6 besok), jadi penentu warna
-  // harus melihat gabungan semua setoran, bukan tiap setoran sendiri-sendiri.
-  function mergeRankRanges(ranges) {
-    const sorted = ranges.slice().sort((a, b) => a[0] - b[0]);
-    const merged = [];
-    sorted.forEach(r => {
-      const last = merged[merged.length - 1];
-      if (last && r[0] <= last[1] + 1) last[1] = Math.max(last[1], r[1]);
-      else merged.push([r[0], r[1]]);
-    });
-    return merged;
-  }
-
-  // Status tiap halaman (1..600): 'full' hijau, 'part' kuning, sisanya abu-abu.
-  // Hijau = rentang setoran (setelah digabung) menutupi SELURUH ayat halaman itu
-  // (sesuai peta asli), kuning = hanya menyentuh sebagian.
+  /* ---------- Peta hafalan (shared: ustadz & wali) ----------
+     Memakai cakupanHalaman() yang sama dengan perhitungan total hafalan, supaya
+     warna peta dan angka halaman tidak bisa bertentangan. */
   function hafalanStates(santriId) {
     const db = Store.get();
-    const full = new Set(), part = new Set();
-    const merged = mergeRankRanges([...db.ziyadahHafalan, ...db.mutqin]
-      .filter(r => r.santriId === santriId)
-      .map(r => {
-        const lo = _rankOf(r.sAwal, r.aAwal), hi = _rankOf(r.sAkhir, r.aAkhir);
-        return lo <= hi ? [lo, hi] : [hi, lo];
-      })
-      .filter(Boolean));
-    for (let g = 1; g <= 600; g++) {
-      const pr = pageRankRange(g);
-      if (!pr) continue;
-      if (merged.some(r => r[0] <= pr[0] && r[1] >= pr[1])) full.add(g);
-      else if (merged.some(r => r[1] >= pr[0] && r[0] <= pr[1])) part.add(g);
-    }
+    const { full, part } = cakupanHalaman([
+      ...db.ziyadahHafalan, ...db.mutqin
+    ].filter(r => r.santriId === santriId));
     return { full, part };
   }
 
-  // Peta hafalan ala GitHub: 30 baris juz x 20 kolom halaman.
+  // Peta hafalan ala GitHub: 30 baris juz, kolom mengikuti jumlah halaman asli
+  // tiap juz (19/20/21 halaman, tidak selalu 20).
   function hafalanMapHTML(santriId) {
     const { full, part } = hafalanStates(santriId);
     let html = '';
     for (let juz = 1; juz <= 30; juz++) {
+      const mulai = JUZ_PAGES[juz - 1];
+      const akhir = juz < 30 ? JUZ_PAGES[juz] - 1 : MUSHAF_PAGES;
       html += '<div style="display:flex;align-items:center;gap:3px;margin-bottom:2px">' +
         '<span style="width:38px;font-size:10px;color:var(--muted)">Juz ' + juz + '</span>';
-      for (let pg = 1; pg <= 20; pg++) {
-        const g = (juz - 1) * 20 + pg;
+      for (let g = mulai; g <= akhir; g++) {
         let color = 'var(--muted)', tip = 'belum disetor';
         if (full.has(g)) { color = 'var(--success)'; tip = 'selesai disetor'; }
         else if (part.has(g)) { color = 'var(--warn)'; tip = 'disetor sebagian'; }
-        html += '<span title="Juz ' + juz + ' · hal. ' + pg + ' · ' + tip + '" ' +
+        html += '<span title="Juz ' + juz + ' · hal. ' + g + ' · ' + tip + '" ' +
           'style="width:11px;height:11px;border-radius:2px;flex:0 0 11px;background:' + color + '"></span>';
       }
       html += '</div>';
@@ -412,7 +319,6 @@ if (typeof document !== 'undefined' && !document._setoranDetailBound) {
     }));
     db.ziyadahHafalan.filter(z => z.santriId === santriId).forEach(z => {
       const h = computeHafalan(z.sAwal, z.aAwal, z.sAkhir, z.aAkhir);
-      if (h && z.pages !== undefined && z.pages !== null && Number(z.pages) > 0) h.pages = Number(z.pages);
       items.push({
         t: z.tanggal, html: `<b>Ziyadah Hafalan</b> — ${getSurah(z.sAwal).latin}:${z.aAwal} → ${getSurah(z.sAkhir).latin}:${z.aAkhir} · <b>${formatHafalan(h)}</b> · Nilai ${z.nilai}<div class="muted">${UI.esc(z.catatan || '')}</div>`,
         hapus: (session && (session.role === 'ustadz' || session.role === 'admin')) ? `<button class="clay-btn sm ghost" data-hapus="ziyadahHafalan" data-id="${z.id}" style="padding:2px 8px;font-size:11px;color:var(--danger)">Hapus</button>` : ''
@@ -1144,8 +1050,7 @@ function exportLaporanExcel(filters) {
       detail = formatSetoranLabel(rec);
       if (type === 'ziyadahHafalan') {
         const h = computeHafalan(rec.sAwal, rec.aAwal, rec.sAkhir, rec.aAkhir);
-        const p = (rec.pages !== undefined && rec.pages !== null && Number(rec.pages) > 0) ? Number(rec.pages) : (h ? h.pages : 0);
-        if (h) detail += ' (' + p + ' hlm · ' + h.ayahs + ' ayat)';
+        if (h) detail += ' (' + formatHafalan(h) + ')';
       } else if (type === 'mutqin' && rec.totalHafalan) {
         detail += ' (' + rec.totalHafalan + ' hlm)';
       }
@@ -1167,8 +1072,7 @@ function exportLaporanExcel(filters) {
       lines.push('Surat: ' + formatSetoranLabel(rec));
       if (type === 'ziyadahHafalan') {
         const h = computeHafalan(rec.sAwal, rec.aAwal, rec.sAkhir, rec.aAkhir);
-        const p = (rec.pages !== undefined && rec.pages !== null && Number(rec.pages) > 0) ? Number(rec.pages) : (h ? h.pages : 0);
-        if (h) lines.push('Panjang: ' + p + ' halaman · ' + h.ayahs + ' ayat');
+        if (h) lines.push('Panjang: ' + formatHafalan(h));
       } else if (type === 'mutqin' && rec.totalHafalan) {
         lines.push('Total Murajaah: ' + rec.totalHafalan + ' halaman');
       }

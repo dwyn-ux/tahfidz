@@ -1003,30 +1003,26 @@ const Store = (() => {
     return haf[0] || null;
   }
 
+  // Total hafalan dihitung dari halaman yang benar-benar penuh. Setoran yang
+  // dipecah beberapa kali tetap dihitung satu halaman begitu seluruh ayatnya
+  // tercakup; setoran sebagian belum menambah angka halaman.
   function totalHafalanSantri(santriId) {
     if (totalHafalanCache.has(santriId)) return totalHafalanCache.get(santriId);
-    let ayahs = 0, pages = 0, juzMin = 30, juzMax = 1;
-    const add = (rec) => {
-      const h = computeHafalan(rec.sAwal, rec.aAwal, rec.sAkhir, rec.aAkhir);
-      if (h) {
-        const p = (rec.pages !== undefined && rec.pages !== null && Number(rec.pages) > 0)
-          ? Number(rec.pages)
-          : ((rec.totalHafalan !== undefined && Number(rec.totalHafalan) > 0) ? Number(rec.totalHafalan) : h.pages);
-        ayahs += h.ayahs;
-        pages += p;
-        juzMin = Math.min(juzMin, h.juzStart);
-        juzMax = Math.max(juzMax, h.juzEnd);
-      } else if (rec.totalHafalan !== undefined && Number(rec.totalHafalan) > 0) {
-        pages += Number(rec.totalHafalan);
-      }
-    };
-    (getHafalanRecordsBySantri().get(santriId) || []).forEach(add);
-    if (ayahs === 0 && pages === 0) {
+    const records = getHafalanRecordsBySantri().get(santriId) || [];
+    const cakupan = records.length ? cakupanHalaman(records) : null;
+    if (!cakupan || !cakupan.merged.length) {
       totalHafalanCache.set(santriId, null);
       return null;
     }
-    pages = Math.round(pages * 10) / 10;
-    const result = { ayahs, pages, juzStart: juzMin, juzEnd: juzMax, juzRange: Math.max(1, juzMax - juzMin + 1) };
+    const ayahs = cakupan.merged.reduce((n, r) => n + (r[1] - r[0] + 1), 0);
+    const pages = cakupan.full.size;
+    const touched = [...cakupan.touched];
+    const juzStart = pageToJuz(Math.min(...touched));
+    const juzEnd = pageToJuz(Math.max(...touched));
+    const result = {
+      ayahs, pages, juzStart, juzEnd, juzRange: Math.max(1, juzEnd - juzStart + 1),
+      fullPages: cakupan.full, partPages: cakupan.part
+    };
     totalHafalanCache.set(santriId, result);
     return result;
   }
@@ -1573,7 +1569,7 @@ const Store = (() => {
   }
 
   return {
-    load, laporanData, save, get, reset, uid, log, nowISO, todayStr,
+    load, laporanData, save, get, reset, uid, log, nowISO, todayStr, invalidateDerivedDataCaches,
     santri: () => (db.santri || []),
     getSettings: () => (db.settings || {}),
     setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout, changePassword,
