@@ -108,7 +108,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const db = Store.get();
     if (_scope === 'all') return db.santri; // admin: semua santri
     const h = myHalaqah();
-    return h ? db.santri.filter(s => Store.santriHasHalaqah(s, h, program)) : [];
+    return h ? db.santri.filter(s => Store.santriHasHalaqah(s, h, program) || (Store.santriHasHalaqah(s, h) && program === 'Mutqin' && (db.mutqin || []).some(m => m.santriId === s.id))) : [];
   }
   // ustadzId yang dicatat: ustadz session, atau ustadz halaqah santri (jika admin)
   function ustadzIdFor(santriId, program) {
@@ -1243,17 +1243,25 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const navItems = (c.role === 'admin') ? Admin.nav('ustadz_pembelajaran') : nav('ustadz_pembelajaran');
     Shared.shell(c.role, navItems, '');
     Shared.setHeader('Pembelajaran', 'Tahsin · Ziyadah · Mutqin · Murojaah · Umum');
+    const validTabs = ['tahsin', 'ziyadah', 'mutqin', 'murojaah', 'umum'];
+    let currentTab = 'tahsin';
+    try {
+      const saved = sessionStorage.getItem('tahfidz_pembelajaran_tab');
+      if (saved && validTabs.includes(saved)) currentTab = saved;
+    } catch (e) {}
+
     document.getElementById('view-content').innerHTML = `
       <div class="pill-tabs" id="tabs">
-        <button class="pill active" data-tab="tahsin"> Tahsin</button>
-        <button class="pill" data-tab="ziyadah"> Ziyadah</button>
-        <button class="pill" data-tab="mutqin"> Mutqin</button>
-        <button class="pill" data-tab="murojaah"> Murojaah</button>
-        <button class="pill" data-tab="umum"> Umum</button>
+        <button class="pill ${currentTab === 'tahsin' ? 'active' : ''}" data-tab="tahsin"> Tahsin</button>
+        <button class="pill ${currentTab === 'ziyadah' ? 'active' : ''}" data-tab="ziyadah"> Ziyadah</button>
+        <button class="pill ${currentTab === 'mutqin' ? 'active' : ''}" data-tab="mutqin"> Mutqin</button>
+        <button class="pill ${currentTab === 'murojaah' ? 'active' : ''}" data-tab="murojaah"> Murojaah</button>
+        <button class="pill ${currentTab === 'umum' ? 'active' : ''}" data-tab="umum"> Umum</button>
       </div>
       <div id="tab-content"></div>`;
     const tabs = document.getElementById('tabs');
     const render = (tab) => {
+      try { sessionStorage.setItem('tahfidz_pembelajaran_tab', tab); } catch (e) {}
       tabs.querySelectorAll('.pill').forEach(p => p.classList.toggle('active', p.dataset.tab === tab));
       if (tab === 'tahsin') renderTahsin();
       else if (tab === 'ziyadah') renderZiyadah();
@@ -1262,7 +1270,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       else renderUmum();
     };
     tabs.querySelectorAll('.pill').forEach(p => p.onclick = () => render(p.dataset.tab));
-    render('tahsin');
+    render(currentTab);
   }
 
   function modeSelector(onChange) {
@@ -1745,13 +1753,14 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
   /* ----- Mutqin ----- */
   function renderMutqin() {
     const db = Store.get();
-    const santri = mySantri('Mutqin').filter(s => Store.santriHasProgram(s, 'Mutqin'));
+    const santri = mySantri('Mutqin').filter(s => Store.santriHasProgram(s, 'Mutqin') || (db.mutqin || []).some(m => m.santriId === s.id));
     const tmrw = Store.tambahHari(Store.todayStr(), 1);
     const rows = santri.map(s => {
-      const rec = db.mutqin.filter(m => m.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
-      const tomorrowDone = db.mutqin.some(m => m.santriId === s.id && m.tanggal === tmrw);
+      const rec = (db.mutqin || []).filter(m => m.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal) || ((b._created || 0) - (a._created || 0)))[0];
+      const tomorrowDone = (db.mutqin || []).some(m => m.santriId === s.id && m.tanggal === tmrw);
       const tmrwBadge = tomorrowDone ? ' <span class="badge purple" title="Sudah murajaah maju untuk besok">Besok ✓</span>' : '';
-      return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${rec ? getSurah(rec.sAkhir).latin + ':' + rec.aAkhir : '<span class="muted">-</span>'}</td><td>${rec ? rec.totalHafalan + ' hlm' : '-'}</td><td><button class="clay-btn sm primary" data-input="${s.id}">+ Murajaah</button>${tmrwBadge}</td></tr>`;
+      const surahInfo = rec ? ((getSurah(rec.sAkhir) ? getSurah(rec.sAkhir).latin : (rec.sAkhir || '-')) + ':' + rec.aAkhir) : '<span class="muted">-</span>';
+      return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${surahInfo}</td><td>${rec ? rec.totalHafalan + ' hlm' : '-'}</td><td><button class="clay-btn sm primary" data-input="${s.id}">+ Murajaah</button>${tmrwBadge}</td></tr>`;
     }).join('');
     document.getElementById('tab-content').innerHTML = `
       <div class="clay-card">
@@ -1818,7 +1827,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
             totalHafalan: totalVal, _created: Date.now()
           });
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
-          if (wUser) Store.addNotif(wUser.id, 'wali', (isMaju ? 'Setoran Maju Murajaah Mutqin: ' : 'Murajaah Mutqin: ') + s.nama);
+          if (wUser) Store.addNotif(wUser.id, 'wali', (isMaju ? 'Setoran Maju Murajaah Mutqin: ' : 'Murajaah Mutqin: ') + s.nama, false);
           const awalSurah = 'Surat ' + (getSurah(sA) ? getSurah(sA).latin : sA) + ' Ayat ' + aaVal;
           const hinggaSurah = 'Surat ' + (getSurah(sK) ? getSurah(sK).latin : sK) + ' Ayat ' + akVal;
           const msg = formatPesanSetoranWA({
@@ -1872,7 +1881,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const t = Store.todayStr();
     const rows = santri.map(s => {
       const semua = (db.murojaah || []).filter(m => m.santriId === s.id);
-      const rec = semua.slice().sort((a, b) => String(b.tanggal || '').localeCompare(String(a.tanggal || '')))[0];
+      const rec = semua.slice().sort((a, b) => String(b.tanggal || '').localeCompare(String(a.tanggal || '')) || ((b._created || 0) - (a._created || 0)))[0];
       const total = Store.totalMurojaahSantri(s.id);
       const hariIni = semua.filter(m => m.tanggal === t).length;
       return `<tr>

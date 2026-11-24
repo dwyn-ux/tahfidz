@@ -1323,7 +1323,7 @@ function exportLaporanExcel(filters) {
         const programs = Store.programsForSantriHalaqah(s, h);
         const relevantTypes = jenisSetoranUntukProgram(programs);
         const cells = days.map(day => {
-          const items = (setoran.get(s.id + '|' + day.tanggal) || []).filter(item => relevantTypes.includes(item.type));
+          const items = (setoran.get(s.id + '|' + day.tanggal) || []).filter(item => relevantTypes.includes(item.type) || item.type === 'mutqin');
           if (items.length) {
             const isMaju = day.tanggal > today;
             return { status: 'submitted', types: items.map(it => it.type), records: items, isMaju };

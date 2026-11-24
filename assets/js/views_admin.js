@@ -593,11 +593,16 @@ const Admin = (() => {
           });
         });
         mutqin.filter(m => m.santriId === s.id).forEach(m => {
-          const surahObj = (typeof getSurah === 'function' && m.surah) ? getSurah(m.surah) : null;
+          const sA = (typeof getSurah === 'function' && m.sAwal) ? getSurah(m.sAwal) : null;
+          const sK = (typeof getSurah === 'function' && m.sAkhir) ? getSurah(m.sAkhir) : null;
+          const awal = sA ? `${sA.latin}:${m.aAwal || 1}` : (m.sAwal ? `${m.sAwal}:${m.aAwal || 1}` : '');
+          const akhir = sK ? `${sK.latin}:${m.aAkhir || 1}` : (m.sAkhir ? `${m.sAkhir}:${m.aAkhir || 1}` : '');
+          const rentang = (awal && akhir) ? `${awal} → ${akhir}` : (akhir || awal || '-');
+          const total = m.totalHafalan ? ` (${m.totalHafalan} hlm)` : '';
           items.push({
             tipe: 'Mutqin',
             badgeClass: 'purple',
-            desc: `Juz ${m.juz || '-'} ${surahObj ? surahObj.latin : ''} (Ayat ${m.ayat || '-'})`,
+            desc: `${rentang}${total}`,
             nilai: m.nilai || '-',
             catatan: m.catatan || '',
             ustadz: ustadzNameById(m.ustadzId),

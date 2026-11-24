@@ -647,7 +647,9 @@ const Store = (() => {
     const assignments = santri.halaqahProgram && typeof santri.halaqahProgram === 'object' ? santri.halaqahProgram : {};
     const assigned = resolveHalaqah(assignments[program]);
     if (assigned) return assigned;
-    return santri.level === program ? findHalaqahByName(santri.halaqah) : null;
+    return (santri.level === program || activeProgramsForSantri(santri).includes(program))
+      ? (findHalaqahByName(santri.halaqah) || findHalaqahById(santri.halaqah))
+      : null;
   }
 
   function halaqahForSantri(santri) {
