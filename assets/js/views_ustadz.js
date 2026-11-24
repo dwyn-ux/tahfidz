@@ -1908,7 +1908,15 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const s = Store.findSantri(santriId);
     if (!s) return;
     const today = Store.todayStr();
-    const parseSurah = value => parseInt(String(value || '').match(/^\d+/)?.[0] || '0');
+    const parseSurah = value => {
+      const str = String(value || '').trim();
+      const m = str.match(/^\d+/);
+      if (m) return parseInt(m[0], 10);
+      const clean = s => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const target = clean(str);
+      const found = (typeof SURAHS !== 'undefined' ? SURAHS : []).find(s => clean(s.latin) === target);
+      return found ? found.n : 0;
+    };
     function surahLabel(n) { const item = getSurah(n); return item ? item.n + '. ' + item.latin : n; }
     const body = `
       ${UI.field('Santri', `<input class="clay-input" value="${UI.esc(s.nama)}" disabled>`)}
@@ -1953,7 +1961,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
             nilai: nilaiVal, catatan: catVal, _created: Date.now()
           });
           const wUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
-          if (wUser) Store.addNotif(wUser.id, 'wali', 'Murojaah: ' + s.nama);
+          if (wUser) Store.addNotif(wUser.id, 'wali', 'Murojaah: ' + s.nama, false);
           const jumlah = h.pages >= 1 ? h.pages + ' halaman penuh' : h.ayahs + ' ayat';
           waReport(santriId, formatPesanSetoranWA({
             santri: s,
@@ -1979,9 +1987,11 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       bindSetoranPreview(modalEl, 'mr');
     }, 50);
     const calc = () => {
-      const h = computeHafalan(parseInt(modalEl.querySelector('#mr-sa').value) || 0,
+      const sA = parseSurah(modalEl.querySelector('#mr-sa').value);
+      const sK = parseSurah(modalEl.querySelector('#mr-sk').value);
+      const h = computeHafalan(sA,
         +modalEl.querySelector('#mr-aa').value,
-        parseInt(modalEl.querySelector('#mr-sk').value) || 0,
+        sK,
         +modalEl.querySelector('#mr-ak').value);
       const box = modalEl.querySelector('#calc-preview');
       if (box) box.innerHTML = h

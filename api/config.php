@@ -748,6 +748,7 @@ function bootstrapData($user) {
             'ziyadahBacaan' => getRecords('ziyadahBacaan'),
             'ziyadahHafalan' => getRecords('ziyadahHafalan'),
             'mutqin' => getRecords('mutqin'),
+            'murojaah' => getRecords('murojaah'),
             'catatan' => getRecords('catatan'),
             'tahunAjaran' => getSettings()['tahunAjaranList'],
             'semester' => getSettings()['semesterList'],
@@ -778,6 +779,7 @@ function bootstrapData($user) {
             'ziyadahBacaan' => getRecords('ziyadahBacaan'),
             'ziyadahHafalan' => getRecords('ziyadahHafalan'),
             'mutqin' => getRecords('mutqin'),
+            'murojaah' => getRecords('murojaah'),
             'catatan' => getRecords('catatan'),
             'tahunAjaran' => getSettings()['tahunAjaranList'],
             'semester' => getSettings()['semesterList'],
@@ -803,6 +805,7 @@ function bootstrapData($user) {
     $ziyadahBacaan = getRecords('ziyadahBacaan');
     $ziyadahHafalan = getRecords('ziyadahHafalan');
     $mutqin = getRecords('mutqin');
+    $murojaah = getRecords('murojaah');
     $catatan = getRecords('catatan');
     $notifikasi = getRecords('notifikasi');
 
@@ -813,10 +816,11 @@ function bootstrapData($user) {
         $ziyadahBacaan = array_values(array_filter($ziyadahBacaan, fn($z) => $z['santriId'] === $santriId));
         $ziyadahHafalan = array_values(array_filter($ziyadahHafalan, fn($z) => $z['santriId'] === $santriId));
         $mutqin = array_values(array_filter($mutqin, fn($m) => $m['santriId'] === $santriId));
+        $murojaah = array_values(array_filter($murojaah, fn($m) => $m['santriId'] === $santriId));
         $catatan = array_values(array_filter($catatan, fn($c) => $c['santriId'] === $santriId));
     } else {
         $santri = []; $kehadiran = []; $tahsin = []; $ziyadahBacaan = [];
-        $ziyadahHafalan = []; $mutqin = []; $catatan = [];
+        $ziyadahHafalan = []; $mutqin = []; $murojaah = []; $catatan = [];
     }
 
     // Wali sees only their own notifications
@@ -887,6 +891,7 @@ function bootstrapData($user) {
         'ziyadahBacaan' => $ziyadahBacaan,
         'ziyadahHafalan' => $ziyadahHafalan,
         'mutqin' => $mutqin,
+        'murojaah' => $murojaah,
         'catatan' => $catatan,
         'tahunAjaran' => getSettings()['tahunAjaranList'],
         'semester' => getSettings()['semesterList'],
