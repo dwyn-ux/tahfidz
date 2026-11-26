@@ -16,18 +16,9 @@ const Auth = (() => {
             <div class="tagline" style="color:var(--text-soft);font-size:13.5px;margin:0">Sistem Informasi Pembelajaran Tahfidz Al-Qur'an</div>
           </div>
 
-          <div style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px 12px;margin-bottom:18px">
-            <div style="font-size:11.5px;font-weight:600;color:var(--text-soft);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Akses Cepat Demo:</div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <button type="button" class="clay-btn sm ghost" style="padding:4px 9px;font-size:11.5px;border-radius:5px" onclick="document.getElementById('login-user').value='admin';document.getElementById('login-pass').value='admin123'">Admin</button>
-              <button type="button" class="clay-btn sm ghost" style="padding:4px 9px;font-size:11.5px;border-radius:5px" onclick="document.getElementById('login-user').value='ustadz1';document.getElementById('login-pass').value='12345678'">Ustadz</button>
-              <button type="button" class="clay-btn sm ghost" style="padding:4px 9px;font-size:11.5px;border-radius:5px" onclick="document.getElementById('login-user').value='0812111111';document.getElementById('login-pass').value='12345678'">Wali</button>
-            </div>
-          </div>
-
           <form id="login-form">
             <label class="field-label" style="font-size:12.5px;font-weight:600">Username / No. HP</label>
-            <input class="clay-input" id="login-user" placeholder="Contoh: admin / ustadz1 / 0812xxxx" required autocomplete="username" />
+            <input class="clay-input" id="login-user" placeholder="Masukkan username atau no. HP" required autocomplete="username" />
             <label class="field-label" style="font-size:12.5px;font-weight:600;margin-top:12px">Password</label>
             <input class="clay-input" id="login-pass" type="password" placeholder="••••••••" required autocomplete="current-password" />
             <div id="login-error" style="display:${initialError ? 'block' : 'none'};margin-top:12px;padding:10px 12px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:13px">${initialError ? UI.esc(initialError) : ''}</div>
