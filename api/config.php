@@ -115,7 +115,7 @@ if ($origin !== '') {
     }
 }
 // If no origins configured, same-origin requests work without CORS headers.
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     http_response_code(204);
     exit;
 }
@@ -339,6 +339,14 @@ function requireRole($role) {
 function requireAdmin() {
     return requireRole('admin');
 }
+function requireAdminOrSuperuser() {
+    $u = requireAuth();
+    if (!in_array($u['role'], ['admin', 'superuser'], true)) err('Forbidden', 403);
+    return $u;
+}
+function requireSuperuser() {
+    return requireRole('superuser');
+}
 
 require_once __DIR__ . '/normalized_store.php';
 
@@ -346,12 +354,16 @@ require_once __DIR__ . '/normalized_store.php';
    Instalasi lama tetap memakai tabel `records` sampai migrate.php selesai.
    Sesudah itu, fungsi publik yang dipakai API ini otomatis mengarah ke tabel
    per-entitas; tabel legacy tidak dihapus dan tetap menjadi arsip rollback. */
-function getRecords($type): array {
-    if (NormalizedStore::isActive()) return NormalizedStore::getRecords($type);
-    return legacyGetRecords($type);
+function getRecords($type, ?int $limit = null): array {
+    if (NormalizedStore::isActive()) return NormalizedStore::getRecords($type, $limit);
+    return legacyGetRecords($type, $limit);
 }
-function legacyGetRecords($type): array {
-    $stmt = pdo()->prepare('SELECT id, data FROM records WHERE type = ?');
+function legacyGetRecords($type, ?int $limit = null): array {
+    $sql = 'SELECT id, data FROM records WHERE type = ?';
+    if ($limit !== null && $limit > 0) {
+        $sql .= ' ORDER BY id DESC LIMIT ' . (int)$limit;
+    }
+    $stmt = pdo()->prepare($sql);
     $stmt->execute([$type]);
     $out = [];
     foreach ($stmt->fetchAll() as $r) {
@@ -401,26 +413,230 @@ function resetApplicationRecords(): void {
     pdo()->exec('DELETE FROM records');
 }
 
+function defaultFeatures(): array {
+    return [
+        // Program pembelajaran (minimal default: Tahsin aktif, lainnya opsional)
+        'tahsin' => true,
+        'ziyadah' => false,
+        'mutqin' => false,
+        'murojaah' => false,
+        // Operasional & monitoring
+        'presensi' => false,
+        'talim' => false,
+        'liveMonitor' => false,
+        // Laporan & utilitas data
+        'rekapSetoran' => false,
+        'laporanPdf' => false,
+        'raport' => false,
+        'importExcel' => false,
+        'exportExcel' => false,
+        // Portal & integrasi
+        'portalWali' => false,
+        'notifikasi' => false,
+        'whatsapp' => false,
+        'quran' => false,
+        'spp' => false,
+    ];
+}
+function normalizeFeatureFlags($raw): array {
+    $defaults = defaultFeatures();
+    if (!is_array($raw)) return $defaults;
+    $out = [];
+    foreach ($defaults as $key => $defVal) {
+        if (!array_key_exists($key, $raw)) {
+            $out[$key] = $defVal;
+        } else {
+            $v = $raw[$key];
+            $out[$key] = ($v === true || $v === 1 || $v === '1' || $v === 'true');
+        }
+    }
+    return $out;
+}
+function featureEnabled(array $settings, string $key): bool {
+    $features = normalizeFeatureFlags($settings['features'] ?? []);
+    return $features[$key] ?? true;
+}
+function disabledRecordTypes(array $settings): array {
+    $disabled = [];
+    if (!featureEnabled($settings, 'tahsin')) $disabled[] = 'tahsin';
+    if (!featureEnabled($settings, 'ziyadah')) {
+        $disabled[] = 'ziyadahBacaan';
+        $disabled[] = 'ziyadahHafalan';
+    }
+    if (!featureEnabled($settings, 'mutqin')) $disabled[] = 'mutqin';
+    if (!featureEnabled($settings, 'murojaah')) $disabled[] = 'murojaah';
+    if (!featureEnabled($settings, 'presensi')) {
+        $disabled[] = 'kehadiran';
+        $disabled[] = 'absensiUstadz';
+    }
+    if (!featureEnabled($settings, 'talim')) $disabled[] = 'jurnalTalim';
+    if (!featureEnabled($settings, 'notifikasi')) $disabled[] = 'notifikasi';
+    if (!featureEnabled($settings, 'spp')) $disabled[] = 'pembayaranSpp';
+    if (!featureEnabled($settings, 'raport')) $disabled[] = 'raport';
+    return $disabled;
+}
+function defaultSubscription(): array {
+    return ['status' => 'active', 'billingDate' => '', 'validUntil' => '', 'graceDays' => 7, 'nominal' => 0, 'note' => ''];
+}
+function normalizeSubscription($raw): array {
+    $def = defaultSubscription();
+    if (!is_array($raw)) return $def;
+    $status = (($raw['status'] ?? 'active') === 'suspended') ? 'suspended' : 'active';
+    $validUntil = trim((string)($raw['validUntil'] ?? ''));
+    if ($validUntil !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $validUntil)) $validUntil = '';
+    $billingDate = trim((string)($raw['billingDate'] ?? ''));
+    if ($billingDate !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $billingDate)) $billingDate = '';
+    $graceDays = array_key_exists('graceDays', $raw) && is_numeric($raw['graceDays'])
+        ? max(0, min(30, (int)$raw['graceDays']))
+        : 7;
+    $nominal = array_key_exists('nominal', $raw) && is_numeric($raw['nominal'])
+        ? max(0, (int)$raw['nominal'])
+        : 0;
+    $note = trim((string)($raw['note'] ?? ''));
+    return [
+        'status' => $status,
+        'billingDate' => $billingDate,
+        'validUntil' => $validUntil,
+        'graceDays' => $graceDays,
+        'nominal' => $nominal,
+        'note' => $note,
+    ];
+}
+function subscriptionSuspendDate(array $sub): string {
+    if (empty($sub['validUntil'])) return '';
+    $dt = DateTimeImmutable::createFromFormat('!Y-m-d', $sub['validUntil']);
+    if (!$dt) return '';
+    $offset = ((int)($sub['graceDays'] ?? 7)) > 0 ? (int)$sub['graceDays'] : 1;
+    return $dt->modify('+' . $offset . ' days')->format('Y-m-d');
+}
+function subscriptionEffectiveBillingDate(array $sub): string {
+    if (!empty($sub['billingDate'])) return $sub['billingDate'];
+    if (empty($sub['validUntil'])) return '';
+    $dt = DateTimeImmutable::createFromFormat('!Y-m-d', $sub['validUntil']);
+    return $dt ? $dt->modify('-7 days')->format('Y-m-d') : '';
+}
+function subscriptionBlockedReason(array $settings): ?string {
+    $sub = normalizeSubscription($settings['subscription'] ?? []);
+    if ($sub['status'] === 'suspended') {
+        return $sub['note'] !== '' ? $sub['note'] : 'Layanan lembaga sedang ditangguhkan sementara. Hubungi pengelola sistem.';
+    }
+    if ($sub['validUntil'] !== '') {
+        $suspendDate = subscriptionSuspendDate($sub);
+        if ($suspendDate !== '' && date('Y-m-d') >= $suspendDate) {
+            $graceNote = $sub['graceDays'] > 0
+                ? ' (melewati masa tenggang ' . $sub['graceDays'] . ' hari sejak jatuh tempo ' . $sub['validUntil'] . ')'
+                : ' (jatuh tempo pada ' . $sub['validUntil'] . ')';
+            $extra = $sub['note'] !== '' ? ' Info: ' . $sub['note'] : '';
+            return 'Layanan lembaga disuspend otomatis karena tagihan belum dibayar' . $graceNote . '. Hubungi pengelola untuk perpanjangan.' . $extra;
+        }
+    }
+    return null;
+}
+function syncSubscriptionNotifications(array $settings): void {
+    $sub = normalizeSubscription($settings['subscription'] ?? []);
+    if ($sub['status'] !== 'active' || $sub['validUntil'] === '') return;
+    $today = date('Y-m-d');
+    $billingDate = subscriptionEffectiveBillingDate($sub);
+    $suspendDate = subscriptionSuspendDate($sub);
+    if ($billingDate === '' || $today < $billingDate || ($suspendDate !== '' && $today >= $suspendDate)) return;
+
+    $phase = ($today > $sub['validUntil']) ? 'tenggang' : 'tagihan';
+    $nominalStr = $sub['nominal'] > 0 ? ' sebesar Rp ' . number_format($sub['nominal'], 0, ',', '.') : '';
+    $noteStr = $sub['note'] !== '' ? ' Catatan: ' . $sub['note'] : '';
+    $msg = $phase === 'tenggang'
+        ? "⚠️ Masa tenggang layanan aplikasi{$nominalStr}! Jatuh tempo {$sub['validUntil']}. Layanan akan disuspend otomatis pada {$suspendDate} jika belum dibayar.{$noteStr}"
+        : "💳 Tagihan layanan aplikasi{$nominalStr} aktif sejak {$billingDate} (jatuh tempo {$sub['validUntil']}, batas akhir sebelum suspend {$suspendDate}).{$noteStr}";
+
+    $stmt = pdo()->query("SELECT id FROM users WHERE role = 'admin'");
+    foreach ($stmt->fetchAll() as $admin) {
+        $adminId = (string)($admin['id'] ?? '');
+        if ($adminId === '') continue;
+        $sig = md5(implode('|', [$sub['validUntil'], $billingDate, $suspendDate, $sub['nominal'], $sub['note'], $phase, $adminId]));
+        $notifId = 'notif_bill_' . substr($sig, 0, 16);
+        if (!getRecord('notifikasi', $notifId)) {
+            putRecord('notifikasi', $notifId, [
+                'id' => $notifId,
+                'userId' => $adminId,
+                'tipe' => 'admin',
+                'kategori' => 'layanan_billing',
+                'periodKey' => $sub['validUntil'] . '|' . $phase,
+                'pesan' => $msg,
+                'tanggal' => date('c'),
+                'read' => false,
+            ]);
+        }
+    }
+}
+
+function defaultSesiHalaqah(): array {
+    return [
+        ['nama' => 'Subuh', 'jamMulai' => '04:30', 'jamSelesai' => '06:00'],
+        ['nama' => 'Ashar', 'jamMulai' => '15:30', 'jamSelesai' => '17:00'],
+        ['nama' => 'Maghrib', 'jamMulai' => '18:00', 'jamSelesai' => '19:15'],
+        ['nama' => 'Isya', 'jamMulai' => '19:30', 'jamSelesai' => '21:00'],
+    ];
+}
+function normalizeSesiHalaqah($raw): array {
+    if (!is_array($raw)) return defaultSesiHalaqah();
+    $out = [];
+    $seen = [];
+    $validTime = fn($v, $fb) => preg_match('/^([01]\d|2[0-3]):[0-5]\d$/', (string)$v) ? (string)$v : $fb;
+    foreach ($raw as $item) {
+        if (!is_array($item)) continue;
+        $nama = trim((string)($item['nama'] ?? ''));
+        if ($nama === '' || in_array(strtolower($nama), ['kajian', 'materi kajian', 'ta’lim malam', "ta'lim malam"], true)) continue;
+        $key = strtolower($nama);
+        if (isset($seen[$key])) continue;
+        $seen[$key] = true;
+        $out[] = [
+            'nama' => $nama,
+            'jamMulai' => $validTime($item['jamMulai'] ?? '', '07:00'),
+            'jamSelesai' => $validTime($item['jamSelesai'] ?? '', '08:00'),
+        ];
+    }
+    return count($out) ? $out : defaultSesiHalaqah();
+}
+function sesiNames(array $settings): array {
+    return array_values(array_map(fn($s) => $s['nama'], normalizeSesiHalaqah($settings['sesiHalaqah'] ?? [])));
+}
+
 /* ---------------- Settings ---------------- */
 function getSettings(): array {
     $stmt = pdo()->prepare('SELECT data FROM settings WHERE id = 1');
     $stmt->execute();
     $r = $stmt->fetch();
-    return $r ? array_merge(defaultSettings(), json_decode($r['data'], true)) : defaultSettings();
+    $merged = $r ? array_merge(defaultSettings(), json_decode($r['data'], true)) : defaultSettings();
+    $merged['features'] = normalizeFeatureFlags($merged['features'] ?? []);
+    $merged['subscription'] = normalizeSubscription($merged['subscription'] ?? []);
+    $merged['sesiHalaqah'] = normalizeSesiHalaqah($merged['sesiHalaqah'] ?? []);
+    return $merged;
 }
 function saveSettings(array $s) {
+    $s['features'] = normalizeFeatureFlags($s['features'] ?? []);
+    $s['subscription'] = normalizeSubscription($s['subscription'] ?? []);
+    $s['sesiHalaqah'] = normalizeSesiHalaqah($s['sesiHalaqah'] ?? []);
     $data = json_encode($s, JSON_UNESCAPED_UNICODE);
     $stmt = pdo()->prepare(upsertSQL('settings', ['id', 'data']));
     $stmt->execute([1, $data]);
 }
 function defaultSettings(): array {
     return [
+        'features' => defaultFeatures(),
+        'subscription' => defaultSubscription(),
+        'sppNominal' => 100000,
+        'sppJatuhTempo' => 10,
         'namaLembaga' => 'Rumah Tahfidz Al-Hikmah',
         'alamat' => 'Jl. Pendidikan No. 10, Jakarta',
+        'kota' => '',
+        'jabatanPimpinan' => 'Mudir / Kepala Lembaga',
+        'namaPimpinan' => '',
+        'ttdPimpinan' => '',
+        'capLembaga' => '',
         'tahunAjaran' => '2025/2026',
         'semester' => 'Ganjil',
         'standarPenilaian' => 'A (90-100), B (80-89), C (70-79), D (<70)',
         'jamBelajar' => '07:00 - 09:00',
+        'sesiHalaqah' => defaultSesiHalaqah(),
         'tema' => 'Claymorphism',
         'defaultPasswordFormat' => '12345678',
         'logo' => '',
@@ -463,7 +679,8 @@ function defaultSettings(): array {
 
 /** Return settings with sensitive fields stripped for non-admin users. */
 function publicSettings(array $s, string $role): array {
-    if ($role === 'admin') return $s;
+    $s['features'] = normalizeFeatureFlags($s['features'] ?? []);
+    if ($role === 'admin' || $role === 'superuser') return $s;
     // Non-admin: remove WhatsApp bridge credentials
     unset($s['waBridgeUrl'], $s['waBridgeKey']);
     return $s;
@@ -526,7 +743,7 @@ function attendanceSummaryMessage(array $santri, array $records, string $mode, s
  */
 function syncAttendanceWaliNotifications(): void {
     $settings = getSettings();
-    if (empty($settings['notifActive']) || empty($settings['notifWali']) || empty($settings['notifAbsensiWali'])) return;
+    if (!featureEnabled($settings, 'notifikasi') || empty($settings['notifActive']) || empty($settings['notifWali']) || empty($settings['notifAbsensiWali'])) return;
     $mode = $settings['notifAbsensiPeriode'] ?? 'harian';
     if (!in_array($mode, ['harian', 'halaqah', 'mingguan', 'bulanan'], true)) $mode = 'harian';
 
@@ -582,6 +799,21 @@ function getUserByUsername($username) {
     $stmt = pdo()->prepare('SELECT * FROM users WHERE username = ?');
     $stmt->execute([$username]);
     return $stmt->fetch();
+}
+function ensureSuperuserSeed(): void {
+    global $envVars;
+    try {
+        $exists = (int)pdo()->query("SELECT COUNT(*) FROM users WHERE role = 'superuser'")->fetchColumn();
+        if ($exists > 0) return;
+        $username = trim((string)($envVars['SUPERUSER_USERNAME'] ?? 'superuser'));
+        $password = (string)($envVars['SUPERUSER_PASSWORD'] ?? 'superuser123');
+        if ($username === '' || $password === '') return;
+        if (getUserByUsername($username)) return;
+        $stmt = pdo()->prepare(insertIgnoreSQL('users', ['id', 'username', 'password', 'role', 'refId']));
+        $stmt->execute([uid('usr'), $username, password_hash($password, PASSWORD_DEFAULT), 'superuser', null]);
+    } catch (Throwable $e) {
+        // Table users belum ada sebelum install; abaikan dengan aman.
+    }
 }
 function publicUser($u) {
     return ['id' => $u['id'], 'username' => $u['username'], 'role' => $u['role'], 'refId' => $u['refId']];
@@ -730,8 +962,11 @@ function bootstrapData($user) {
     syncGitUpdateNotifications();
     $settings = publicSettings(getSettings(), $user['role']);
 
-    // Admin & Pengawas: return everything
-    if ($user['role'] === 'admin' || $user['role'] === 'pengawas') {
+    // Admin, Superuser & Pengawas: return everything (except superuser accounts hidden from non-superuser)
+    if ($user['role'] === 'admin' || $user['role'] === 'pengawas' || $user['role'] === 'superuser') {
+        if ($user['role'] === 'admin') {
+            syncSubscriptionNotifications(getSettings());
+        }
         $db = [
             'settings' => $settings,
             'users' => [],
@@ -750,13 +985,19 @@ function bootstrapData($user) {
             'mutqin' => getRecords('mutqin'),
             'murojaah' => getRecords('murojaah'),
             'catatan' => getRecords('catatan'),
+            'raport' => featureEnabled(getSettings(), 'raport') ? getRecords('raport') : [],
+            'pembayaranSpp' => featureEnabled(getSettings(), 'spp') ? getRecords('pembayaranSpp') : [],
             'tahunAjaran' => getSettings()['tahunAjaranList'],
             'semester' => getSettings()['semesterList'],
             'notifikasi' => getRecords('notifikasi'),
-            'logAktivitas' => getRecords('logAktivitas'),
-            'logWa' => getRecords('logWa'),
+            'logAktivitas' => getRecords('logAktivitas', 150),
+            'logWa' => getRecords('logWa', 150),
         ];
-        $stmt = pdo()->query('SELECT id, username, role, refId FROM users');
+        if ($user['role'] === 'superuser') {
+            $stmt = pdo()->query('SELECT id, username, role, refId FROM users');
+        } else {
+            $stmt = pdo()->query("SELECT id, username, role, refId FROM users WHERE role != 'superuser'");
+        }
         $db['users'] = $stmt->fetchAll();
         return $db;
     }
@@ -781,11 +1022,13 @@ function bootstrapData($user) {
             'mutqin' => getRecords('mutqin'),
             'murojaah' => getRecords('murojaah'),
             'catatan' => getRecords('catatan'),
+            'raport' => featureEnabled(getSettings(), 'raport') ? getRecords('raport') : [],
+            'pembayaranSpp' => featureEnabled(getSettings(), 'spp') ? getRecords('pembayaranSpp') : [],
             'tahunAjaran' => getSettings()['tahunAjaranList'],
             'semester' => getSettings()['semesterList'],
             'notifikasi' => array_values(array_filter(getRecords('notifikasi'), fn($n) => $n['userId'] === $user['uid'])),
-            'logAktivitas' => getRecords('logAktivitas'),
-            'logWa' => getRecords('logWa'),
+            'logAktivitas' => getRecords('logAktivitas', 150),
+            'logWa' => getRecords('logWa', 150),
         ];
         // Ustadz sees only their own user account + admin accounts (for reference)
         $stmt = pdo()->query('SELECT id, username, role, refId FROM users');
@@ -794,52 +1037,79 @@ function bootstrapData($user) {
         return $db;
     }
 
-    // Wali: return ONLY their child's data (read-only, privacy-protected)
+    // Wali: return ONLY their child's (or children's) data (read-only, privacy-protected)
     $wali = $user['refId'] ? getRecord('wali', $user['refId']) : null;
-    $santriId = $wali['santriId'] ?? null;
+    $santriIds = [];
+    if ($wali) {
+        if (!empty($wali['santriId'])) {
+            $santriIds[] = $wali['santriId'];
+        }
+        // Link siblings sharing same phone number or waliId
+        if (NormalizedStore::isActive()) {
+            $query = 'SELECT id FROM santri WHERE wali_id = ?';
+            $params = [$wali['id']];
+            if (!empty($wali['noHp'])) {
+                $cleanPhone = preg_replace('/[^0-9]/', '', $wali['noHp']);
+                if (strlen($cleanPhone) >= 8) {
+                    $query .= " OR REPLACE(REPLACE(REPLACE(no_hp_wali, '-', ''), ' ', ''), '+', '') LIKE ?";
+                    $params[] = '%' . substr($cleanPhone, -8);
+                }
+            }
+            $stmt = pdo()->prepare($query);
+            $stmt->execute($params);
+            foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $sid) {
+                $santriIds[] = (string)$sid;
+            }
+        }
+    }
+    $santriIds = array_values(array_unique(array_filter($santriIds)));
 
-    $santri = getRecords('santri');
-    $kehadiran = getRecords('kehadiran');
-    $jurnalTalim = getRecords('jurnalTalim');
-    $tahsin = getRecords('tahsin');
-    $ziyadahBacaan = getRecords('ziyadahBacaan');
-    $ziyadahHafalan = getRecords('ziyadahHafalan');
-    $mutqin = getRecords('mutqin');
-    $murojaah = getRecords('murojaah');
-    $catatan = getRecords('catatan');
-    $notifikasi = getRecords('notifikasi');
-
-    if ($santriId) {
-        $santri = array_values(array_filter($santri, fn($s) => $s['id'] === $santriId));
-        $kehadiran = array_values(array_filter($kehadiran, fn($k) => $k['santriId'] === $santriId));
-        $tahsin = array_values(array_filter($tahsin, fn($t) => $t['santriId'] === $santriId));
-        $ziyadahBacaan = array_values(array_filter($ziyadahBacaan, fn($z) => $z['santriId'] === $santriId));
-        $ziyadahHafalan = array_values(array_filter($ziyadahHafalan, fn($z) => $z['santriId'] === $santriId));
-        $mutqin = array_values(array_filter($mutqin, fn($m) => $m['santriId'] === $santriId));
-        $murojaah = array_values(array_filter($murojaah, fn($m) => $m['santriId'] === $santriId));
-        $catatan = array_values(array_filter($catatan, fn($c) => $c['santriId'] === $santriId));
+    if (!empty($santriIds)) {
+        if (NormalizedStore::isActive()) {
+            $santri = NormalizedStore::getRecordsForSantri('santri', $santriIds);
+            $kehadiran = NormalizedStore::getRecordsForSantri('kehadiran', $santriIds);
+            $tahsin = NormalizedStore::getRecordsForSantri('tahsin', $santriIds);
+            $ziyadahBacaan = NormalizedStore::getRecordsForSantri('ziyadahBacaan', $santriIds);
+            $ziyadahHafalan = NormalizedStore::getRecordsForSantri('ziyadahHafalan', $santriIds);
+            $mutqin = NormalizedStore::getRecordsForSantri('mutqin', $santriIds);
+            $murojaah = NormalizedStore::getRecordsForSantri('murojaah', $santriIds);
+            $catatan = NormalizedStore::getRecordsForSantri('catatan', $santriIds);
+            $raport = featureEnabled($settings, 'raport') ? NormalizedStore::getRecordsForSantri('raport', $santriIds) : [];
+            $pembayaranSpp = featureEnabled($settings, 'spp') ? NormalizedStore::getRecordsForSantri('pembayaranSpp', $santriIds) : [];
+        } else {
+            $santri = array_values(array_filter(getRecords('santri'), fn($s) => in_array($s['id'], $santriIds, true)));
+            $kehadiran = array_values(array_filter(getRecords('kehadiran'), fn($k) => in_array($k['santriId'] ?? '', $santriIds, true)));
+            $tahsin = array_values(array_filter(getRecords('tahsin'), fn($t) => in_array($t['santriId'] ?? '', $santriIds, true)));
+            $ziyadahBacaan = array_values(array_filter(getRecords('ziyadahBacaan'), fn($z) => in_array($z['santriId'] ?? '', $santriIds, true)));
+            $ziyadahHafalan = array_values(array_filter(getRecords('ziyadahHafalan'), fn($z) => in_array($z['santriId'] ?? '', $santriIds, true)));
+            $mutqin = array_values(array_filter(getRecords('mutqin'), fn($m) => in_array($m['santriId'] ?? '', $santriIds, true)));
+            $murojaah = array_values(array_filter(getRecords('murojaah'), fn($m) => in_array($m['santriId'] ?? '', $santriIds, true)));
+            $catatan = array_values(array_filter(getRecords('catatan'), fn($c) => in_array($c['santriId'] ?? '', $santriIds, true)));
+            $raport = featureEnabled($settings, 'raport') ? array_values(array_filter(getRecords('raport'), fn($r) => in_array($r['santriId'] ?? '', $santriIds, true))) : [];
+            $pembayaranSpp = featureEnabled($settings, 'spp') ? array_values(array_filter(getRecords('pembayaranSpp'), fn($p) => in_array($p['santriId'] ?? '', $santriIds, true))) : [];
+        }
     } else {
         $santri = []; $kehadiran = []; $tahsin = []; $ziyadahBacaan = [];
-        $ziyadahHafalan = []; $mutqin = []; $murojaah = []; $catatan = [];
+        $ziyadahHafalan = []; $mutqin = []; $murojaah = []; $catatan = []; $raport = []; $pembayaranSpp = [];
     }
 
     // Wali sees only their own notifications
-    $notifikasi = array_values(array_filter($notifikasi, fn($n) => $n['userId'] === $user['uid']));
+    $notifikasi = array_values(array_filter(getRecords('notifikasi'), fn($n) => $n['userId'] === $user['uid']));
 
     // Wali sees their own wali record + every ustadz who teaches one of their
-    // child's active-program halaqah. Legacy data has one `level`/`halaqah`;
-    // newer data can contain `programAktif` and `halaqahProgram`.
+    // children's active-program halaqah.
     $waliRecords = $wali ? [$wali] : [];
     $ustadzRecords = [];
     $ustadzIds = [];
     $halaqahForWali = [];
     if (!empty($santri)) {
         $halaqahRecords = getRecords('halaqah');
-        $santriData = $santri[0];
         $references = [];
-        if (!empty($santriData['halaqah'])) $references[] = $santriData['halaqah'];
-        if (!empty($santriData['halaqahProgram']) && is_array($santriData['halaqahProgram'])) {
-            foreach ($santriData['halaqahProgram'] as $reference) if ($reference) $references[] = $reference;
+        foreach ($santri as $santriData) {
+            if (!empty($santriData['halaqah'])) $references[] = $santriData['halaqah'];
+            if (!empty($santriData['halaqahProgram']) && is_array($santriData['halaqahProgram'])) {
+                foreach ($santriData['halaqahProgram'] as $reference) if ($reference) $references[] = $reference;
+            }
         }
         $references = array_values(array_unique($references));
         $halaqahForWali = array_values(array_filter($halaqahRecords, fn($h) =>
@@ -875,6 +1145,30 @@ function bootstrapData($user) {
         ));
     }
 
+    // Wali hanya melihat jurnal Materi Kajian yang sesuai kelas anaknya.
+    $jurnalTalim = [];
+    if (featureEnabled($settings, 'talim') && !empty($santri)) {
+        $childKeys = [];
+        foreach ($santri as $santriData) {
+            $tk = trim((string)($santriData['tingkat'] ?? ''));
+            $kl = trim((string)($santriData['kelas'] ?? ''));
+            if ($tk !== '' && $kl !== '') $childKeys[$tk . '|' . $kl] = true;
+            elseif ($kl !== '') $childKeys['|' . $kl] = true;
+        }
+        if ($childKeys) {
+            $jurnalTalim = array_values(array_filter(getRecords('jurnalTalim'), function ($j) use ($childKeys) {
+                $keys = is_array($j['kelasKeys'] ?? null) ? $j['kelasKeys'] : [];
+                if (!$keys && (!empty($j['tingkat']) || !empty($j['kelas']))) {
+                    $keys[] = trim((string)($j['tingkat'] ?? '')) . '|' . trim((string)($j['kelas'] ?? ''));
+                }
+                foreach ($keys as $k) {
+                    if (isset($childKeys[(string)$k])) return true;
+                }
+                return false;
+            }));
+        }
+    }
+
     $db = [
         'settings' => $settings,
         'users' => [['id' => $user['uid'], 'username' => '', 'role' => 'wali', 'refId' => $user['refId']]],
@@ -893,6 +1187,8 @@ function bootstrapData($user) {
         'mutqin' => $mutqin,
         'murojaah' => $murojaah,
         'catatan' => $catatan,
+        'raport' => $raport,
+        'pembayaranSpp' => $pembayaranSpp,
         'tahunAjaran' => getSettings()['tahunAjaranList'],
         'semester' => getSettings()['semesterList'],
         'notifikasi' => $notifikasi,

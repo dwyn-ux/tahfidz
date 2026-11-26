@@ -1,5 +1,5 @@
 {
-    "hash": "861bf3f",
-    "message": "fix: retain active tab on refresh and fix murojaah setoran persistence",
-    "date": "2026-11-24T16:16:38+07:00"
+    "hash": "c79a1cc",
+    "message": "fix: include murojaah in bootstrapData and bump cache version",
+    "date": "2026-11-24T17:58:58+07:00"
 }

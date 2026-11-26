@@ -155,10 +155,12 @@ function laporanDataForUser(array $user, array $filters): array {
         }
     }
 
+    $sesiList = sesiNames(getSettings());
+    $defaultSesi = $sesiList[0] ?? 'Subuh';
     $latestAttendance = [];
     foreach ($attendance as $record) {
-        $session = (string)($record['sesi'] ?? 'Subuh');
-        if ($session === 'Ta’lim Malam') continue;
+        $session = (string)($record['sesi'] ?? $defaultSesi);
+        if (in_array(strtolower(trim($session)), ['kajian', 'materi kajian', 'ta’lim malam', "ta'lim malam"], true)) continue;
         $key = implode('|', [(string)$record['santriId'], (string)$record['tanggal'], $session]);
         $created = (int)($record['_created'] ?? 0);
         if (!isset($latestAttendance[$key]) || $created >= (int)($latestAttendance[$key]['_created'] ?? 0)) {
@@ -167,15 +169,24 @@ function laporanDataForUser(array $user, array $filters): array {
     }
     $stats = [];
     foreach ($santriIds as $id) {
-        $stats[$id] = ['hadirSubuh' => 0, 'hadirAshar' => 0, 'hadirMaghrib' => 0, 'hadirIsya' => 0, 'hadir' => 0, 'totalK' => 0];
+        $stats[$id] = [
+            'hadirPerSesi' => array_fill_keys($sesiList, 0),
+            'hadirSubuh' => 0, 'hadirAshar' => 0, 'hadirMaghrib' => 0, 'hadirIsya' => 0,
+            'hadir' => 0, 'totalK' => 0,
+        ];
     }
     foreach ($latestAttendance as $record) {
         $id = (string)$record['santriId'];
         if (!isset($stats[$id])) continue;
+        if (($record['status'] ?? '') === 'Libur') continue;
         $stats[$id]['totalK']++;
         if (($record['status'] ?? '') === 'Hadir') {
             $stats[$id]['hadir']++;
-            $key = match ($record['sesi'] ?? 'Subuh') {
+            $sesName = (string)($record['sesi'] ?? $defaultSesi);
+            if (isset($stats[$id]['hadirPerSesi'][$sesName])) {
+                $stats[$id]['hadirPerSesi'][$sesName]++;
+            }
+            $key = match ($sesName) {
                 'Subuh' => 'hadirSubuh', 'Ashar' => 'hadirAshar',
                 'Maghrib' => 'hadirMaghrib', 'Isya' => 'hadirIsya', default => null,
             };

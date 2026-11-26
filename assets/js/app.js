@@ -14,26 +14,34 @@ const App = (() => {
     admin_riwayat: () => Admin.riwayat(),
     admin_laporan: () => Admin.laporan(),
     admin_laporan_murojaah: () => Admin.laporanMurojaah(),
+    admin_raport: (opts) => Admin.raport(opts),
     admin_rekap_kehadiran: () => Admin.rekapKehadiran(),
     admin_rekap_setoran: () => Admin.rekapSetoran(),
     admin_notif: () => Admin.notif(),
     admin_talim: () => Admin.talim(),
     admin_libur: () => Admin.adminLibur(),
+    admin_spp: () => Admin.spp(),
     admin_settings: () => Admin.settings(),
+    // Superuser (Vendor)
+    superuser_panel: () => Admin.superuserPanel(),
     // Ustadz
     ustadz_dashboard: () => Ustadz.dashboard(),
     ustadz_absensi: () => Ustadz.absensi(),
     ustadz_talim: () => Ustadz.talim(),
-    ustadz_talim_absensi: () => Ustadz.absensi('Ta’lim Malam'),
+    ustadz_talim_absensi: () => Ustadz.absensi(Store.TALIM_SESI),
     ustadz_pembelajaran: () => Ustadz.pembelajaran(),
     ustadz_riwayat: () => Ustadz.riwayat(),
+    ustadz_rekap_setoran: () => Ustadz.rekapSetoran(),
     ustadz_laporan: () => Ustadz.laporan(),
     ustadz_laporan_murojaah: () => Ustadz.laporanMurojaah(),
+    ustadz_raport: () => Ustadz.raport(),
     ustadz_notif: () => Ustadz.notif(),
     // Wali
     wali_dashboard: () => Wali.dashboard(),
     wali_perkembangan: () => Wali.perkembangan(),
+    wali_raport: () => Wali.raport(),
     wali_absensi: () => Wali.absensi(),
+    wali_spp: () => Wali.spp(),
     wali_catatan: () => Wali.catatan(),
     wali_profil: () => Wali.profil(),
     // Al-Qur'an reader (shared, no login required)
@@ -41,10 +49,36 @@ const App = (() => {
   };
 
   const defaultRoute = {
+    superuser: 'superuser_panel',
     admin: 'admin_dashboard',
     pengawas: 'admin_live_monitor',
     ustadz: 'ustadz_dashboard',
     wali: 'wali_dashboard'
+  };
+  const ROUTE_FEATURE_MAP = {
+    admin_live_monitor: 'liveMonitor',
+    admin_absensi_ustadz: 'presensi',
+    admin_rekap_kehadiran: 'presensi',
+    admin_rekap_setoran: 'rekapSetoran',
+    admin_libur: 'presensi',
+    admin_spp: 'spp',
+    admin_talim: 'talim',
+    admin_laporan: 'laporanPdf',
+    admin_laporan_murojaah: 'murojaah',
+    admin_raport: 'raport',
+    admin_notif: 'notifikasi',
+    ustadz_absensi: 'presensi',
+    ustadz_talim: 'talim',
+    ustadz_talim_absensi: 'talim',
+    ustadz_rekap_setoran: 'rekapSetoran',
+    ustadz_laporan: 'laporanPdf',
+    ustadz_laporan_murojaah: 'murojaah',
+    ustadz_raport: 'raport',
+    ustadz_notif: 'notifikasi',
+    wali_absensi: 'presensi',
+    wali_raport: 'raport',
+    wali_spp: 'spp',
+    quran: 'quran'
   };
   let current = null;
   let tableObserverStarted = false;
@@ -91,12 +125,17 @@ const App = (() => {
   }
 
   function isAllowedView(view, role) {
-    if (view === 'quran') return true;
+    if (view === 'quran') return !role || role === 'superuser' || Store.hasFeature('quran');
     if (!role) return false;
+    if (role === 'superuser') return view === 'superuser_panel';
+    const reqFeature = ROUTE_FEATURE_MAP[view];
+    if (reqFeature && !Store.hasFeature(reqFeature)) return false;
     if (role === 'admin') return view.startsWith('admin_');
     if (role === 'pengawas') {
+      if (!Store.hasFeature('liveMonitor')) return false;
       return ['admin_live_monitor', 'admin_dashboard', 'admin_rekap_kehadiran', 'admin_rekap_setoran', 'admin_absensi_ustadz', 'admin_riwayat', 'admin_laporan', 'admin_laporan_murojaah', 'admin_libur', 'admin_notif'].includes(view);
     }
+    if (role === 'wali' && !Store.hasFeature('portalWali')) return false;
     return view.startsWith(role + '_');
   }
 
@@ -118,7 +157,7 @@ const App = (() => {
     if (view !== 'quran') document.body.classList.remove('q-reading-fullscreen');
     current = view;
     try {
-      routes[view]();
+      routes[view](options);
       enhanceTables(document.getElementById('app'));
       // Pemicu WA otomatis berjadwal (rekap harian/mingguan/bulanan). Hanya
       // berjalan saat ada yang membuka aplikasi; untuk pengiriman tepat waktu
@@ -169,8 +208,8 @@ const App = (() => {
         }
       } catch(e) {}
     } catch (e) {
-      // token invalid or server unreachable -> back to login
-      Auth.renderLogin();
+      // token invalid, forbidden, or server unreachable -> back to login
+      Auth.renderLogin(e && e.message ? e.message : '');
       return;
     }
     setFavicon();

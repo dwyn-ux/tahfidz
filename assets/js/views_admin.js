@@ -112,266 +112,459 @@ const Admin = (() => {
 
   function nav(active) {
     const session = Store.getSession();
-    const isPengawas = session?.role === 'pengawas';
-    const unreadCount = session ? Store.notifFor(session.userId).filter(n => !n.read).length : 0;
-    const notifLabel = 'Notifikasi' + (unreadCount > 0 ? ` <span class="badge blue" style="font-size:10px;padding:2px 6px;margin-left:4px">${unreadCount}</span>` : '');
-    if (isPengawas) {
+    const role = session?.role;
+    if (role === 'superuser') {
       return [
-        { view: 'admin_live_monitor', label: '🔴 Live Monitor', active: active === 'admin_live_monitor' },
-        { view: 'admin_dashboard', label: 'Dashboard', active: active === 'admin_dashboard' },
-        { view: 'admin_rekap_kehadiran', label: 'Rekap Kehadiran', active: active === 'admin_rekap_kehadiran' },
-        { view: 'admin_rekap_setoran', label: 'Rekap Setoran', active: active === 'admin_rekap_setoran' },
-        { view: 'admin_absensi_ustadz', label: 'Absensi Ustadz', active: active === 'admin_absensi_ustadz' },
-        { view: 'admin_riwayat', label: 'Riwayat', active: active === 'admin_riwayat' },
-        { view: 'admin_laporan', label: 'Laporan', active: active === 'admin_laporan' },
-        { view: 'admin_laporan_murojaah', label: 'Laporan Murojaah', active: active === 'admin_laporan_murojaah' },
-        { view: 'admin_libur', label: 'Kalender Libur', active: active === 'admin_libur' },
-        { view: 'admin_notif', label: notifLabel, active: active === 'admin_notif' },
-        { view: 'quran', label: 'Al-Qur\'an', active: active === 'quran' }
+        { group: 'Kontrol Vendor' },
+        { view: 'superuser_panel', label: 'Kontrol Fitur & Paket', icon: Shared.icon('settings'), active: active === 'superuser_panel' },
+        { view: 'quran', label: 'Al-Qur\'an Digital', icon: Shared.icon('quran'), active: active === 'quran' }
       ];
     }
-    return [
-      { view: 'admin_dashboard', label: 'Dashboard', active: active === 'admin_dashboard' },
-      { view: 'admin_live_monitor', label: '🔴 Live Monitor', active: active === 'admin_live_monitor' },
-      { view: 'admin_santri', label: 'Santri', active: active === 'admin_santri' },
-      { view: 'admin_ustadz', label: 'Ustadz', active: active === 'admin_ustadz' },
-      { view: 'admin_halaqah', label: 'Halaqah', active: active === 'admin_halaqah' },
-      { view: 'admin_master', label: 'Master Surat', active: active === 'admin_master' },
-      { view: 'admin_absensi_ustadz', label: 'Absensi Ustadz', active: active === 'admin_absensi_ustadz' },
-      { view: 'admin_libur', label: 'Kalender Libur', active: active === 'admin_libur' },
-      { view: 'admin_riwayat', label: 'Riwayat', active: active === 'admin_riwayat' },
-      { view: 'admin_laporan', label: 'Laporan', active: active === 'admin_laporan' },
-      { view: 'admin_laporan_murojaah', label: 'Laporan Murojaah', active: active === 'admin_laporan_murojaah' },
-      { view: 'admin_rekap_kehadiran', label: 'Rekap Kehadiran', active: active === 'admin_rekap_kehadiran' },
-      { view: 'admin_rekap_setoran', label: 'Rekap Setoran', active: active === 'admin_rekap_setoran' },
-      { view: 'admin_notif', label: notifLabel, active: active === 'admin_notif' },
-      { view: 'admin_talim', label: 'Ta’lim', active: active === 'admin_talim' },
-      { view: 'admin_settings', label: 'Settings', active: active === 'admin_settings' },
-      { view: 'quran', label: 'Al-Qur\'an', active: active === 'quran' }
-    ];
+    const isPengawas = role === 'pengawas';
+    const unreadCount = session ? Store.notifFor(session.userId).filter(n => !n.read).length : 0;
+    const notifLabel = 'Notifikasi' + (unreadCount > 0 ? ` <span class="badge blue sm" style="margin-left:4px">${unreadCount}</span>` : '');
+    const featFilter = items => items.filter(it => !it.feature || Store.hasFeature(it.feature));
+    const hasQuranData = Store.hasFeature('ziyadah') || Store.hasFeature('mutqin') || Store.hasFeature('murojaah') || Store.hasFeature('quran');
+    if (isPengawas) {
+      return featFilter([
+        { group: 'Pemantauan' },
+        { view: 'admin_live_monitor', feature: 'liveMonitor', label: 'Live Monitor', icon: Shared.icon('monitor'), active: active === 'admin_live_monitor' },
+        { view: 'admin_dashboard', label: 'Dashboard', icon: Shared.icon('dashboard'), active: active === 'admin_dashboard' },
+        { view: 'admin_libur', feature: 'presensi', label: 'Kalender Libur', icon: Shared.icon('calendar'), active: active === 'admin_libur' },
+        { group: 'Laporan & Rekap' },
+        { view: 'admin_rekap_setoran', feature: 'rekapSetoran', label: 'Rekap Setoran', icon: Shared.icon('setoran'), active: active === 'admin_rekap_setoran' },
+        { view: 'admin_rekap_kehadiran', feature: 'presensi', label: 'Rekap Kehadiran', icon: Shared.icon('calendar'), active: active === 'admin_rekap_kehadiran' },
+        { view: 'admin_absensi_ustadz', feature: 'presensi', label: 'Absensi Ustadz', icon: Shared.icon('presensi'), active: active === 'admin_absensi_ustadz' },
+        { view: 'admin_laporan', feature: 'laporanPdf', label: 'Laporan Capaian', icon: Shared.icon('laporan'), active: active === 'admin_laporan' },
+        { view: 'admin_laporan_murojaah', feature: 'murojaah', label: 'Laporan Murojaah', icon: Shared.icon('award'), active: active === 'admin_laporan_murojaah' },
+        { view: 'admin_raport', feature: 'raport', label: 'Raport Santri', icon: Shared.icon('award'), active: active === 'admin_raport' },
+        { view: 'admin_riwayat', label: 'Riwayat Setoran', icon: Shared.icon('riwayat'), active: active === 'admin_riwayat' },
+        { group: 'Lainnya' },
+        { view: 'quran', feature: 'quran', label: 'Al-Qur\'an', icon: Shared.icon('quran'), active: active === 'quran' },
+        { view: 'admin_notif', feature: 'notifikasi', label: notifLabel, icon: Shared.icon('bell'), active: active === 'admin_notif' }
+      ]);
+    }
+    return featFilter([
+      { group: 'Utama' },
+      { view: 'admin_dashboard', label: 'Dashboard', icon: Shared.icon('dashboard'), active: active === 'admin_dashboard' },
+      { view: 'admin_live_monitor', feature: 'liveMonitor', label: 'Live Monitor', icon: Shared.icon('monitor'), active: active === 'admin_live_monitor' },
+      { group: 'Data Master' },
+      { view: 'admin_santri', label: 'Data Santri', icon: Shared.icon('users'), active: active === 'admin_santri' },
+      { view: 'admin_ustadz', label: 'Data Ustadz', icon: Shared.icon('teacher'), active: active === 'admin_ustadz' },
+      { view: 'admin_halaqah', label: 'Halaqah', icon: Shared.icon('halaqah'), active: active === 'admin_halaqah' },
+      ...(hasQuranData ? [{ view: 'admin_master', label: 'Master Surat', icon: Shared.icon('quran'), active: active === 'admin_master' }] : []),
+      { group: 'Operasional' },
+      { view: 'admin_absensi_ustadz', feature: 'presensi', label: 'Absensi Ustadz', icon: Shared.icon('presensi'), active: active === 'admin_absensi_ustadz' },
+      { view: 'admin_spp', feature: 'spp', label: 'Pembayaran SPP', icon: Shared.icon('award'), active: active === 'admin_spp' },
+      { view: 'admin_talim', feature: 'talim', label: 'Kajian', icon: Shared.icon('book'), active: active === 'admin_talim' },
+      { view: 'admin_libur', feature: 'presensi', label: 'Kalender Libur', icon: Shared.icon('calendar'), active: active === 'admin_libur' },
+      { group: 'Laporan & Rekap' },
+      { view: 'admin_rekap_setoran', feature: 'rekapSetoran', label: 'Rekap Setoran', icon: Shared.icon('setoran'), active: active === 'admin_rekap_setoran' },
+      { view: 'admin_rekap_kehadiran', feature: 'presensi', label: 'Rekap Kehadiran', icon: Shared.icon('calendar'), active: active === 'admin_rekap_kehadiran' },
+      { view: 'admin_laporan', feature: 'laporanPdf', label: 'Laporan Capaian', icon: Shared.icon('laporan'), active: active === 'admin_laporan' },
+      { view: 'admin_laporan_murojaah', feature: 'murojaah', label: 'Laporan Murojaah', icon: Shared.icon('award'), active: active === 'admin_laporan_murojaah' },
+      { view: 'admin_raport', feature: 'raport', label: 'Raport Santri', icon: Shared.icon('award'), active: active === 'admin_raport' },
+      { view: 'admin_riwayat', label: 'Riwayat Setoran', icon: Shared.icon('riwayat'), active: active === 'admin_riwayat' },
+      { group: 'Pengaturan & Lainnya' },
+      { view: 'quran', feature: 'quran', label: 'Al-Qur\'an Digital', icon: Shared.icon('quran'), active: active === 'quran' },
+      { view: 'admin_notif', feature: 'notifikasi', label: notifLabel, icon: Shared.icon('bell'), active: active === 'admin_notif' },
+      { view: 'admin_settings', label: 'Pengaturan', icon: Shared.icon('settings'), active: active === 'admin_settings' }
+    ]);
   }
 
   function navUstadz(active) {
     const session = Store.getSession();
     const unreadCount = session ? Store.notifFor(session.userId).filter(n => !n.read).length : 0;
-    const notifLabel = 'Notifikasi' + (unreadCount > 0 ? ` <span class="badge blue" style="font-size:10px;padding:2px 6px;margin-left:4px">${unreadCount}</span>` : '');
+    const notifLabel = 'Notifikasi' + (unreadCount > 0 ? ` <span class="badge blue sm" style="margin-left:4px">${unreadCount}</span>` : '');
     return [
-      { view: 'ustadz_dashboard', label: 'Dashboard', active: active === 'ustadz_dashboard' },
-      { view: 'ustadz_absensi', label: 'Absensi', active: active === 'ustadz_absensi' },
-      { view: 'ustadz_talim', label: 'Ta’lim Malam', active: active === 'ustadz_talim' },
-      { view: 'ustadz_pembelajaran', label: 'Pembelajaran', active: active === 'ustadz_pembelajaran' },
-      { view: 'ustadz_riwayat', label: 'Riwayat', active: active === 'ustadz_riwayat' },
-      { view: 'ustadz_laporan', label: 'Laporan', active: active === 'ustadz_laporan' },
-      { view: 'ustadz_laporan_murojaah', label: 'Laporan Murojaah', active: active === 'ustadz_laporan_murojaah' },
-      { view: 'ustadz_notif', label: notifLabel, active: active === 'ustadz_notif' },
-      { view: 'quran', label: 'Al-Qur\'an', active: active === 'quran' }
+      { group: 'Utama' },
+      { view: 'ustadz_dashboard', label: 'Dashboard', icon: Shared.icon('dashboard'), active: active === 'ustadz_dashboard' },
+      { group: 'Aktivitas Harian' },
+      { view: 'ustadz_absensi', label: 'Absensi Santri', icon: Shared.icon('presensi'), active: active === 'ustadz_absensi' },
+      { view: 'ustadz_pembelajaran', label: 'Setoran & Hafalan', icon: Shared.icon('setoran'), active: active === 'ustadz_pembelajaran' },
+      { view: 'ustadz_talim', label: 'Kajian', icon: Shared.icon('book'), active: active === 'ustadz_talim' },
+      { group: 'Laporan' },
+      { view: 'ustadz_riwayat', label: 'Riwayat Setoran', icon: Shared.icon('riwayat'), active: active === 'ustadz_riwayat' },
+      { view: 'ustadz_laporan', label: 'Laporan Capaian', icon: Shared.icon('laporan'), active: active === 'ustadz_laporan' },
+      { view: 'ustadz_laporan_murojaah', label: 'Laporan Murojaah', icon: Shared.icon('award'), active: active === 'ustadz_laporan_murojaah' },
+      { view: 'ustadz_notif', label: notifLabel, icon: Shared.icon('bell'), active: active === 'ustadz_notif' },
+      { view: 'quran', label: 'Al-Qur\'an Digital', icon: Shared.icon('quran'), active: active === 'quran' }
     ];
   }
 
   /* ---------------- Dashboard ---------------- */
   function dashboard() {
     Store.checkSetoranTerlewat();
+    const hasLive = Store.hasFeature('liveMonitor');
+    const hasPresensi = Store.hasFeature('presensi');
     Shared.shell('admin', nav('admin_dashboard'), '');
-    Shared.setHeader('Dashboard Admin', 'Ringkasan lembaga');
+    Shared.setHeader('Dashboard Lembaga', 'Ringkasan operasional dan capaian santri hari ini');
+    if (hasLive) {
+      Shared.setActions(`
+        <button class="clay-btn sm primary" data-go="admin_live_monitor" style="display:inline-flex;align-items:center;gap:6px">
+          <span class="live-pulse-dot" style="background:#fff"></span> Live Monitor
+        </button>
+      `);
+    }
     const db = Store.get();
-    const totalHafalanPages = db.santri.reduce((acc, s) => { const h = Store.totalHafalanSantri(s.id); return acc + (h ? h.pages : 0); }, 0);
     const bulanIni = Store.todayStr().slice(0, 7);
-    // Satu sesi bisa dicatat lebih dari satu ustadz (satu halaqah boleh diampu
-    // beberapa ustadz), jadi rekap memakai satu status per sesi.
     const hadirBulanIni = Store.dedupeKehadiran(db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni)));
-    const countHadir = sesi => hadirBulanIni.filter(k => k.sesi === sesi && k.status === 'Hadir').length;
-    const hadirSubuh = countHadir('Subuh');
-    const hadirAshar = countHadir('Ashar');
-    const hadirMaghrib = countHadir('Maghrib');
-    const hadirIsya = countHadir('Isya');
-    const ustadzHadirHariIni = new Set((db.absensiUstadz || [])
-      .filter(a => a.tanggal === Store.todayStr() && a.status === 'Hadir')
-      .map(a => a.ustadzId)).size;
+    const today = Store.todayStr();
+    const activeU = db.ustadz.filter(u => u.status !== 'Nonaktif');
+    const activeS = db.santri.filter(s => s.status !== 'Nonaktif');
+    const uAbsen = new Set((db.absensiUstadz || []).filter(a => a.tanggal === today && a.status === 'Hadir').map(a => a.ustadzId)).size;
+    const sDiabsen = new Set((db.kehadiran || []).filter(k => k.tanggal === today).map(k => k.santriId)).size;
+    const sSetoran = new Set([
+      ...(db.ziyadahHafalan || []).filter(z => z.tanggal === today).map(z => z.santriId),
+      ...(db.tahsin || []).filter(t => t.tanggal === today).map(t => t.santriId),
+      ...(db.mutqin || []).filter(m => m.tanggal === today).map(m => m.santriId),
+      ...(db.ziyadahBacaan || []).filter(b => b.tanggal === today).map(b => b.santriId),
+    ]).size;
+    const pU = activeU.length > 0 ? Math.round((uAbsen / activeU.length) * 100) : 0;
+    const pS = activeS.length > 0 ? Math.round((sDiabsen / activeS.length) * 100) : 0;
+    const pSet = activeS.length > 0 ? Math.round((sSetoran / activeS.length) * 100) : 0;
+
+    const tahsinCount = db.santri.filter(s => Store.santriHasProgram(s, 'Tahsin')).length;
+    const ziyadahCount = db.santri.filter(s => Store.santriHasProgram(s, 'Ziyadah')).length;
+    const mutqinCount = db.santri.filter(s => Store.santriHasProgram(s, 'Mutqin')).length;
+    const totalSantri = db.santri.length || 1;
 
     // Banner libur lembaga (dari Settings → Kalender Libur) bila hari ini libur.
     function adminLiburBanner() {
       const info = Store.getLiburLembagaInfo(Store.todayStr());
       if (!info) return '';
       return `
-        <div class="clay-card mt" style="border-left:4px solid #a855f7;background:#faf5ff">
-          <div class="row center" style="gap:10px;flex-wrap:wrap">
-            <span class="badge purple" style="font-size:13px">Libur Lembaga</span>
-            <b>${UI.esc(info.keterangan || 'Libur Lembaga')}</b>
-            <span class="muted" style="font-size:12px">Sesi: ${UI.esc(info.sesi === 'semua' ? 'Semua Sesi' : (Array.isArray(info.sesi) ? info.sesi.join(', ') : String(info.sesi)))}</span>
-            <button class="clay-btn sm ghost" data-go="admin_libur" style="margin-left:auto;color:#7e22ce;border:1px solid #d8b4fe">Kelola Kalender Libur</button>
-          </div>
-        </div>`;
-    }
-
-    // Widget Live Monitor Hari Ini di Dashboard
-    function adminLiveMonitorWidget() {
-      const today = Store.todayStr();
-      const activeU = db.ustadz.filter(u => u.status !== 'Nonaktif');
-      const activeS = db.santri.filter(s => s.status !== 'Nonaktif');
-      const uAbsen = new Set((db.absensiUstadz || []).filter(a => a.tanggal === today).map(a => a.ustadzId)).size;
-      const sDiabsen = new Set((db.kehadiran || []).filter(k => k.tanggal === today).map(k => k.santriId)).size;
-      const sSetoran = new Set([
-        ...(db.ziyadahHafalan || []).filter(z => z.tanggal === today).map(z => z.santriId),
-        ...(db.tahsin || []).filter(t => t.tanggal === today).map(t => t.santriId),
-        ...(db.mutqin || []).filter(m => m.tanggal === today).map(m => m.santriId),
-        ...(db.ziyadahBacaan || []).filter(b => b.tanggal === today).map(b => b.santriId),
-      ]).size;
-      const pU = activeU.length > 0 ? Math.round((uAbsen / activeU.length) * 100) : 0;
-      const pS = activeS.length > 0 ? Math.round((sDiabsen / activeS.length) * 100) : 0;
-      const pSet = activeS.length > 0 ? Math.round((sSetoran / activeS.length) * 100) : 0;
-
-      return `
-        <div class="clay-card mb" style="background:linear-gradient(135deg, rgba(239,68,68,0.03), rgba(37,99,235,0.03));border:1px solid rgba(220,38,38,0.2)">
-          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div class="clay-card mb" style="border-left:4px solid #8b5cf6;background:#f5f3ff">
+          <div class="row center" style="justify-content:space-between;gap:10px;flex-wrap:wrap">
             <div style="display:flex;align-items:center;gap:10px">
-              <span class="badge live"><span class="live-pulse-dot"></span> LIVE MONITOR</span>
-              <b style="font-size:15px">Aktivitas &amp; Setoran Hari Ini (${UI.fmtDate(today)})</b>
+              <span class="badge purple">Libur Lembaga</span>
+              <b>${UI.esc(info.keterangan || 'Libur Lembaga')}</b>
+              <span class="muted" style="font-size:12px">Sesi: ${UI.esc(info.sesi === 'semua' ? 'Semua Sesi' : (Array.isArray(info.sesi) ? info.sesi.join(', ') : String(info.sesi)))}</span>
             </div>
-            <button class="clay-btn sm primary" data-go="admin_live_monitor" style="display:inline-flex;align-items:center;gap:6px">
-              Buka Live Monitor Lengkap ➜
-            </button>
-          </div>
-          <div class="grid cols-3 mt" style="gap:14px">
-            <div class="clay-card pad-sm live-kpi-card blue" style="background:#fff">
-              <div style="font-size:12px;color:var(--text-soft);font-weight:600">👨‍🏫 GURU SUDAH ABSEN</div>
-              <div class="row center mt" style="justify-content:space-between">
-                <b style="font-size:20px">${uAbsen} <span style="font-size:13px;font-weight:400" class="muted">/ ${activeU.length} guru</span></b>
-                <span class="badge ${pU >= 80 ? 'green' : 'blue'}">${pU}%</span>
-              </div>
-              <div class="live-bar-container">
-                <div class="live-bar-seg" style="width:${pU}%;background:#2563eb"></div>
-              </div>
-              <div class="muted" style="font-size:11.5px">${activeU.length - uAbsen} guru belum absen hari ini</div>
-            </div>
-
-            <div class="clay-card pad-sm live-kpi-card purple" style="background:#fff">
-              <div style="font-size:12px;color:var(--text-soft);font-weight:600">🎓 SANTRI SUDAH DIABSEN</div>
-              <div class="row center mt" style="justify-content:space-between">
-                <b style="font-size:20px">${sDiabsen} <span style="font-size:13px;font-weight:400" class="muted">/ ${activeS.length} santri</span></b>
-                <span class="badge ${pS >= 80 ? 'green' : 'purple'}">${pS}%</span>
-              </div>
-              <div class="live-bar-container">
-                <div class="live-bar-seg" style="width:${pS}%;background:#9333ea"></div>
-              </div>
-              <div class="muted" style="font-size:11.5px">${activeS.length - sDiabsen} santri belum diabsen hari ini</div>
-            </div>
-
-            <div class="clay-card pad-sm live-kpi-card green" style="background:#fff">
-              <div style="font-size:12px;color:var(--text-soft);font-weight:600">📖 SANTRI SUDAH SETORAN</div>
-              <div class="row center mt" style="justify-content:space-between">
-                <b style="font-size:20px">${sSetoran} <span style="font-size:13px;font-weight:400" class="muted">/ ${activeS.length} santri</span></b>
-                <span class="badge ${pSet >= 70 ? 'green' : 'warn'}">${pSet}%</span>
-              </div>
-              <div class="live-bar-container">
-                <div class="live-bar-seg" style="width:${pSet}%;background:#16a34a"></div>
-              </div>
-              <div class="muted" style="font-size:11.5px">${activeS.length - sSetoran} santri belum setoran hari ini</div>
-            </div>
+            <button class="clay-btn sm ghost" data-go="admin_libur">Kelola Kalender Libur</button>
           </div>
         </div>`;
     }
 
-    // Rekap absensi per halaqah × sesi hari ini: memetakan status ustadz
-    // pengampu (bisa lebih dari satu) — Libur bila ada yang mencatat Libur,
-    // selain itu tampilkan status gabungan atau "Belum".
+    // Widget Live Glance Hari Ini di Dashboard
+    function adminLiveMonitorWidget() {
+      return `
+        <div class="clay-card mb live-glance-bar">
+          <div class="live-glance-content">
+            <span class="badge live"><span class="live-pulse-dot"></span> LIVE MONITOR</span>
+            <div class="live-glance-stats">
+              <span><b>${sDiabsen}/${activeS.length}</b> Diabsen</span>
+              <span class="dot-sep">·</span>
+              <span><b>${sSetoran}</b> Setoran</span>
+              <span class="dot-sep">·</span>
+              <span><b>${uAbsen}/${activeU.length}</b> Guru</span>
+            </div>
+          </div>
+          <button class="clay-btn sm ghost live-glance-btn" data-go="admin_live_monitor">
+            Detail ➜
+          </button>
+        </div>`;
+    }
+
+    // Rekap absensi per halaqah × sesi hari ini
     function adminRekapAbsensiHariIni() {
-      const SESI_HARI = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
-      const today = Store.todayStr();
+      const SESI_HARI = Store.sesiList();
       const rows = db.halaqah.map(h => {
         const uIds = Store.ustadzIdsForHalaqah(h);
         const cells = SESI_HARI.map(sesi => {
           const recs = (db.absensiUstadz || []).filter(a =>
             a.tanggal === today && a.sesi === sesi && uIds.includes(a.ustadzId));
-          if (recs.some(r => r.status === 'Libur')) return '<td><span class="badge purple">Libur</span></td>';
-          if (!recs.length) return '<td><span class="badge warn">Belum</span></td>';
+          if (recs.some(r => r.status === 'Libur')) return '<td class="center"><span class="badge purple sm">Libur</span></td>';
+          if (!recs.length) return '<td class="center"><span class="badge warn sm">Belum</span></td>';
           const uniq = [...new Set(recs.map(r => r.status))];
-          return `<td><span class="badge ${uniq.every(s => s === 'Hadir') ? 'green' : 'blue'}">${UI.esc(uniq.join('+'))}</span></td>`;
+          return `<td class="center"><span class="badge ${uniq.every(s => s === 'Hadir') ? 'green' : 'blue'} sm">${UI.esc(uniq.join('+'))}</span></td>`;
         }).join('');
         const belumSesi = SESI_HARI.filter(sesi => !(db.absensiUstadz || []).some(a =>
           a.tanggal === today && a.sesi === sesi && uIds.includes(a.ustadzId)));
         return `<tr>
           <td><b>${UI.esc(h.nama)}</b></td>${cells}
-          <td>${(belumSesi.length && uIds.length)
-            ? `<button class="clay-btn sm ghost" data-libur-cepat="${UI.esc(h.nama)}" style="color:#7e22ce;border:1px solid #d8b4fe">Libur Semua Sesi</button>`
-            : ''}</td>
+          <td class="center">${(belumSesi.length && uIds.length)
+            ? `<button class="clay-btn sm ghost" data-libur-cepat="${UI.esc(h.nama)}" style="font-size:11px;padding:3px 7px">Libur</button>`
+            : '<span class="muted" style="font-size:11px">-</span>'}</td>
         </tr>`;
       }).join('');
+
+      const mobileCards = db.halaqah.map(h => {
+        const uIds = Store.ustadzIdsForHalaqah(h);
+        const belumSesi = SESI_HARI.filter(sesi => !(db.absensiUstadz || []).some(a =>
+          a.tanggal === today && a.sesi === sesi && uIds.includes(a.ustadzId)));
+        const chips = SESI_HARI.map(sesi => {
+          const recs = (db.absensiUstadz || []).filter(a =>
+            a.tanggal === today && a.sesi === sesi && uIds.includes(a.ustadzId));
+          let badge = '<span class="badge warn sm">Belum</span>';
+          if (recs.some(r => r.status === 'Libur')) badge = '<span class="badge purple sm">Libur</span>';
+          else if (recs.length) {
+            const uniq = [...new Set(recs.map(r => r.status))];
+            badge = `<span class="badge ${uniq.every(s => s === 'Hadir') ? 'green' : 'blue'} sm">${UI.esc(uniq.join('+'))}</span>`;
+          }
+          return `<div class="h-sesi-chip"><span class="h-sesi-lbl">${sesi}</span>${badge}</div>`;
+        }).join('');
+
+        return `
+          <div class="h-absen-item">
+            <div class="row center" style="justify-content:space-between;margin-bottom:8px">
+              <b style="font-size:13px;color:var(--text)">${UI.esc(h.nama)}</b>
+              ${(belumSesi.length && uIds.length)
+                ? `<button class="clay-btn sm ghost" data-libur-cepat="${UI.esc(h.nama)}" style="font-size:11px;padding:2px 8px">Liburkan</button>`
+                : ''}
+            </div>
+            <div class="h-chips-grid">${chips}</div>
+          </div>
+        `;
+      }).join('');
+
       if (!db.halaqah.length) return '';
       return `
-        <div class="clay-card mt">
-          <div class="row center" style="justify-content:space-between">
+        <div class="clay-card mb">
+          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
             <div class="section-title" style="margin:0">Status Absensi Halaqah Hari Ini</div>
-            <button class="clay-btn sm ghost" data-go="admin_libur" style="color:#7e22ce;border:1px solid #d8b4fe">+ Libur Terjadwal</button>
+            <button class="clay-btn sm ghost" data-go="admin_libur">+ Kalender Libur</button>
           </div>
-          <div class="muted" style="font-size:12px;margin:6px 0 10px">Halaqah yang belum absen bisa langsung diliburkan dari barisnya.</div>
-          <div class="table-wrap"><table class="clay-table">
-            <thead><tr><th>Halaqah</th>${SESI_HARI.map(s => `<th>${s}</th>`).join('')}<th>Aksi</th></tr></thead>
+          <div class="muted" style="font-size:12px;margin:4px 0 12px;line-height:1.4">Pantau kehadiran ustadz di tiap sesi hari ini.</div>
+          <!-- Desktop Table (>= 640px) -->
+          <div class="table-wrap desktop-only"><table class="clay-table">
+            <thead><tr><th>Halaqah</th>${SESI_HARI.map(s => `<th class="center">${s}</th>`).join('')}<th class="center">Aksi</th></tr></thead>
             <tbody>${rows}</tbody>
           </table></div>
+          <!-- Mobile Card List (< 640px) -->
+          <div class="h-absen-mobile-list mobile-only">${mobileCards}</div>
         </div>`;
     }
 
-    const kpi = `
-      <div class="grid kpi">
-        ${Shared.statCard(Shared.ICONS.users, db.santri.length, 'Santri', '#16A34A')}
-        ${Shared.statCard(Shared.ICONS.teacher, db.ustadz.length, 'Ustadz', '#3B82F6')}
-        ${Shared.statCard(Shared.ICONS.building, db.halaqah.length, 'Halaqah', '#FACC15')}
-        ${Shared.statCard(Shared.ICONS.book, db.santri.filter(s => Store.santriHasProgram(s, 'Tahsin')).length, 'Tahsin', '#22C55E')}
-        ${Shared.statCard(Shared.ICONS.star, db.santri.filter(s => Store.santriHasProgram(s, 'Ziyadah')).length, 'Ziyadah', '#3B82F6')}
-        ${Shared.statCard(Shared.ICONS.star, db.santri.filter(s => Store.santriHasProgram(s, 'Mutqin')).length, 'Mutqin', '#16A34A')}
-      </div>
-      <div class="grid kpi mt">
-        ${Shared.statCard(Shared.ICONS.sun, hadirSubuh, 'Kehadiran Subuh', '#22C55E')}
-        ${Shared.statCard(Shared.ICONS.sun, hadirAshar, 'Kehadiran Ashar', '#22C55E')}
-        ${Shared.statCard(Shared.ICONS.sunset, hadirMaghrib, 'Kehadiran Maghrib', '#22C55E')}
-        ${Shared.statCard(Shared.ICONS.moon, hadirIsya, 'Kehadiran Isya', '#22C55E')}
-        ${Shared.statCard(Shared.ICONS.teacher, ustadzHadirHariIni + '/' + db.ustadz.length, 'Ustadz Hadir Hari Ini', '#3B82F6')}
-      </div>`;
-
-    // progress hafalan per halaqah (avg pages)
     const halaqahData = db.halaqah.map(h => {
       const ss = db.santri.filter(s => Store.santriHasHalaqah(s, h));
       const avg = ss.length ? Math.round(ss.reduce((a, s) => { const hh = Store.totalHafalanSantri(s.id); return a + (hh ? hh.pages : 0); }, 0) / ss.length) : 0;
       return { label: h.nama.replace('Halaqah ', 'H'), value: avg };
     });
-    // kehadiran mingguan (dummy per hari dari data)
+
     const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-    const kehadiranData = days.map(d => ({ label: d, value: hadirBulanIni.filter(k => new Date(k.tanggal).getDay() === (days.indexOf(d) + 1) % 7).length + Math.floor(Math.random() * 3) }));
+    const kehadiranData = days.map(d => ({
+      label: d,
+      value: hadirBulanIni.filter(k => new Date(k.tanggal + 'T12:00:00').getDay() === (days.indexOf(d) + 1) % 7).length
+    }));
+    const hasHafalanChart = Store.hasFeature('ziyadah') || Store.hasFeature('mutqin');
+
+    // Banner notifikasi tagihan / masa tenggang layanan lembaga untuk Admin.
+    const subNotice = Store.subscriptionNotice();
+    const subFmtRp = n => (Number(n) > 0 ? ' sebesar <b>Rp ' + Number(n).toLocaleString('id-ID') + '</b>' : '');
+    const subWarningBanner = (subNotice && (subNotice.isBillingDue || subNotice.isGrace || subNotice.isAutoSuspended)) ? `
+      <div class="clay-card mb" style="border-left:4px solid ${subNotice.isGrace || subNotice.isAutoSuspended ? '#ef4444' : '#f59e0b'};background:${subNotice.isGrace || subNotice.isAutoSuspended ? '#fef2f2' : '#fffbeb'}">
+        <div class="row center" style="justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <div style="font-size:13px;color:${subNotice.isGrace || subNotice.isAutoSuspended ? '#991b1b' : '#92400e'};flex:1;min-width:220px">
+            ${subNotice.isGrace
+              ? `<b>Masa Tenggang Layanan Aplikasi:</b> Jatuh tempo <b>${UI.esc(UI.fmtDate(subNotice.validUntil))}</b> sudah lewat (${Math.abs(subNotice.daysLeft)} hari). Tagihan${subFmtRp(subNotice.nominal)} harus dilunasi sebelum disuspend otomatis pada <b>${UI.esc(UI.fmtDate(subNotice.suspendDate))}</b> (${subNotice.daysToSuspend} hari lagi).`
+              : `<b>Notifikasi Tagihan Layanan Aplikasi:</b> Penagihan dimulai <b>${UI.esc(UI.fmtDate(subNotice.effectiveBillingDate))}</b>${subFmtRp(subNotice.nominal)}, jatuh tempo <b>${UI.esc(UI.fmtDate(subNotice.validUntil))}</b> (${subNotice.daysLeft <= 0 ? 'hari ini' : subNotice.daysLeft + ' hari lagi'}). Batas masa tenggang (${subNotice.graceDays} hari) s.d. <b>${UI.esc(UI.fmtDate(subNotice.suspendDate))}</b>.`
+            }
+            ${subNotice.note ? `<div style="margin-top:4px;font-size:12px">Info Pengelola: ${UI.esc(subNotice.note)}</div>` : ''}
+          </div>
+          <button class="clay-btn sm ghost" type="button" data-go="admin_settings">Cek Tagihan</button>
+        </div>
+      </div>` : '';
+
+    const hasSpp = Store.hasFeature('spp');
+    const sppOverdue = hasSpp ? activeS.filter(s => Store.sppStatusSantri(s).status === 'Jatuh Tempo').length : 0;
+    const sppLunas = hasSpp ? activeS.filter(s => Store.sppStatusSantri(s).status === 'Lunas').length : 0;
+
+    function adminHalaqahAndRecentWidget() {
+      const monthRows = [];
+      if (Store.hasFeature('tahsin')) (db.tahsin || []).forEach(r => monthRows.push({ santriId: r.santriId, tanggal: r.tanggal, created: r._created || 0, program: 'Tahsin', badge: 'blue', detail: `Hal ${r.halAwal}-${r.halAkhir}`, nilai: r.nilai }));
+      if (Store.hasFeature('ziyadah')) (db.ziyadahHafalan || []).forEach(r => monthRows.push({ santriId: r.santriId, tanggal: r.tanggal, created: r._created || 0, program: 'Ziyadah', badge: 'green', detail: `${getSurah(r.sAwal).latin}:${r.aAwal} → ${getSurah(r.sAkhir).latin}:${r.aAkhir}`, nilai: r.nilai }));
+      if (Store.hasFeature('mutqin')) (db.mutqin || []).forEach(r => monthRows.push({ santriId: r.santriId, tanggal: r.tanggal, created: r._created || 0, program: 'Mutqin', badge: 'warn', detail: `${getSurah(r.sAwal).latin}:${r.aAwal} → ${getSurah(r.sAkhir).latin}:${r.aAkhir}`, nilai: r.nilai }));
+      if (Store.hasFeature('murojaah')) (db.murojaah || []).forEach(r => monthRows.push({ santriId: r.santriId, tanggal: r.tanggal, created: r._created || 0, program: 'Murojaah', badge: 'purple', detail: `${getSurah(r.sAwal).latin}:${r.aAwal} → ${getSurah(r.sAkhir).latin}:${r.aAkhir}`, nilai: r.nilai }));
+
+      const recent = monthRows.slice().sort((a, b) => String(b.tanggal || '').localeCompare(String(a.tanggal || '')) || (b.created - a.created)).slice(0, 6);
+      const halaqahRows = db.halaqah.map(h => {
+        const santris = activeS.filter(s => Store.santriHasHalaqah(s, h));
+        const ids = new Set(santris.map(s => s.id));
+        const bulanCount = monthRows.filter(r => String(r.tanggal || '').startsWith(bulanIni) && ids.has(r.santriId)).length;
+        return `<tr>
+          <td><b>${UI.esc(h.nama)}</b><div class="muted" style="font-size:11.5px">${UI.esc(Store.ustadzNamesForHalaqah(h).join(', ') || 'Belum ada ustadz')}</div></td>
+          <td class="center"><span class="badge blue sm">${UI.esc(h.level || '-')}</span></td>
+          <td class="center"><b>${santris.length}</b></td>
+          <td class="center"><b>${bulanCount}x</b></td>
+        </tr>`;
+      }).join('');
+
+      const recentHtml = recent.length ? `
+        <div class="table-wrap"><table class="clay-table">
+          <thead><tr><th>Santri</th><th>Program</th><th>Capaian</th><th class="center">Nilai</th><th>Tanggal</th></tr></thead>
+          <tbody>${recent.map(r => {
+            const santriObj = Store.findSantri(r.santriId);
+            return `<tr>
+              <td><b>${UI.esc(santriObj ? santriObj.nama : '-')}</b></td>
+              <td><span class="badge ${r.badge} sm">${UI.esc(r.program)}</span></td>
+              <td style="font-size:12.5px">${UI.esc(r.detail)}</td>
+              <td class="center">${r.nilai !== undefined && r.nilai !== null && r.nilai !== '' ? `<b>${UI.esc(r.nilai)}</b>` : '-'}</td>
+              <td class="muted" style="font-size:12px">${UI.esc(UI.fmtDate(r.tanggal))}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>` : '<div class="empty">Belum ada setoran tercatat.</div>';
+
+      return `
+        <div class="clay-card mb">
+          <div class="row center" style="justify-content:space-between;margin-bottom:10px">
+            <div class="section-title" style="margin:0">Ringkasan Halaqah &amp; Setoran Bulan Ini</div>
+            <button class="clay-btn sm ghost" data-go="admin_halaqah">Kelola Halaqah</button>
+          </div>
+          <div class="table-wrap"><table class="clay-table">
+            <thead><tr><th>Halaqah &amp; Pembimbing</th><th class="center">Level</th><th class="center">Santri</th><th class="center">Setoran Bln Ini</th></tr></thead>
+            <tbody>${halaqahRows || '<tr><td colspan="4"><div class="empty">Belum ada halaqah.</div></td></tr>'}</tbody>
+          </table></div>
+        </div>
+        <div class="clay-card mb">
+          <div class="row center" style="justify-content:space-between;margin-bottom:10px">
+            <div class="section-title" style="margin:0">Setoran Terbaru</div>
+            <button class="clay-btn sm ghost" data-go="admin_riwayat">Lihat Riwayat</button>
+          </div>
+          ${recentHtml}
+        </div>`;
+    }
+
+    function adminSppSummaryWidget() {
+      if (!hasSpp) return '';
+      const rows = activeS.map(s => ({ s, info: Store.sppStatusSantri(s, bulanIni) }));
+      const totalMasuk = rows.filter(x => x.info.status === 'Lunas').reduce((sum, x) => sum + (Number(x.info.paidRec?.nominal ?? x.info.nominal) || 0), 0);
+      const pending = rows.filter(x => x.info.status === 'Jatuh Tempo' || x.info.status === 'Belum Bayar').slice(0, 5);
+      return `
+        <div class="clay-card mb">
+          <div class="row center" style="justify-content:space-between;margin-bottom:10px;gap:8px;flex-wrap:wrap">
+            <div>
+              <div class="section-title" style="margin:0">Ringkasan SPP (${UI.esc(Shared.bulanLabel(bulanIni))})</div>
+              <div class="muted" style="font-size:12px">Terkumpul: <b>Rp ${totalMasuk.toLocaleString('id-ID')}</b> · Lunas: <b>${sppLunas}/${activeS.length}</b> santri</div>
+            </div>
+            <button class="clay-btn sm ghost" data-go="admin_spp">Kelola SPP</button>
+          </div>
+          ${pending.length ? `
+            <div class="table-wrap"><table class="clay-table">
+              <thead><tr><th>Santri</th><th>Nominal</th><th>Status</th></tr></thead>
+              <tbody>${pending.map(x => `<tr>
+                <td><b>${UI.esc(x.s.nama)}</b></td>
+                <td>Rp ${Number(x.info.nominal).toLocaleString('id-ID')}</td>
+                <td><span class="badge ${x.info.status === 'Jatuh Tempo' ? 'danger' : 'warn'} sm">${UI.esc(x.info.status)}</span></td>
+              </tr>`).join('')}</tbody>
+            </table></div>` : '<div class="muted" style="font-size:13px">Semua santri aktif sudah lunas atau bebas SPP bulan ini.</div>'}
+        </div>`;
+    }
 
     const content = `
-      ${adminLiveMonitorWidget()}
-      ${kpi}
-      ${adminLiburBanner()}
-      ${adminRekapAbsensiHariIni()}
-      <div class="grid cols-2 mt">
-        <div class="clay-card">
-          <div class="section-title"> Progress Hafalan per Halaqah</div>
-          ${Shared.barChart(halaqahData, Math.max(1, ...halaqahData.map(d => d.value)))}
-        </div>
-        <div class="clay-card">
-          <div class="section-title">Kehadiran Mingguan</div>
-          ${Shared.barChart(kehadiranData, Math.max(1, ...kehadiranData.map(d => d.value)))}
-        </div>
+      ${subWarningBanner}
+      <div class="grid kpi mb">
+        ${Shared.statCard(Shared.ICONS.users, db.santri.length, 'Total Santri Aktif', 'var(--primary)')}
+        ${hasPresensi ? Shared.statCard(Shared.ICONS.presensi, sDiabsen + ' / ' + activeS.length, 'Kehadiran Santri Hari Ini', '#2563eb') : ''}
+        ${Shared.statCard(Shared.ICONS.setoran, sSetoran + ' Santri', 'Sudah Setoran Hari Ini', '#10b981')}
+        ${hasPresensi ? Shared.statCard(Shared.ICONS.teacher, uAbsen + ' / ' + activeU.length, 'Guru Hadir Hari Ini', '#8b5cf6') : ''}
+        ${hasSpp ? Shared.statCard(Shared.ICONS.award, sppLunas + ' / ' + activeS.length, sppOverdue ? `SPP Lunas (${sppOverdue} Jatuh Tempo)` : 'SPP Lunas Bulan Ini', sppOverdue ? '#ef4444' : '#0d9488') : ''}
       </div>
-      <div class="grid cols-2 mt">
-        <div class="clay-card">
-          <div class="section-title"> Ranking Halaqah</div>
-          ${db.halaqah.map((h, i) => {
-            const ss = db.santri.filter(s => Store.santriHasHalaqah(s, h));
-            const total = ss.reduce((a, s) => { const hh = Store.totalHafalanSantri(s.id); return a + (hh ? hh.pages : 0); }, 0);
-            return `<div class="row center" style="justify-content:space-between;padding:8px 0"><div><b>#${i + 1}</b> ${UI.esc(h.nama)}</div><span class="badge green">${total} hlm</span></div>`;
-          }).join('')}
+
+      ${hasPresensi ? adminLiburBanner() : ''}
+
+      <div class="grid cols-main-side">
+        <div>
+          ${hasLive ? adminLiveMonitorWidget() : ''}
+          ${hasPresensi ? adminRekapAbsensiHariIni() : ''}
+
+          ${(hasHafalanChart || hasPresensi) ? `<div class="grid ${hasHafalanChart && hasPresensi ? 'cols-2 ' : ''}mb">
+            ${hasHafalanChart ? `<div class="clay-card">
+              <div class="section-title">Rata-rata Hafalan per Halaqah</div>
+              <div class="muted" style="font-size:12px;margin-bottom:8px">Halaman rata-rata yang disetor santri</div>
+              ${Shared.barChart(halaqahData, Math.max(1, ...halaqahData.map(d => d.value)))}
+            </div>` : ''}
+            ${hasPresensi ? `<div class="clay-card">
+              <div class="section-title">Tren Kehadiran Mingguan</div>
+              <div class="muted" style="font-size:12px;margin-bottom:8px">Akumulasi kehadiran per hari</div>
+              ${Shared.barChart(kehadiranData, Math.max(1, ...kehadiranData.map(d => d.value)))}
+            </div>` : ''}
+          </div>` : ''}
+
+          ${adminHalaqahAndRecentWidget()}
+          ${adminSppSummaryWidget()}
         </div>
-        <div class="clay-card">
-          <div class="section-title">Quick Action</div>
-          <div class="row">
-            <button class="clay-btn primary" data-go="admin_santri">+ Santri</button>
-            <button class="clay-btn secondary" data-go="admin_ustadz">+ Ustadz</button>
-            <button class="clay-btn" data-go="admin_halaqah">+ Halaqah</button>
-            <button class="clay-btn ghost" id="qa-import">Import Excel</button>
+
+        <div>
+          <div class="clay-card mb">
+            <div class="section-title">Aksi Cepat Admin</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <button class="clay-btn primary" data-go="admin_santri" style="justify-content:flex-start">
+                + Data Santri Baru
+              </button>
+              <button class="clay-btn ghost" data-go="admin_ustadz" style="justify-content:flex-start">
+                + Data Ustadz Baru
+              </button>
+              <button class="clay-btn ghost" data-go="admin_halaqah" style="justify-content:flex-start">
+                + Kelola Halaqah
+              </button>
+              ${hasSpp ? `<button class="clay-btn ghost" data-go="admin_spp" style="justify-content:flex-start">
+                Pembayaran SPP${sppOverdue ? ` <span class="badge danger sm" style="margin-left:auto">${sppOverdue} Jatuh Tempo</span>` : ''}
+              </button>` : ''}
+              ${Store.hasFeature('importExcel') ? `<button class="clay-btn ghost" id="qa-import" style="justify-content:flex-start">
+                Import Data Santri / Excel
+              </button>` : ''}
+            </div>
           </div>
-          <div class="section-title mt"> Aktivitas Terakhir</div>
-          ${db.logAktivitas.slice(0, 6).map(l => `<div class="row center" style="justify-content:space-between;padding:6px 0"><span class="muted" style="font-size:13px">${UI.esc(l.aksi)}</span><span class="muted" style="font-size:12px">${UI.fmtDateTime(l.tanggal)}</span></div>`).join('') || '<div class="empty">Belum ada aktivitas.</div>'}
+
+          ${(Store.hasFeature('tahsin') || Store.hasFeature('ziyadah') || Store.hasFeature('mutqin')) ? `
+          <div class="clay-card mb">
+            <div class="section-title">Sebaran Program Santri</div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              ${Store.hasFeature('tahsin') ? `<div>
+                <div class="row" style="justify-content:space-between;margin-bottom:4px;font-size:12.5px">
+                  <span>Tahsin Al-Qur'an</span>
+                  <b>${tahsinCount} Santri (${Math.round((tahsinCount / totalSantri) * 100)}%)</b>
+                </div>
+                <div style="height:6px;background:var(--slate-100);border-radius:4px;overflow:hidden">
+                  <div style="height:100%;background:#10b981;width:${Math.round((tahsinCount / totalSantri) * 100)}%"></div>
+                </div>
+              </div>` : ''}
+              ${Store.hasFeature('ziyadah') ? `<div>
+                <div class="row" style="justify-content:space-between;margin-bottom:4px;font-size:12.5px">
+                  <span>Ziyadah Hafalan Baru</span>
+                  <b>${ziyadahCount} Santri (${Math.round((ziyadahCount / totalSantri) * 100)}%)</b>
+                </div>
+                <div style="height:6px;background:var(--slate-100);border-radius:4px;overflow:hidden">
+                  <div style="height:100%;background:#2563eb;width:${Math.round((ziyadahCount / totalSantri) * 100)}%"></div>
+                </div>
+              </div>` : ''}
+              ${Store.hasFeature('mutqin') ? `<div>
+                <div class="row" style="justify-content:space-between;margin-bottom:4px;font-size:12.5px">
+                  <span>Mutqin &amp; Penguatan</span>
+                  <b>${mutqinCount} Santri (${Math.round((mutqinCount / totalSantri) * 100)}%)</b>
+                </div>
+                <div style="height:6px;background:var(--slate-100);border-radius:4px;overflow:hidden">
+                  <div style="height:100%;background:#f59e0b;width:${Math.round((mutqinCount / totalSantri) * 100)}%"></div>
+                </div>
+              </div>` : ''}
+            </div>
+          </div>` : ''}
+
+          ${(Store.hasFeature('ziyadah') || Store.hasFeature('mutqin')) ? `
+          <div class="clay-card mb">
+            <div class="section-title">Peringkat Capaian Halaqah</div>
+            <div style="display:flex;flex-direction:column;gap:6px">
+              ${db.halaqah.slice(0, 5).map((h, i) => {
+                const ss = db.santri.filter(s => Store.santriHasHalaqah(s, h));
+                const total = ss.reduce((a, s) => { const hh = Store.totalHafalanSantri(s.id); return a + (hh ? hh.pages : 0); }, 0);
+                return `<div class="row center" style="justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--slate-100)">
+                  <div style="font-size:13px"><b>#${i + 1}</b> ${UI.esc(h.nama)}</div>
+                  <span class="badge green sm">${total} hlm</span>
+                </div>`;
+              }).join('')}
+            </div>
+          </div>` : ''}
+
+          <div class="clay-card mb">
+            <div class="section-title">Aktivitas Terakhir</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              ${db.logAktivitas.slice(0, 5).map(l => `<div style="border-bottom:1px solid var(--slate-100);padding-bottom:6px">
+                <div style="font-size:12.5px;color:var(--text)">${UI.esc(l.aksi)}</div>
+                <div class="muted" style="font-size:11px;margin-top:2px">${UI.fmtDateTime(l.tanggal)}</div>
+              </div>`).join('') || '<div class="empty" style="padding:16px 0">Belum ada aktivitas.</div>'}
+            </div>
+          </div>
         </div>
       </div>`;
     document.getElementById('view-content').innerHTML = content;
@@ -389,7 +582,7 @@ const Admin = (() => {
           'Libur Semua Sesi',
           `Halaqah <b>${UI.esc(hNama)}</b> akan dicatat <b>Libur</b> untuk semua sesi hari ini (${UI.fmtDate(Store.todayStr())}). Seluruh santri tidak terhitung Alfa. Lanjutkan?`,
           async () => {
-            const sesiAll = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
+            const sesiAll = Store.sesiList();
             const ok = await Store.liburkanHalaqah(uId, sesiAll, hNama, 'Libur (diatur admin)', Store.todayStr());
             if (ok) {
               UI.toast(`Halaqah ${hNama} diliburkan semua sesi ✓`, 'success');
@@ -408,9 +601,11 @@ const Admin = (() => {
     const role = session?.role || 'admin';
     Shared.shell(role, nav('admin_live_monitor'), '');
     Shared.setHeader('Live Monitor', 'Pantau real-time kehadiran guru, santri, dan progres setoran harian');
-    Shared.setActions(`
-      <button class="clay-btn sm secondary" id="btn-export-live-xlsx">Export Excel</button>
-    `);
+    if (Store.hasFeature('exportExcel')) {
+      Shared.setActions(`
+        <button class="clay-btn sm secondary" id="btn-export-live-xlsx">Export Excel</button>
+      `);
+    }
 
     let currentDate = Store.todayStr();
     let currentSesi = ''; // '' = Semua Sesi
@@ -427,7 +622,7 @@ const Admin = (() => {
     let countdown = autoRefreshSeconds;
     let timerId = null;
 
-    const SESI_LIST = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
+    const SESI_LIST = Store.sesiList();
 
     function cleanPhone(raw) {
       if (!raw) return '';
@@ -442,11 +637,20 @@ const Admin = (() => {
       return u ? u.nama : '-';
     }
 
+    function formatSesiTime(waktu) {
+      if (!waktu) return '';
+      const d = new Date(waktu);
+      if (!Number.isNaN(d.getTime())) {
+        return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }).replace(/\./g, ':');
+      }
+      return waktu.includes('T') ? waktu.split('T')[1].slice(0, 5) : (waktu.length >= 16 ? waktu.slice(11, 16) : '');
+    }
+
     function renderSesiPill(r) {
       if (!r) return `<span class="live-sesi-pill belum">Belum</span>`;
       const st = r.status || '';
       const cls = st === 'Hadir' ? 'hadir' : (st === 'Izin' ? 'izin' : (st === 'Sakit' ? 'sakit' : (st === 'Alfa' ? 'alfa' : (st === 'Libur' ? 'libur' : 'belum'))));
-      const time = r.waktu ? (r.waktu.includes('T') ? r.waktu.split('T')[1].slice(0, 5) : (r.waktu.length >= 16 ? r.waktu.slice(11, 16) : '')) : '';
+      const time = formatSesiTime(r.waktu);
       return `<span class="live-sesi-pill ${cls}">${UI.esc(st)}${time ? ` <small>${time}</small>` : ''}</span>`;
     }
 
@@ -495,7 +699,8 @@ const Admin = (() => {
         let catatanTerakhir = '';
 
         if (currentSesi) {
-          const recS = uRecs.find(a => a.sesi === currentSesi);
+          const recS = uRecs.find(a => Store.isTalimSesi(currentSesi) ? Store.isTalimSesi(a.sesi) : a.sesi === currentSesi);
+          if (Store.isTalimSesi(currentSesi)) sesiMap[currentSesi] = recS || null;
           sudah = !!recS;
           status = recS ? recS.status : 'Belum Absen';
           waktuTerakhir = recS?.waktu ? UI.fmtDateTime(recS.waktu) : '-';
@@ -539,7 +744,8 @@ const Admin = (() => {
         let sudahDiabsen = false;
         let status = 'Belum Diabsen';
         if (currentSesi) {
-          const recS = sRecs.find(k => k.sesi === currentSesi);
+          const recS = sRecs.find(k => Store.isTalimSesi(currentSesi) ? Store.isTalimSesi(k.sesi) : k.sesi === currentSesi);
+          if (Store.isTalimSesi(currentSesi)) sesiMap[currentSesi] = recS || null;
           sudahDiabsen = !!recS;
           status = recS ? recS.status : 'Belum Diabsen';
         } else {
@@ -726,6 +932,11 @@ const Admin = (() => {
       const sheets = [];
 
       // Sheet 1: Guru
+      const sesiCols = SESI_LIST.map((sesi, i) => ({
+        key: 'sesi_' + i,
+        sesi,
+        label: sesi
+      }));
       sheets.push({
         name: 'Live_Guru',
         columns: [
@@ -733,27 +944,26 @@ const Admin = (() => {
           { key: 'nama', label: 'Nama Guru' },
           { key: 'noHp', label: 'No. HP' },
           { key: 'halaqah', label: 'Halaqah' },
-          { key: 'subuh', label: 'Subuh' },
-          { key: 'ashar', label: 'Ashar' },
-          { key: 'maghrib', label: 'Maghrib' },
-          { key: 'isya', label: 'Isya' },
+          ...sesiCols.map(c => ({ key: c.key, label: c.label })),
           { key: 'status', label: 'Kesimpulan' },
           { key: 'waktu', label: 'Waktu Terakhir' },
           { key: 'catatan', label: 'Catatan' }
         ],
-        rows: data.guruList.map((g, i) => ({
-          no: i + 1,
-          nama: g.nama,
-          noHp: g.noHp || '-',
-          halaqah: g.halaqah,
-          subuh: g.sesiMap.Subuh ? g.sesiMap.Subuh.status : 'Belum',
-          ashar: g.sesiMap.Ashar ? g.sesiMap.Ashar.status : 'Belum',
-          maghrib: g.sesiMap.Maghrib ? g.sesiMap.Maghrib.status : 'Belum',
-          isya: g.sesiMap.Isya ? g.sesiMap.Isya.status : 'Belum',
-          status: g.sudah ? 'Sudah Absen' : 'Belum Absen',
-          waktu: g.waktuTerakhir || '-',
-          catatan: g.catatanTerakhir || '-'
-        }))
+        rows: data.guruList.map((g, i) => {
+          const row = {
+            no: i + 1,
+            nama: g.nama,
+            noHp: g.noHp || '-',
+            halaqah: g.halaqah,
+            status: g.sudah ? 'Sudah Absen' : 'Belum Absen',
+            waktu: g.waktuTerakhir || '-',
+            catatan: g.catatanTerakhir || '-'
+          };
+          sesiCols.forEach(c => {
+            row[c.key] = g.sesiMap[c.sesi] ? g.sesiMap[c.sesi].status : 'Belum';
+          });
+          return row;
+        })
       });
 
       // Sheet 2: Santri Absensi
@@ -765,24 +975,23 @@ const Admin = (() => {
           { key: 'nis', label: 'NIS' },
           { key: 'halaqah', label: 'Halaqah' },
           { key: 'pengampu', label: 'Guru Pengampu' },
-          { key: 'subuh', label: 'Subuh' },
-          { key: 'ashar', label: 'Ashar' },
-          { key: 'maghrib', label: 'Maghrib' },
-          { key: 'isya', label: 'Isya' },
+          ...sesiCols.map(c => ({ key: c.key, label: c.label })),
           { key: 'status', label: 'Status Diabsen' }
         ],
-        rows: data.santriList.map((s, i) => ({
-          no: i + 1,
-          nama: s.nama,
-          nis: s.nis || '-',
-          halaqah: s.halaqah,
-          pengampu: s.pengampu,
-          subuh: s.sesiMap.Subuh ? s.sesiMap.Subuh.status : 'Belum',
-          ashar: s.sesiMap.Ashar ? s.sesiMap.Ashar.status : 'Belum',
-          maghrib: s.sesiMap.Maghrib ? s.sesiMap.Maghrib.status : 'Belum',
-          isya: s.sesiMap.Isya ? s.sesiMap.Isya.status : 'Belum',
-          status: s.sudahDiabsen ? 'Sudah Diabsen' : 'Belum Diabsen'
-        }))
+        rows: data.santriList.map((s, i) => {
+          const row = {
+            no: i + 1,
+            nama: s.nama,
+            nis: s.nis || '-',
+            halaqah: s.halaqah,
+            pengampu: s.pengampu,
+            status: s.sudahDiabsen ? 'Sudah Diabsen' : 'Belum Diabsen'
+          };
+          sesiCols.forEach(c => {
+            row[c.key] = s.sesiMap[c.sesi] ? s.sesiMap[c.sesi].status : 'Belum';
+          });
+          return row;
+        })
       });
 
       // Sheet 3: Santri Setoran
@@ -826,123 +1035,125 @@ const Admin = (() => {
         <div id="live-monitor-root">
           <!-- Filter & Kontrol Realtime -->
           <div class="clay-card mb" style="background:#fff">
-            <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
-              <div style="display:flex;align-items:center;gap:10px">
-                <span class="badge live"><span class="live-pulse-dot"></span> LIVE MONITOR</span>
-                <span class="muted" style="font-size:12.5px" id="lm-last-updated">Pembaruan: ${new Date().toLocaleTimeString()}</span>
+            <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:6px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="badge live"><span class="live-pulse-dot"></span> LIVE</span>
+                <span class="muted" style="font-size:11.5px" id="lm-last-updated">${new Date().toLocaleTimeString()}</span>
               </div>
-              <div class="row center" style="gap:8px">
-                <button class="clay-btn sm ghost" id="btn-toggle-refresh">
-                  Auto-refresh: <b style="color:${autoRefresh ? 'var(--primary)' : 'var(--danger)'}">${autoRefresh ? 'Aktif' : 'Mati'}</b>
+              <div class="row center" style="gap:6px">
+                <button class="clay-btn sm ghost" id="btn-toggle-refresh" style="font-size:11.5px;padding:4px 8px;min-height:30px">
+                  Auto: <b style="color:${autoRefresh ? 'var(--primary)' : 'var(--danger)'}">${autoRefresh ? 'ON' : 'OFF'}</b>
                 </button>
-                <button class="clay-btn sm primary" id="btn-refresh-now" style="display:inline-flex;align-items:center;gap:5px">
-                  🔄 Segarkan
+                <button class="clay-btn sm primary" id="btn-refresh-now" style="font-size:11.5px;padding:4px 10px;min-height:30px">
+                  Segarkan
                 </button>
-                <span class="muted" id="lm-countdown" style="font-size:12px;min-width:40px">${autoRefresh ? `${countdown}s` : ''}</span>
+                <span class="muted" id="lm-countdown" style="font-size:11px;min-width:22px;text-align:right">${autoRefresh ? `${countdown}s` : ''}</span>
               </div>
             </div>
 
-            <div class="row mt" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
-              <div style="flex:1;min-width:140px">
-                ${UI.field('Tanggal Monitor', `<input type="date" class="clay-input" id="lm-date" value="${currentDate}">`)}
+            <div class="lm-filter-grid mt" style="margin-top:10px">
+              <div class="lm-span-2">
+                ${UI.field('Tanggal', `
+                  <div class="lm-date-row">
+                    <input type="date" class="clay-input" id="lm-date" value="${currentDate}">
+                    <button class="clay-btn sm ghost" id="lm-preset-today">Hari Ini</button>
+                    <button class="clay-btn sm ghost" id="lm-preset-yesterday">Kemarin</button>
+                  </div>
+                `)}
               </div>
-              <div style="flex:1;min-width:140px">
+              <div>
                 ${UI.field('Sesi', `
                   <select class="clay-select" id="lm-sesi">
-                    <option value="" ${!currentSesi ? 'selected' : ''}>Semua Sesi Hari Ini</option>
+                    <option value="" ${!currentSesi ? 'selected' : ''}>Semua Sesi</option>
                     ${SESI_LIST.map(s => `<option value="${s}" ${currentSesi === s ? 'selected' : ''}>${s}</option>`).join('')}
-                    <option value="Ta’lim Malam" ${currentSesi === 'Ta’lim Malam' ? 'selected' : ''}>Ta’lim Malam</option>
+                    <option value="${Store.TALIM_SESI}" ${Store.isTalimSesi(currentSesi) ? 'selected' : ''}>Kajian</option>
                   </select>
                 `)}
               </div>
-              <div style="flex:1;min-width:160px">
+              <div>
                 ${UI.field('Halaqah', `
                   <select class="clay-select" id="lm-halaqah">
                     ${UI.optionsFromList(halaqahOptions, 'v', 'l', currentHalaqah)}
                   </select>
                 `)}
               </div>
-              <div style="flex:1.2;min-width:180px">
+              <div class="lm-span-2">
                 ${UI.field('Cari', `
                   <input type="search" class="clay-input" id="lm-search" placeholder="Cari nama guru atau santri..." value="${UI.esc(searchTerm)}" autocomplete="off">
                 `)}
-              </div>
-              <div style="flex:0 0 auto;display:flex;gap:6px;padding-bottom:2px">
-                <button class="clay-btn sm ghost" id="lm-preset-today">Hari Ini</button>
-                <button class="clay-btn sm ghost" id="lm-preset-yesterday">Kemarin</button>
               </div>
             </div>
           </div>
 
           <!-- 3 KPI Card Utama Live Monitor -->
-          <div class="grid cols-3 mb" style="gap:16px">
+          <div class="grid cols-3 live-kpi-grid mb" style="gap:16px">
             <!-- 1. Live Guru / Ustadz -->
             <div class="clay-card pad-sm live-kpi-card blue" style="background:#fff">
-              <div class="row center" style="justify-content:space-between">
-                <span style="font-size:12px;font-weight:700;color:var(--text-soft)">👨‍🏫 KEHADIRAN GURU / USTADZ</span>
-                <span class="badge ${d.persenGuru >= 80 ? 'green' : (d.persenGuru >= 50 ? 'blue' : 'warn')}">${d.persenGuru}% Absen</span>
+              <div class="row center" style="justify-content:space-between;gap:4px">
+                <span class="lk-title"><span class="hide-xs">KEHADIRAN </span>GURU</span>
+                <span class="badge lk-badge ${d.persenGuru >= 80 ? 'green' : (d.persenGuru >= 50 ? 'blue' : 'warn')}">${d.persenGuru}%</span>
               </div>
-              <div class="mt" style="display:flex;align-items:baseline;gap:8px">
-                <b style="font-size:26px;color:#2563eb">${d.guruSudah}</b>
-                <span class="muted" style="font-size:13px">/ ${d.totalGuru} Guru Aktif</span>
+              <div class="lk-metric">
+                <b style="color:#2563eb">${d.guruSudah}</b>
+                <span class="muted">/${d.totalGuru}<span class="hide-xs"> Guru</span></span>
               </div>
               <div class="live-bar-container">
                 <div class="live-bar-seg" style="width:${d.persenGuru}%;background:#2563eb"></div>
                 <div class="live-bar-seg" style="width:${100 - d.persenGuru}%;background:#e2e8f0"></div>
               </div>
-              <div class="row center" style="justify-content:space-between;margin-top:6px;font-size:12px">
-                <span style="color:#16a34a;font-weight:600">✅ Sudah Absen: ${d.guruSudah}</span>
-                <span style="color:${d.guruBelum > 0 ? '#dc2626' : '#6b7280'};font-weight:600">❌ Belum Absen: ${d.guruBelum}</span>
+              <div class="lk-foot">
+                <span class="hide-xs" style="color:#16a34a;font-weight:600">Sudah: ${d.guruSudah}</span>
+                <span style="color:${d.guruBelum > 0 ? '#dc2626' : '#6b7280'};font-weight:600"><span class="hide-xs">Belum: </span><span class="show-xs">Blm: </span>${d.guruBelum}</span>
               </div>
             </div>
 
             <!-- 2. Live Santri Diabsen -->
             <div class="clay-card pad-sm live-kpi-card purple" style="background:#fff">
-              <div class="row center" style="justify-content:space-between">
-                <span style="font-size:12px;font-weight:700;color:var(--text-soft)">🎓 STATUS ABSENSI SANTRI</span>
-                <span class="badge ${d.persenSantriAbsen >= 80 ? 'green' : (d.persenSantriAbsen >= 50 ? 'purple' : 'warn')}">${d.persenSantriAbsen}% Diabsen</span>
+              <div class="row center" style="justify-content:space-between;gap:4px">
+                <span class="lk-title"><span class="hide-xs">ABSENSI </span>SANTRI</span>
+                <span class="badge lk-badge ${d.persenSantriAbsen >= 80 ? 'green' : (d.persenSantriAbsen >= 50 ? 'purple' : 'warn')}">${d.persenSantriAbsen}%</span>
               </div>
-              <div class="mt" style="display:flex;align-items:baseline;gap:8px">
-                <b style="font-size:26px;color:#9333ea">${d.santriDiabsen}</b>
-                <span class="muted" style="font-size:13px">/ ${d.totalSantri} Santri Aktif</span>
+              <div class="lk-metric">
+                <b style="color:#9333ea">${d.santriDiabsen}</b>
+                <span class="muted">/${d.totalSantri}<span class="hide-xs"> Santri</span></span>
               </div>
               <div class="live-bar-container">
                 <div class="live-bar-seg" style="width:${d.persenSantriAbsen}%;background:#9333ea"></div>
                 <div class="live-bar-seg" style="width:${100 - d.persenSantriAbsen}%;background:#e2e8f0"></div>
               </div>
-              <div class="row center" style="justify-content:space-between;margin-top:6px;font-size:12px">
-                <span style="color:#16a34a;font-weight:600">✅ Sudah Diabsen: ${d.santriDiabsen}</span>
-                <span style="color:${d.santriBelum > 0 ? '#d97706' : '#6b7280'};font-weight:600">⏳ Belum Diabsen: ${d.santriBelum}</span>
+              <div class="lk-foot">
+                <span class="hide-xs" style="color:#16a34a;font-weight:600">Sudah: ${d.santriDiabsen}</span>
+                <span style="color:${d.santriBelum > 0 ? '#d97706' : '#6b7280'};font-weight:600"><span class="hide-xs">Belum: </span><span class="show-xs">Blm: </span>${d.santriBelum}</span>
               </div>
             </div>
 
             <!-- 3. Live Presentase Setoran 1 Hari -->
             <div class="clay-card pad-sm live-kpi-card green" style="background:#fff">
-              <div class="row center" style="justify-content:space-between">
-                <span style="font-size:12px;font-weight:700;color:var(--text-soft)">📖 PRESENTASE SETORAN 1 HARI</span>
-                <span class="badge ${d.persenSetoran >= 70 ? 'green' : 'warn'}">${d.persenSetoran}% Capaian</span>
+              <div class="row center" style="justify-content:space-between;gap:4px">
+                <span class="lk-title">SETORAN<span class="hide-xs"> HARI INI</span></span>
+                <span class="badge lk-badge ${d.persenSetoran >= 70 ? 'green' : 'warn'}">${d.persenSetoran}%</span>
               </div>
-              <div class="mt" style="display:flex;align-items:baseline;gap:8px">
-                <b style="font-size:26px;color:#16a34a">${d.persenSetoran}%</b>
-                <span class="muted" style="font-size:13px">(${d.santriSudahSetor} dari ${d.totalSantri} santri)</span>
+              <div class="lk-metric">
+                <b style="color:#16a34a">${d.santriSudahSetor}</b>
+                <span class="muted">/${d.totalSantri}<span class="hide-xs"> Santri</span></span>
               </div>
               <div class="live-bar-container">
                 <div class="live-bar-seg" style="width:${d.persenSetoran}%;background:#16a34a"></div>
                 <div class="live-bar-seg" style="width:${100 - d.persenSetoran}%;background:#e2e8f0"></div>
               </div>
-              <div class="row center" style="justify-content:space-between;margin-top:6px;font-size:12px">
-                <span style="color:#16a34a;font-weight:600">✅ Sudah Setoran: ${d.santriSudahSetor}</span>
-                <span style="color:${d.santriBelumSetor > 0 ? '#dc2626' : '#6b7280'};font-weight:600">⏳ Belum Setoran: ${d.santriBelumSetor}</span>
+              <div class="lk-foot">
+                <span class="hide-xs" style="color:#16a34a;font-weight:600">Sudah: ${d.santriSudahSetor}</span>
+                <span style="color:${d.santriBelumSetor > 0 ? '#dc2626' : '#6b7280'};font-weight:600"><span class="hide-xs">Belum: </span><span class="show-xs">Blm: </span>${d.santriBelumSetor}</span>
               </div>
             </div>
           </div>
 
           <!-- Navigasi Tab Monitor -->
-          <div class="pill-tabs" id="lm-tab-bar" style="margin-bottom:12px">
-            <button class="pill ${currentTab === 'guru' ? 'active' : ''}" data-lm-tab="guru">👨‍🏫 Live Guru (${d.totalGuru})</button>
-            <button class="pill ${currentTab === 'santri' ? 'active' : ''}" data-lm-tab="santri">🎓 Live Santri Diabsen (${d.totalSantri})</button>
-            <button class="pill ${currentTab === 'setoran' ? 'active' : ''}" data-lm-tab="setoran">📖 Live Setoran &amp; Presentase (${d.santriSudahSetor}/${d.totalSantri})</button>
-            <button class="pill ${currentTab === 'halaqah' ? 'active' : ''}" data-lm-tab="halaqah">📊 Ringkasan per Halaqah (${d.halaqahList.length})</button>
+          <div class="pill-tabs" id="lm-tab-bar" style="margin-bottom:10px">
+            <button class="pill ${currentTab === 'guru' ? 'active' : ''}" data-lm-tab="guru">Guru (${d.totalGuru})</button>
+            <button class="pill ${currentTab === 'santri' ? 'active' : ''}" data-lm-tab="santri">Santri (${d.totalSantri})</button>
+            <button class="pill ${currentTab === 'setoran' ? 'active' : ''}" data-lm-tab="setoran">Setoran (${d.santriSudahSetor}/${d.totalSantri})</button>
+            <button class="pill ${currentTab === 'halaqah' ? 'active' : ''}" data-lm-tab="halaqah">Halaqah (${d.halaqahList.length})</button>
           </div>
 
           <!-- Isi Tab -->
@@ -969,28 +1180,23 @@ const Admin = (() => {
       const rows = d.displayGuru.map((g, idx) => {
         const cleanNum = cleanPhone(g.noHp);
         const waBtn = (!g.sudah && cleanNum)
-          ? `<a href="https://wa.me/${cleanNum}?text=${encodeURIComponent(`Assalamu'alaikum Ustadz/Ustadzah ${g.nama}, mengingatkan untuk mengisi absensi ${currentSesi || 'hari ini'} di aplikasi Tahfidzku.`)}" target="_blank" class="clay-btn sm ghost" style="color:#16a34a;border:1px solid #86efac;font-size:11px;padding:3px 8px;text-decoration:none;display:inline-flex;align-items:center;gap:4px">💬 Ingatkan WA</a>`
-          : (cleanNum ? `<a href="https://wa.me/${cleanNum}" target="_blank" class="clay-btn sm ghost" style="font-size:11px;padding:3px 8px;text-decoration:none">💬 Chat WA</a>` : '<span class="muted">-</span>');
+          ? `<a href="https://wa.me/${cleanNum}?text=${encodeURIComponent(`Assalamu'alaikum Ustadz/Ustadzah ${g.nama}, mengingatkan untuk mengisi absensi ${currentSesi || 'hari ini'} di aplikasi Tahfidzku.`)}" target="_blank" class="clay-btn sm ghost" style="color:#16a34a;border:1px solid #86efac;font-size:11px;padding:3px 8px;text-decoration:none;display:inline-flex;align-items:center;gap:4px">Ingatkan WA</a>`
+          : (cleanNum ? `<a href="https://wa.me/${cleanNum}" target="_blank" class="clay-btn sm ghost" style="font-size:11px;padding:3px 8px;text-decoration:none">Chat WA</a>` : '<span class="muted">-</span>');
 
         const sesiCells = currentSesi
           ? `<td>${renderSesiPill(g.sesiMap[currentSesi])}</td>`
-          : `
-            <td>${renderSesiPill(g.sesiMap.Subuh)}</td>
-            <td>${renderSesiPill(g.sesiMap.Ashar)}</td>
-            <td>${renderSesiPill(g.sesiMap.Maghrib)}</td>
-            <td>${renderSesiPill(g.sesiMap.Isya)}</td>
-          `;
+          : SESI_LIST.map(ses => `<td>${renderSesiPill(g.sesiMap[ses])}</td>`).join('');
 
         const statusBadge = g.sudah
-          ? `<span class="badge green">✅ Sudah Absen</span>`
-          : `<span class="badge danger">❌ Belum Absen</span>`;
+          ? `<span class="badge green">Sudah Absen</span>`
+          : `<span class="badge danger">Belum Absen</span>`;
 
         return `
           <tr>
             <td class="center" style="width:40px">${idx + 1}</td>
             <td>
               <b>${UI.esc(g.nama)}</b>
-              ${g.noHp ? `<div class="muted" style="font-size:11.5px">📱 ${UI.esc(g.noHp)}</div>` : ''}
+              ${g.noHp ? `<div class="muted" style="font-size:11.5px">${UI.esc(g.noHp)}</div>` : ''}
             </td>
             <td><b>${UI.esc(g.halaqah)}</b></td>
             ${sesiCells}
@@ -1003,31 +1209,30 @@ const Admin = (() => {
 
       return `
         <div class="clay-card mb" style="background:#fff">
-          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-            <div class="row center" style="gap:6px">
-              <span class="muted" style="font-size:13px">Filter Status:</span>
-              <button class="clay-btn sm ${guruSubFilter === 'all' ? 'primary' : 'ghost'}" data-guru-filter="all">Semua Guru (${d.totalGuru})</button>
-              <button class="clay-btn sm ${guruSubFilter === 'sudah' ? 'primary' : 'ghost'}" data-guru-filter="sudah" style="color:${guruSubFilter === 'sudah' ? '#fff' : '#16a34a'}">✅ Sudah Absen (${d.guruSudah})</button>
-              <button class="clay-btn sm ${guruSubFilter === 'belum' ? 'danger' : 'ghost'}" data-guru-filter="belum" style="color:${guruSubFilter === 'belum' ? '#fff' : '#dc2626'}">❌ Belum Absen (${d.guruBelum})</button>
+          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+            <div class="row center" style="gap:6px;flex-wrap:wrap">
+              <button class="clay-btn sm ${guruSubFilter === 'all' ? 'primary' : 'ghost'}" data-guru-filter="all" style="min-height:32px;padding:4px 10px">Semua (${d.totalGuru})</button>
+              <button class="clay-btn sm ${guruSubFilter === 'sudah' ? 'primary' : 'ghost'}" data-guru-filter="sudah" style="min-height:32px;padding:4px 10px;color:${guruSubFilter === 'sudah' ? '#fff' : '#16a34a'}">Sudah (${d.guruSudah})</button>
+              <button class="clay-btn sm ${guruSubFilter === 'belum' ? 'danger' : 'ghost'}" data-guru-filter="belum" style="min-height:32px;padding:4px 10px;color:${guruSubFilter === 'belum' ? '#fff' : '#dc2626'}">Belum (${d.guruBelum})</button>
             </div>
-            <div class="muted" style="font-size:12px">Menampilkan <b>${d.displayGuru.length}</b> guru</div>
+            <div class="muted" style="font-size:11.5px">${d.displayGuru.length} guru</div>
           </div>
 
           <div class="table-wrap">
-            <table class="clay-table">
+            <table class="clay-table table-wide">
               <thead>
                 <tr>
                   <th class="center" style="width:40px">No</th>
                   <th>Nama Guru / Ustadz</th>
                   <th>Halaqah</th>
-                  ${currentSesi ? `<th>Sesi ${currentSesi}</th>` : `<th>Subuh</th><th>Ashar</th><th>Maghrib</th><th>Isya</th>`}
+                  ${currentSesi ? `<th>Sesi ${UI.esc(currentSesi)}</th>` : SESI_LIST.map(ses => `<th>${UI.esc(ses)}</th>`).join('')}
                   <th>Status</th>
                   <th>Waktu Terakhir</th>
                   <th>Aksi</th>
                 </tr>
               </thead>
               <tbody>
-                ${rows || '<tr><td colspan="9" class="center"><div class="empty">Tidak ada data guru yang sesuai filter.</div></td></tr>'}
+                ${rows || `<tr><td colspan="${6 + (currentSesi ? 1 : SESI_LIST.length)}" class="center"><div class="empty">Tidak ada data guru yang sesuai filter.</div></td></tr>`}
               </tbody>
             </table>
           </div>
@@ -1040,16 +1245,11 @@ const Admin = (() => {
       const rows = d.displaySantri.map((s, idx) => {
         const sesiCells = currentSesi
           ? `<td>${renderSesiPill(s.sesiMap[currentSesi])}</td>`
-          : `
-            <td>${renderSesiPill(s.sesiMap.Subuh)}</td>
-            <td>${renderSesiPill(s.sesiMap.Ashar)}</td>
-            <td>${renderSesiPill(s.sesiMap.Maghrib)}</td>
-            <td>${renderSesiPill(s.sesiMap.Isya)}</td>
-          `;
+          : SESI_LIST.map(ses => `<td>${renderSesiPill(s.sesiMap[ses])}</td>`).join('');
 
         const statusBadge = s.sudahDiabsen
-          ? `<span class="badge green">✅ Sudah Diabsen</span>`
-          : `<span class="badge warn" style="background:#fef3c7;color:#92400e;font-weight:600">⏳ Belum Diabsen</span>`;
+          ? `<span class="badge green">Sudah Diabsen</span>`
+          : `<span class="badge warn" style="background:#fef3c7;color:#92400e;font-weight:600">Belum Diabsen</span>`;
 
         const ustadzBadge = s.ustadzSudahAbsen
           ? `<span class="badge green" style="font-size:11px">Guru: Hadir</span>`
@@ -1075,13 +1275,12 @@ const Admin = (() => {
 
       return `
         <div class="clay-card mb" style="background:#fff">
-          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:10px">
             <div class="row center" style="gap:6px;flex-wrap:wrap">
-              <span class="muted" style="font-size:13px">Filter:</span>
-              <button class="clay-btn sm ${santriSubFilter === 'all' ? 'primary' : 'ghost'}" data-santri-filter="all">Semua Santri (${d.totalSantri})</button>
-              <button class="clay-btn sm ${santriSubFilter === 'sudah' ? 'primary' : 'ghost'}" data-santri-filter="sudah" style="color:${santriSubFilter === 'sudah' ? '#fff' : '#16a34a'}">✅ Sudah Diabsen (${d.santriDiabsen})</button>
-              <button class="clay-btn sm ${santriSubFilter === 'belum' ? 'secondary' : 'ghost'}" data-santri-filter="belum" style="color:${santriSubFilter === 'belum' ? '#fff' : '#d97706'}">⏳ Belum Diabsen (${d.santriBelum})</button>
-              <select class="clay-select sm" id="lm-santri-status-select" style="max-width:140px;padding:4px 8px;font-size:12px">
+              <button class="clay-btn sm ${santriSubFilter === 'all' ? 'primary' : 'ghost'}" data-santri-filter="all" style="min-height:32px;padding:4px 10px">Semua (${d.totalSantri})</button>
+              <button class="clay-btn sm ${santriSubFilter === 'sudah' ? 'primary' : 'ghost'}" data-santri-filter="sudah" style="min-height:32px;padding:4px 10px;color:${santriSubFilter === 'sudah' ? '#fff' : '#16a34a'}">Sudah (${d.santriDiabsen})</button>
+              <button class="clay-btn sm ${santriSubFilter === 'belum' ? 'secondary' : 'ghost'}" data-santri-filter="belum" style="min-height:32px;padding:4px 10px;color:${santriSubFilter === 'belum' ? '#fff' : '#d97706'}">Belum (${d.santriBelum})</button>
+              <select class="clay-select sm" id="lm-santri-status-select" style="max-width:130px;padding:4px 8px;font-size:12px;min-height:32px">
                 <option value="">Semua Status</option>
                 <option value="Hadir" ${santriStatusFilter === 'Hadir' ? 'selected' : ''}>Hadir</option>
                 <option value="Izin" ${santriStatusFilter === 'Izin' ? 'selected' : ''}>Izin</option>
@@ -1090,23 +1289,23 @@ const Admin = (() => {
                 <option value="Belum" ${santriStatusFilter === 'Belum' ? 'selected' : ''}>Belum Diabsen</option>
               </select>
             </div>
-            <div class="muted" style="font-size:12px">Menampilkan <b>${d.displaySantri.length}</b> santri</div>
+            <div class="muted" style="font-size:11.5px">${d.displaySantri.length} santri</div>
           </div>
 
           <div class="table-wrap">
-            <table class="clay-table">
+            <table class="clay-table table-wide">
               <thead>
                 <tr>
                   <th class="center" style="width:40px">No</th>
                   <th>Nama Santri</th>
                   <th>Halaqah &amp; Guru</th>
-                  ${currentSesi ? `<th>Sesi ${currentSesi}</th>` : `<th>Subuh</th><th>Ashar</th><th>Maghrib</th><th>Isya</th>`}
+                  ${currentSesi ? `<th>Sesi ${UI.esc(currentSesi)}</th>` : SESI_LIST.map(ses => `<th>${UI.esc(ses)}</th>`).join('')}
                   <th>Status Santri</th>
                   <th>Status Guru</th>
                 </tr>
               </thead>
               <tbody>
-                ${rows || '<tr><td colspan="8" class="center"><div class="empty">Tidak ada data santri yang sesuai filter.</div></td></tr>'}
+                ${rows || `<tr><td colspan="${5 + (currentSesi ? 1 : SESI_LIST.length)}" class="center"><div class="empty">Tidak ada data santri yang sesuai filter.</div></td></tr>`}
               </tbody>
             </table>
           </div>
@@ -1118,8 +1317,8 @@ const Admin = (() => {
     function renderTabSetoran(d) {
       const rows = d.displaySetoran.map((s, idx) => {
         const statusBadge = s.sudahSetor
-          ? `<span class="badge green">✅ Sudah Setoran (${s.items.length})</span>`
-          : `<span class="badge warn" style="background:#fef3c7;color:#92400e;font-weight:600">⏳ Belum Setoran</span>`;
+          ? `<span class="badge green">Sudah Setoran (${s.items.length})</span>`
+          : `<span class="badge warn" style="background:#fef3c7;color:#92400e;font-weight:600">Belum Setoran</span>`;
 
         const itemsHtml = s.items.length
           ? s.items.map(it => `
@@ -1146,7 +1345,7 @@ const Admin = (() => {
             </td>
             <td style="min-width:140px"><b>${UI.esc(s.halaqah)}</b></td>
             <td style="min-width:130px">${statusBadge}</td>
-            <td style="min-width:280px">${itemsHtml}</td>
+            <td class="cell-wrap" style="min-width:280px">${itemsHtml}</td>
           </tr>
         `;
       }).join('');
@@ -1156,7 +1355,7 @@ const Admin = (() => {
         <div class="clay-card mb" style="background:linear-gradient(135deg, #f0fdf4, #eff6ff);border:1px solid #bbf7d0">
           <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:12px">
             <div>
-              <div style="font-size:13px;font-weight:700;color:#166534">📊 RINGKASAN SETORAN HARI INI (${UI.fmtDate(currentDate)})</div>
+              <div style="font-size:13px;font-weight:700;color:#166534">RINGKASAN SETORAN HARI INI (${UI.fmtDate(currentDate)})</div>
               <div style="font-size:13.5px;margin-top:4px;color:#1e293b">
                 Presentase santri yang sudah setoran: <b style="font-size:18px;color:#16a34a">${d.persenSetoran}%</b> (${d.santriSudahSetor} dari ${d.totalSantri} santri).
               </div>
@@ -1171,25 +1370,24 @@ const Admin = (() => {
         </div>
 
         <div class="clay-card mb" style="background:#fff">
-          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:10px">
             <div class="row center" style="gap:6px;flex-wrap:wrap">
-              <span class="muted" style="font-size:13px">Filter:</span>
-              <button class="clay-btn sm ${setoranSubFilter === 'all' ? 'primary' : 'ghost'}" data-setoran-filter="all">Semua Santri (${d.totalSantri})</button>
-              <button class="clay-btn sm ${setoranSubFilter === 'sudah' ? 'primary' : 'ghost'}" data-setoran-filter="sudah" style="color:${setoranSubFilter === 'sudah' ? '#fff' : '#16a34a'}">✅ Sudah Setoran (${d.santriSudahSetor})</button>
-              <button class="clay-btn sm ${setoranSubFilter === 'belum' ? 'danger' : 'ghost'}" data-setoran-filter="belum" style="color:${setoranSubFilter === 'belum' ? '#fff' : '#dc2626'}">⏳ Belum Setoran (${d.santriBelumSetor})</button>
-              <select class="clay-select sm" id="lm-setoran-type-select" style="max-width:160px;padding:4px 8px;font-size:12px">
-                <option value="">Semua Jenis Setoran</option>
+              <button class="clay-btn sm ${setoranSubFilter === 'all' ? 'primary' : 'ghost'}" data-setoran-filter="all" style="min-height:32px;padding:4px 10px">Semua (${d.totalSantri})</button>
+              <button class="clay-btn sm ${setoranSubFilter === 'sudah' ? 'primary' : 'ghost'}" data-setoran-filter="sudah" style="min-height:32px;padding:4px 10px;color:${setoranSubFilter === 'sudah' ? '#fff' : '#16a34a'}">Sudah (${d.santriSudahSetor})</button>
+              <button class="clay-btn sm ${setoranSubFilter === 'belum' ? 'danger' : 'ghost'}" data-setoran-filter="belum" style="min-height:32px;padding:4px 10px;color:${setoranSubFilter === 'belum' ? '#fff' : '#dc2626'}">Belum (${d.santriBelumSetor})</button>
+              <select class="clay-select sm" id="lm-setoran-type-select" style="max-width:150px;padding:4px 8px;font-size:12px;min-height:32px">
+                <option value="">Semua Jenis</option>
                 <option value="Ziyadah Hafalan" ${setoranTypeFilter === 'Ziyadah Hafalan' ? 'selected' : ''}>Ziyadah Hafalan</option>
                 <option value="Tahsin" ${setoranTypeFilter === 'Tahsin' ? 'selected' : ''}>Tahsin</option>
                 <option value="Mutqin" ${setoranTypeFilter === 'Mutqin' ? 'selected' : ''}>Mutqin</option>
                 <option value="Ziyadah Bacaan" ${setoranTypeFilter === 'Ziyadah Bacaan' ? 'selected' : ''}>Ziyadah Bacaan</option>
               </select>
             </div>
-            <div class="muted" style="font-size:12px">Menampilkan <b>${d.displaySetoran.length}</b> santri</div>
+            <div class="muted" style="font-size:11.5px">${d.displaySetoran.length} santri</div>
           </div>
 
           <div class="table-wrap">
-            <table class="clay-table">
+            <table class="clay-table table-wide">
               <thead>
                 <tr>
                   <th class="center" style="width:40px">No</th>
@@ -1212,8 +1410,8 @@ const Admin = (() => {
     function renderTabHalaqah(d) {
       const cards = d.displayHalaqah.map(h => {
         const ustadzAbsenBadge = h.ustadzAbsenCount > 0
-          ? `<span class="badge green">✅ Guru Hadir (${h.ustadzAbsenCount}/${h.hUstadzTotal})</span>`
-          : `<span class="badge danger">❌ Guru Belum Absen</span>`;
+          ? `<span class="badge green">Guru Hadir (${h.ustadzAbsenCount}/${h.hUstadzTotal})</span>`
+          : `<span class="badge danger">Guru Belum Absen</span>`;
 
         const belumSetorTags = h.belumSetorNames.length
           ? `<div style="margin-top:8px;font-size:11.5px">
@@ -1221,7 +1419,7 @@ const Admin = (() => {
               ${h.belumSetorNames.slice(0, 5).map(nm => `<span class="badge gray" style="font-size:10.5px">${UI.esc(nm)}</span>`).join(' ')}
               ${h.belumSetorNames.length > 5 ? `<span class="muted">+${h.belumSetorNames.length - 5} lainnya</span>` : ''}
             </div>`
-          : '<div style="margin-top:8px;font-size:11.5px;color:#16a34a">🎉 Seluruh santri sudah setoran!</div>';
+          : '<div style="margin-top:8px;font-size:11.5px;color:#16a34a">Seluruh santri sudah setoran!</div>';
 
         return `
           <div class="clay-card pad-sm" style="background:#fff;border-top:4px solid ${h.persenSetor >= 70 ? '#16a34a' : (h.persenSetor >= 40 ? '#2563eb' : '#d97706')}">
@@ -1403,7 +1601,7 @@ const Admin = (() => {
   }
 
   /* ---------------- Tombol aksi baris tabel ----------------
-     Sebelumnya tombol aksi hanya berupa ikon (✏️ / 🗑) sehingga di HP tampak
+     Sebelumnya tombol aksi hanya berupa ikon sehingga di HP tampak
      seperti tombol kosong dan rawan salah pencet. Semua aksi baris sekarang
      memakai label teks dengan ukuran seragam. */
   function rowActionButtons(actions) {
@@ -1421,10 +1619,12 @@ const Admin = (() => {
   }
 
   function ustadzRowActions(ustadz) {
-    return rowActionButtons([
+    const actions = [
+      ...(Store.hasFeature('raport') ? [{ label: 'Raport', cls: 'secondary', attr: ` data-raport-ustadz="${UI.esc(ustadz.id)}"`, title: 'Cetak / unduh raport halaqah ustadz ini' }] : []),
       { label: 'Edit', attr: ` data-edit="${UI.esc(ustadz.id)}"` },
       { label: 'Hapus', cls: 'danger', attr: ` data-del="${UI.esc(ustadz.id)}"` }
-    ]);
+    ];
+    return rowActionButtons(actions);
   }
 
   function auditWaliModal(phoneUsage) {
@@ -1436,7 +1636,7 @@ const Admin = (() => {
       '</div>';
     } else {
       bodyHTML = '<div style="font-size:13px;color:#713f12;background:#fef3c7;border:1px solid #fde68a;padding:10px 14px;border-radius:10px;margin-bottom:14px;">' +
-        '⚠️ Ditemukan <b>' + dupKeys.length + ' nomor WhatsApp</b> yang terdaftar pada beberapa santri sekaligus.<br>' +
+        'Ditemukan <b>' + dupKeys.length + ' nomor WhatsApp</b> yang terdaftar pada beberapa santri sekaligus.<br>' +
         'Jika santri di bawah ini <b>bukan saudara kandung</b>, silakan klik tombol <b>Edit No. HP</b> untuk memperbaikinya agar laporan setoran tidak salah sasaran.' +
       '</div>' +
       '<div style="display:flex;flex-direction:column;gap:12px;max-height:420px;overflow-y:auto;">' +
@@ -1444,7 +1644,7 @@ const Admin = (() => {
           const list = phoneUsage[phone];
           return '<div class="clay-card pad-sm" style="border:1px solid var(--border)">' +
             '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
-              '<span style="font-family:monospace;font-weight:700;font-size:13px;color:#0284c7">📱 ' + UI.esc(phone) + '</span>' +
+              '<span style="font-family:monospace;font-weight:700;font-size:13px;color:#0284c7">' + UI.esc(phone) + '</span>' +
               '<span class="badge warn" style="font-size:11px">' + list.length + ' Santri Terdaftar</span>' +
             '</div>' +
             '<div class="table-wrap"><table class="clay-table">' +
@@ -1455,7 +1655,7 @@ const Admin = (() => {
                     '<td><b>' + UI.esc(st.nama) + '</b><div class="muted">' + UI.esc(st.nis || '') + '</div></td>' +
                     '<td>' + UI.esc(Store.educationLabel(st) || '-') + '</td>' +
                     '<td>' + UI.esc(st.namaWali || '-') + '</td>' +
-                    '<td><button type="button" class="clay-btn sm primary" data-audit-edit="' + UI.esc(st.id) + '">✏ Edit No. HP</button></td>' +
+                    '<td><button type="button" class="clay-btn sm primary" data-audit-edit="' + UI.esc(st.id) + '">Edit No. HP</button></td>' +
                   '</tr>'
                 ).join('') +
               '</tbody>' +
@@ -1503,7 +1703,7 @@ const Admin = (() => {
     const rows = db.santri.map(s => {
       const p = Store.waNomorWali(s.id);
       const isDup = p && phoneUsage[p] && phoneUsage[p].length > 1;
-      const dupBadge = isDup ? (' <span class="badge warn" style="font-size:10px;padding:1px 6px;cursor:pointer;" title="Nomor HP wali (' + p + ') terdaftar di ' + (phoneUsage[p].length - 1) + ' santri lain">⚠️ No. Duplikat</span>') : '';
+      const dupBadge = isDup ? (' <span class="badge warn" style="font-size:10px;padding:1px 6px;cursor:pointer;" title="Nomor HP wali (' + p + ') terdaftar di ' + (phoneUsage[p].length - 1) + ' santri lain">No. Duplikat</span>') : '';
       const waliUser = db.users.find(u => u.role === 'wali' && u.refId === s.waliId);
       const username = waliUser ? waliUser.username : '-';
       return `<tr>
@@ -1523,10 +1723,10 @@ const Admin = (() => {
         <div class="row" style="justify-content:space-between">
           <div class="section-title" style="margin:0">Daftar Santri (${db.santri.length})</div>
           <div class="row">
-            ${dupCount > 0 ? '<button type="button" class="clay-btn warn" id="btn-audit-wali" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;">⚠️ ' + dupCount + ' No. Wali Duplikat</button>' : ''}
-            <button class="clay-btn ghost" id="btn-gen-bulk">⚙️ Generate Username</button>
-            <button class="clay-btn ghost" id="btn-import">Import Excel</button>
-            <button class="clay-btn secondary" id="btn-download-xlsx">⬇ Download XLSX</button>
+            ${dupCount > 0 ? '<button type="button" class="clay-btn warn" id="btn-audit-wali" style="background:#fef3c7;color:#92400e;border:1px solid #fde68a;">' + dupCount + ' No. Wali Duplikat</button>' : ''}
+            <button class="clay-btn ghost" id="btn-gen-bulk">Generate Username</button>
+            ${Store.hasFeature('importExcel') ? '<button class="clay-btn ghost" id="btn-import">Import Excel</button>' : ''}
+            ${Store.hasFeature('exportExcel') ? '<button class="clay-btn secondary" id="btn-download-xlsx">⬇ Download XLSX</button>' : ''}
             <button class="clay-btn primary" id="btn-add">+ Tambah Santri</button>
           </div>
         </div>
@@ -1541,8 +1741,10 @@ const Admin = (() => {
     const btnAudit = document.getElementById('btn-audit-wali');
     if (btnAudit) btnAudit.onclick = () => auditWaliModal(phoneUsage);
     document.getElementById('btn-add').onclick = () => santriForm();
-    document.getElementById('btn-import').onclick = () => importSantriDialog();
-    document.getElementById('btn-download-xlsx').onclick = downloadSantriXlsx;
+    const btnImpSantri = document.getElementById('btn-import');
+    if (btnImpSantri) btnImpSantri.onclick = () => importSantriDialog();
+    const btnDlSantri = document.getElementById('btn-download-xlsx');
+    if (btnDlSantri) btnDlSantri.onclick = downloadSantriXlsx;
     document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => santriForm(b.dataset.edit));
     document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
       UI.confirmDialog('Hapus Santri', 'Yakin ingin menghapus santri ini?', () => {
@@ -1652,8 +1854,11 @@ const Admin = (() => {
   function santriForm(id) {
     const db = Store.get();
     const s = id ? Store.findSantri(id) : null;
-    const allPrograms = db.levelTahfidz || ['Tahsin', 'Ziyadah', 'Mutqin'];
-    const activePrograms = s ? Store.activeProgramsForSantri(s) : [(s && s.level) || 'Tahsin'];
+    const enabledPrograms = Store.enabledPrograms();
+    const allPrograms = enabledPrograms.length ? enabledPrograms : (db.levelTahfidz || ['Tahsin', 'Ziyadah', 'Mutqin']);
+    const activePrograms = s ? Store.activeProgramsForSantri(s) : [allPrograms[0] || 'Tahsin'];
+    // Jika santri lama punya program yang saat ini sedang nonaktif, tetap tampilkan agar tidak hilang.
+    const visiblePrograms = [...new Set([...allPrograms, ...(s ? activePrograms : [])])];
     const primaryProgram = s && activePrograms.includes(s.level) ? s.level : activePrograms[0];
     const selectedTingkat = s ? Store.tingkatForSantri(s) : (Store.tingkatOptions()[0] || '');
     const selectedKelas = s ? Store.kelasForSantri(s) : '';
@@ -1672,12 +1877,12 @@ const Admin = (() => {
       const choices = db.halaqah.map(h => ({ v: h.id, l: halaqahOptionLabel(h) }));
       return `<option value="">Pilih halaqah untuk setoran ${UI.esc(program)}</option>${UI.optionsFromList(choices, 'v', 'l', selected)}`;
     };
-    const programChecks = allPrograms.map(program => `
+    const programChecks = visiblePrograms.map(program => `
       <label class="row" style="gap:8px;cursor:pointer;padding:5px 0">
         <input type="checkbox" data-program-active value="${UI.esc(program)}" ${activePrograms.includes(program) ? 'checked' : ''}>
         <span>${UI.esc(program)}</span>
       </label>`).join('');
-    const programHalaqahFields = allPrograms.map(program => `
+    const programHalaqahFields = visiblePrograms.map(program => `
       <div data-program-halaqah-row="${UI.esc(program)}" class="row" style="align-items:end;gap:12px;margin-top:8px">
         <div style="min-width:100px"><b>${UI.esc(program)}</b></div>
         <div style="flex:1"><select class="clay-select" data-program-halaqah="${UI.esc(program)}">${halaqahOptions(program)}</select></div>
@@ -1699,7 +1904,7 @@ const Admin = (() => {
         <div style="flex:1">${UI.field('Username', `<input class="clay-input" id="f-uname" value="${s ? UI.esc((db.users.find(u => u.role === 'wali' && u.refId === s.waliId) || {}).username || '') : ''}" placeholder="Otomatis dari HP/nama wali">`)}</div>
         <div style="flex:1">${UI.field('Password', `<input class="clay-input" id="f-pass" value="${s ? '' : WALI_PASS}" placeholder="Kosongkan jika tidak diubah">`)}</div>
       </div>
-      <button class="clay-btn sm secondary" id="btn-gen-uname" type="button">⚙️ Generate Username</button>
+      <button class="clay-btn sm secondary" id="btn-gen-uname" type="button">Generate Username</button>
       <div class="row mt">
         <div style="flex:1">${UI.field('Status', `<select class="clay-select" id="f-status"><option ${s && s.status === 'Aktif' ? 'selected' : ''}>Aktif</option><option ${s && s.status === 'Nonaktif' ? 'selected' : ''}>Nonaktif</option></select>`)}</div>
         <div style="flex:1">${UI.field('Program Utama', `<select class="clay-select" id="f-level"></select><div class="muted" style="font-size:12px;margin-top:4px">Ditampilkan sebagai level utama pada laporan lama.</div>`)}</div>
@@ -1709,7 +1914,8 @@ const Admin = (() => {
         <div style="flex:1">${UI.field('Kelas', `<select class="clay-select" id="f-kelas">${kelasOptions(selectedTingkat, selectedKelas)}</select>`)}</div>
       </div>
       ${UI.field('Program Aktif', `<div class="clay-card pad-sm">${programChecks}</div><div class="muted" style="font-size:12px;margin-top:4px">Santri dapat aktif di lebih dari satu program pada waktu yang sama.</div>`) }
-      ${UI.field('Halaqah per Jenis Setoran', `<div class="clay-card pad-sm">${programHalaqahFields}</div><div class="muted" style="font-size:12px;margin-top:4px">Jenis setoran mengikuti Program Aktif, bukan level halaqah. Contoh: centang Ziyadah lalu pilih halaqah Mutqin agar masuk kelompok Mutqin, tetapi setorannya tetap Ziyadah.</div>`)}`;
+      ${UI.field('Halaqah per Jenis Setoran', `<div class="clay-card pad-sm">${programHalaqahFields}</div><div class="muted" style="font-size:12px;margin-top:4px">Jenis setoran mengikuti Program Aktif, bukan level halaqah. Contoh: centang Ziyadah lalu pilih halaqah Mutqin agar masuk kelompok Mutqin, tetapi setorannya tetap Ziyadah.</div>`)}
+      ${Store.hasFeature('spp') ? UI.field('Nominal SPP Khusus (Rp)', `<input class="clay-input" id="f-spp-nominal" type="number" min="0" step="1000" value="${s && s.sppNominal !== undefined && s.sppNominal !== '' ? Number(s.sppNominal) : ''}" placeholder="Kosongkan = ikuti default lembaga (Rp ${Store.sppConfig().nominal.toLocaleString('id-ID')})"><div class="muted" style="font-size:12px;margin-top:4px">Isi 0 untuk santri beasiswa / bebas SPP.</div>`) : ''}`;
     const modal = UI.openModal({
       title: id ? 'Edit Santri' : 'Tambah Santri', sub: id ? '' : 'Akun wali otomatis dibuat',
       bodyHTML: body,
@@ -1730,6 +1936,11 @@ const Admin = (() => {
             tingkat: m.querySelector('#f-tingkat').value,
             kelas: m.querySelector('#f-kelas').value
           };
+          const sppInp = m.querySelector('#f-spp-nominal');
+          if (sppInp) {
+            const rawSpp = sppInp.value.trim();
+            data.sppNominal = rawSpp === '' ? '' : Math.max(0, parseInt(rawSpp, 10) || 0);
+          }
           if (!data.nama) { UI.toast('Nama wajib diisi', 'error'); return; }
           if (!data.tingkat || !data.kelas) {
             UI.toast('Pilih tingkat dan kelas yang sesuai', 'error'); return;
@@ -1812,7 +2023,7 @@ const Admin = (() => {
         });
         if (existing.length > 0) {
           const names = existing.map(x => (x.nama + ' (' + (Store.educationLabel(x) || '-') + ')')).join(', ');
-          hpWaliWarn.innerHTML = '⚠️ <b>Perhatian:</b> Nomor WhatsApp ini sudah dipakai untuk santri: <b>' + UI.esc(names) + '</b>.<br><span style="font-size:11px;color:#92400e">Pastikan mereka benar-benar bersaudara kandung (1 wali yang sama) agar laporan tidak salah sasaran.</span>';
+          hpWaliWarn.innerHTML = '<b>Perhatian:</b> Nomor WhatsApp ini sudah dipakai untuk santri: <b>' + UI.esc(names) + '</b>.<br><span style="font-size:11px;color:#92400e">Pastikan mereka benar-benar bersaudara kandung (1 wali yang sama) agar laporan tidak salah sasaran.</span>';
           hpWaliWarn.style.display = 'block';
         } else {
           hpWaliWarn.style.display = 'none';
@@ -1834,9 +2045,10 @@ const Admin = (() => {
       const primarySelect = modal.modal.querySelector('#f-level');
       const previous = primarySelect.value || primaryProgram;
       primarySelect.innerHTML = UI.optionsFromList(checked.map(program => ({ v: program, l: program })), 'v', 'l', checked.includes(previous) ? previous : checked[0]);
-      allPrograms.forEach(program => {
+      visiblePrograms.forEach(program => {
         const row = modal.modal.querySelector(`[data-program-halaqah-row="${program}"]`);
         const select = modal.modal.querySelector(`[data-program-halaqah="${program}"]`);
+        if (!row || !select) return;
         const enabled = checked.includes(program);
         row.style.display = enabled ? 'flex' : 'none';
         select.disabled = !enabled;
@@ -1954,8 +2166,8 @@ const Admin = (() => {
         <div class="row" style="justify-content:space-between">
           <div class="section-title" style="margin:0">Daftar Ustadz (${db.ustadz.length})</div>
           <div class="row">
-            <button class="clay-btn ghost" id="btn-import">Import Excel</button>
-            <button class="clay-btn secondary" id="btn-download-xlsx">⬇ Download XLSX</button>
+            ${Store.hasFeature('importExcel') ? '<button class="clay-btn ghost" id="btn-import">Import Excel</button>' : ''}
+            ${Store.hasFeature('exportExcel') ? '<button class="clay-btn secondary" id="btn-download-xlsx">⬇ Download XLSX</button>' : ''}
             <button class="clay-btn primary" id="btn-add">+ Tambah Ustadz</button>
           </div>
         </div>
@@ -1965,8 +2177,11 @@ const Admin = (() => {
         </table></div>
       </div>`;
     document.getElementById('btn-add').onclick = () => ustadzForm();
-    document.getElementById('btn-import').onclick = () => importUstadzDialog();
-    document.getElementById('btn-download-xlsx').onclick = downloadUstadzXlsx;
+    const btnImpUstadz = document.getElementById('btn-import');
+    if (btnImpUstadz) btnImpUstadz.onclick = () => importUstadzDialog();
+    const btnDlUstadz = document.getElementById('btn-download-xlsx');
+    if (btnDlUstadz) btnDlUstadz.onclick = downloadUstadzXlsx;
+    document.querySelectorAll('[data-raport-ustadz]').forEach(b => b.onclick = () => App.navigate('admin_raport', { ustadzId: b.dataset.raportUstadz }));
     document.querySelectorAll('[data-edit]').forEach(b => b.onclick = () => ustadzForm(b.dataset.edit));
     document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
       UI.confirmDialog('Hapus Ustadz', 'Yakin hapus ustadz ini?', () => {
@@ -2002,14 +2217,27 @@ const Admin = (() => {
       <div class="row">
         <div style="flex:1">${UI.field('Username', `<input class="clay-input" id="f-uname" value="${u ? UI.esc(db.users.find(x => x.role === 'ustadz' && x.refId === id)?.username || '') : ''}" placeholder="Otomatis jika kosong">`)}</div>
         <div style="flex:1">${UI.field('Password', `<input class="clay-input" id="f-pass" value="${u ? '' : '12345678'}" placeholder="Kosongkan jika tidak diubah">`)}</div>
+      </div>
+      <div style="margin-top:8px">
+        <label class="field-label">Tanda Tangan Digital Ustadz (untuk Raport, PNG transparan disarankan)</label>
+        <div class="row center" style="gap:10px;flex-wrap:wrap">
+          <div id="f-ttd-preview" style="width:150px;height:62px;border:1px dashed var(--border);border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden">
+            ${UI.safeUrl(u?.ttd) ? `<img src="${UI.esc(UI.safeUrl(u.ttd))}" style="max-width:95%;max-height:56px;object-fit:contain">` : '<span class="muted" style="font-size:11.5px">Belum ada TTD</span>'}
+          </div>
+          <label class="clay-btn sm ghost" style="cursor:pointer">Upload TTD
+            <input type="file" id="f-ttd-upload" accept="image/*" style="display:none">
+          </label>
+          <button class="clay-btn sm ghost" type="button" id="f-ttd-del" style="color:#dc2626">Hapus</button>
+        </div>
       </div>`;
-    UI.openModal({
+    let _ustTtd = UI.safeUrl(u?.ttd) || '';
+    const mModal = UI.openModal({
       title: id ? 'Edit Ustadz' : 'Tambah Ustadz', bodyHTML: body,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
         { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
           const db = Store.get();
-          const data = { nama: m.querySelector('#f-nama').value.trim(), noHp: m.querySelector('#f-hp').value.trim(), email: m.querySelector('#f-email').value.trim(), status: m.querySelector('#f-status').value, halaqah: m.querySelector('#f-halaqah').value };
+          const data = { nama: m.querySelector('#f-nama').value.trim(), noHp: m.querySelector('#f-hp').value.trim(), email: m.querySelector('#f-email').value.trim(), status: m.querySelector('#f-status').value, halaqah: m.querySelector('#f-halaqah').value, ttd: _ustTtd };
           if (!data.nama) { UI.toast('Nama wajib', 'error'); return; }
           
           let uname = m.querySelector('#f-uname').value.trim();
@@ -2051,6 +2279,19 @@ const Admin = (() => {
         } }
       ]
     });
+    const ttdPrev = mModal.modal.querySelector('#f-ttd-preview');
+    mModal.modal.querySelector('#f-ttd-upload').onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        _ustTtd = await UI.readImageDataUrl(file, 420, 180);
+        ttdPrev.innerHTML = `<img src="${UI.esc(_ustTtd)}" style="max-width:95%;max-height:56px;object-fit:contain">`;
+      } catch (err) { UI.toast(err.message, 'error'); }
+    };
+    mModal.modal.querySelector('#f-ttd-del').onclick = () => {
+      _ustTtd = '';
+      ttdPrev.innerHTML = '<span class="muted" style="font-size:11.5px">Belum ada TTD</span>';
+    };
   }
 
   function importUstadzDialog() {
@@ -2124,6 +2365,7 @@ const Admin = (() => {
           ${h ? `<div class="muted" style="font-size:13px;margin-top:5px">Level: ${UI.esc(h.level || '-')} · ${UI.esc(h.hari || '-')} · ${UI.esc(h.jam || '-')} · ${UI.esc(h.ruangan || '-')}<br>Setoran Bacaan: <b>${h.setoranBacaan ? 'Aktif' : 'Nonaktif'}</b></div>` : '<div class="muted" style="font-size:13px;margin-top:5px">Santri yang belum memiliki halaqah aktif.</div>'}
         </div>
         ${h ? `<div>${rowActionButtons([
+          ...(Store.hasFeature('raport') ? [{ label: 'Raport Halaqah', cls: 'primary', attr: ` data-raport-halaqah="${UI.esc(h.id)}"`, title: 'Cetak / unduh raport 1 halaqah ini' }] : []),
           { label: 'Edit Halaqah', attr: ` data-edit-halaqah="${UI.esc(h.id)}"` },
           { label: 'Hapus', cls: 'danger', attr: ` data-del="${UI.esc(h.id)}"` }
         ])}</div>` : ''}
@@ -2145,6 +2387,7 @@ const Admin = (() => {
       ${groups || '<div class="empty">Belum ada halaqah.</div>'}
       ${withoutHalaqah.length ? group('Belum Ditentukan Halaqah', null, withoutHalaqah) : ''}`;
     document.getElementById('btn-add').onclick = () => halaqahForm();
+    document.querySelectorAll('[data-raport-halaqah]').forEach(b => b.onclick = () => App.navigate('admin_raport', { halaqahId: b.dataset.raportHalaqah }));
     document.querySelectorAll('[data-edit-halaqah]').forEach(b => b.onclick = () => halaqahForm(b.dataset.editHalaqah));
     document.querySelectorAll('[data-del]').forEach(b => b.onclick = () => {
       UI.confirmDialog('Hapus Halaqah', 'Yakin hapus halaqah?', () => {
@@ -2200,18 +2443,25 @@ const Admin = (() => {
         <input type="checkbox" data-halaqah-ustadz value="${UI.esc(u.id)}" ${selectedUstadzIds.includes(u.id) ? 'checked' : ''}>
         <span>${UI.esc(u.nama)} <span class="muted" style="font-size:12px">(${UI.esc(u.halaqah || 'Belum ditugaskan')})</span></span>
       </label>`).join('');
+    const enabledLevels = Store.enabledPrograms();
+    const levelChoices = enabledLevels.length ? enabledLevels : db.levelTahfidz;
+    const curLevel = h ? h.level : (levelChoices[0] || 'Tahsin');
+    const allLevels = [...new Set([...levelChoices, ...(h && h.level ? [h.level] : [])])];
+    const hasZiyadah = Store.hasFeature('ziyadah');
     const body = `
       ${UI.field('Nama Halaqah', `<input class="clay-input" id="f-nama" value="${h ? UI.esc(h.nama) : ''}">`)}
       ${UI.field('Ustadz Pengampu', `<div class="clay-card pad-sm" style="max-height:190px;overflow:auto">${ustadzChecks || '<div class="muted">Belum ada ustadz.</div>'}</div><div class="muted" style="font-size:12px;margin-top:4px">Boleh pilih lebih dari satu ustadz. Ustadz yang dipilih akan dipindahkan dari halaqah sebelumnya.</div>`)}
       <div class="row">
-        <div style="flex:1">${UI.field('Level', `<select class="clay-select" id="f-level">${UI.optionsFromList(db.levelTahfidz.map(l => ({ v: l, l })), 'v', 'l', h ? h.level : 'Ziyadah')}</select>`)}</div>
+        <div style="flex:1">${UI.field('Level', `<select class="clay-select" id="f-level">${UI.optionsFromList(allLevels.map(l => ({ v: l, l })), 'v', 'l', curLevel)}</select>`)}</div>
       </div>
       <div class="row">
         <div style="flex:1">${UI.field('Hari', `<input class="clay-input" id="f-hari" value="${h ? UI.esc(h.hari) : 'Senin-Rabu-Jumat'}">`)}</div>
         <div style="flex:1">${UI.field('Jam', `<input class="clay-input" id="f-jam" value="${h ? UI.esc(h.jam) : '07:00-08:30'}">`)}</div>
       </div>
       ${UI.field('Ruangan', `<input class="clay-input" id="f-ruang" value="${h ? UI.esc(h.ruangan) : ''}">`)}
-      ${UI.field('Fitur Setoran', `<label class="row" style="gap:8px;cursor:pointer"><input id="f-setoran-bacaan" type="checkbox" ${h && h.setoranBacaan ? 'checked' : ''}> <span>Aktifkan tahap Setoran Bacaan untuk halaqah ini</span></label><div class="muted" style="font-size:12px;margin-top:4px">Jika nonaktif, ustadz langsung menginput setoran hafalan.</div>`)}`;
+      <div ${hasZiyadah ? '' : 'style="display:none"'}>
+        ${UI.field('Fitur Setoran', `<label class="row" style="gap:8px;cursor:pointer"><input id="f-setoran-bacaan" type="checkbox" ${h && h.setoranBacaan ? 'checked' : ''}> <span>Aktifkan tahap Setoran Bacaan untuk halaqah ini</span></label><div class="muted" style="font-size:12px;margin-top:4px">Jika nonaktif, ustadz langsung menginput setoran hafalan.</div>`)}
+      </div>`;
     UI.openModal({
       title: id ? 'Edit Halaqah' : 'Tambah Halaqah', bodyHTML: body,
       actions: [
@@ -2258,7 +2508,7 @@ const Admin = (() => {
     </tr>`).join('');
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card">
-        <div class="section-title">📜 Database Surat (${SURAHS.length})</div>
+        <div class="section-title">Database Surat (${SURAHS.length})</div>
         <div class="table-wrap"><table class="clay-table">
           <thead><tr><th>#</th><th>Nama</th><th>Ayat</th><th>Hal Awal</th><th>Hal Akhir</th><th>Juz</th></tr></thead>
           <tbody>${rows}</tbody>
@@ -2359,7 +2609,7 @@ const Admin = (() => {
     const range = Shared.rekapSetoranRange();
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card mb">
-        <div class="section-title"> Filter Laporan</div>
+        <div class="section-title">Filter Laporan</div>
         <div class="row">
           <div style="flex:1">${UI.field('Dari Tanggal', `<input type="date" class="clay-input" id="f-dari" value="${range.dari}">`)}</div>
           <div style="flex:1">${UI.field('Sampai Tanggal', `<input type="date" class="clay-input" id="f-sampai" value="${range.sampai}">`)}</div>
@@ -2437,14 +2687,28 @@ const Admin = (() => {
     Shared.renderLaporanMurojaah(document.getElementById('view-content'), { santriList: Store.get().santri || [] });
   }
 
+  /* ---------------- Raport Santri ---------------- */
+  function raport(opts) {
+    const session = Store.getSession();
+    Shared.shell('admin', nav('admin_raport'), '');
+    Shared.setHeader('Raport Santri', 'Evaluasi semester, catatan pembimbing, dan cetak raport santri');
+    Shared.renderRaportPage(document.getElementById('view-content'), {
+      mode: 'staff',
+      canEdit: !session || session.role !== 'pengawas',
+      halaqahId: opts?.halaqahId || '',
+      ustadzId: opts?.ustadzId || '',
+      santriList: Store.get().santri || []
+    });
+  }
+
   /* ---------------- Rekap Kehadiran ----------------
-     Totalan Hadir/Izin/Sakit/Alfa per orang untuk satu periode. Alfa dihitung
-     dari slot yang tidak ada catatannya, jadi angkanya selalu cocok dengan
-     "jumlah hari x sesi". */
+     Totalan Hadir/Izin/Sakit/Alfa per orang untuk satu periode. Alfa hanya
+     dihitung dari catatan berstatus "Alfa" yang dipilih guru/ustadz. */
   function rekapKehadiran() {
     Shared.shell('admin', nav('admin_rekap_kehadiran'), '');
     Shared.setHeader('Rekap Kehadiran', 'Totalan hadir, izin, sakit, dan alfa per periode');
     const db = Store.get();
+    const sesiTersedia = Store.sesiList();
     const hariIni = Store.todayStr();
     const awalBulan = hariIni.slice(0, 8) + '01';
 
@@ -2453,7 +2717,7 @@ const Admin = (() => {
         <div class="row">
           <div style="flex:1;min-width:140px">${UI.field('Dari Tanggal', `<input type="date" class="clay-input" id="rk-dari" value="${awalBulan}">`)}</div>
           <div style="flex:1;min-width:140px">${UI.field('Sampai Tanggal', `<input type="date" class="clay-input" id="rk-sampai" value="${hariIni}">`)}</div>
-          <div style="flex:1;min-width:140px">${UI.field('Sesi', `<select class="clay-select" id="rk-sesi"><option value="">Semua Sesi</option>${Store.SESI_REKAP.map(s => `<option>${UI.esc(s)}</option>`).join('')}</select>`)}</div>
+          <div style="flex:1;min-width:140px">${UI.field('Sesi', `<select class="clay-select" id="rk-sesi"><option value="">Semua Sesi</option>${sesiTersedia.map(s => `<option>${UI.esc(s)}</option>`).join('')}</select>`)}</div>
           <div style="flex:1;min-width:150px">${UI.field('Halaqah', `<select class="clay-select" id="rk-halaqah"><option value="">Semua Halaqah</option>${UI.optionsFromList(db.halaqah.map(h => ({ v: h.id, l: halaqahOptionLabel(h, false) })), 'v', 'l')}</select>`)}</div>
         </div>
         <div class="row mt">
@@ -2462,7 +2726,7 @@ const Admin = (() => {
           <button class="clay-btn ghost" data-rk-preset="thisweek">Minggu Ini</button>
           <button class="clay-btn ghost" data-rk-preset="month">Bulan Ini</button>
           <button class="clay-btn ghost" data-rk-preset="lastmonth">Bulan Lalu</button>
-          <button class="clay-btn secondary" id="rk-export">Export Excel</button>
+          ${Store.hasFeature('exportExcel') ? '<button class="clay-btn secondary" id="rk-export">Export Excel</button>' : ''}
         </div>
       </div>
       <div class="pill-tabs" id="rk-tab-bar">
@@ -2481,7 +2745,7 @@ const Admin = (() => {
       return {
         dari,
         sampai,
-        sesiList: sesi ? [sesi] : Store.SESI_REKAP.slice(),
+        sesiList: sesi ? [sesi] : sesiTersedia.slice(),
         halaqahId: document.getElementById('rk-halaqah').value
       };
     }
@@ -2519,7 +2783,7 @@ const Admin = (() => {
       const body = rows.map((r, i) => {
         const sesiCells = f.sesiList.map(sesi => {
           const p = r.perSesi[sesi];
-          return `<td class="center" style="font-size:12px">${UI.esc(p.Hadir || 0)}/${UI.esc(p.Izin || 0)}/${UI.esc(p.Sakit || 0)}/${UI.esc(p.Libur ? p.Libur + '/' : '')}${UI.esc(p.Alfa || 0)}</td>`;
+          return `<td class="center" style="font-size:12px">${UI.esc(p.Hadir || 0)}/${UI.esc(p.Izin || 0)}/${UI.esc(p.Sakit || 0)}/${UI.esc(p.Libur || 0)}/${UI.esc(p.Alfa || 0)}</td>`;
         }).join('');
         return `<tr>
           <td class="center">${i + 1}</td>
@@ -2575,12 +2839,13 @@ const Admin = (() => {
       const body = rows.map((r, i) => {
         const sesiCells = f.sesiList.map(sesi => {
           const p = r.perSesi[sesi];
-          return `<td class="center" style="font-size:12px">${UI.esc(p.Hadir || 0)}/${UI.esc(p.Izin || 0)}/${UI.esc(p.Sakit || 0)}/${UI.esc(p.Libur ? p.Libur + '/' : '')}${UI.esc(p.Alfa || 0)}</td>`;
+          return `<td class="center" style="font-size:12px">${UI.esc(p.Hadir || 0)}/${UI.esc(p.Izin || 0)}/${UI.esc(p.Sakit || 0)}/${UI.esc(p.Libur || 0)}/${UI.esc(p.Alfa || 0)}</td>`;
         }).join('');
+        const halaqahNames = db.halaqah.filter(h => Store.halaqahHasUstadz(h, r.u)).map(h => h.nama).join(', ') || r.u.halaqah || '-';
         return `<tr>
           <td class="center">${i + 1}</td>
           <td><b>${UI.esc(r.u.nama)}</b></td>
-          <td>${UI.esc(Store.ustadzNamesForHalaqah(Store.findHalaqahForUstadz(r.u) || {}).join(', ') || '-')}</td>
+          <td>${UI.esc(halaqahNames)}</td>
           ${sesiCells}
           <td class="center">${badgeAngka(r.Hadir, 'green')}</td>
           <td class="center">${badgeAngka(r.Izin, 'warn')}</td>
@@ -2604,7 +2869,7 @@ const Admin = (() => {
             ${Shared.statCard(Shared.ICONS.sun, jumlah.Libur, 'Total Libur', '#A855F7')}
             ${Shared.statCard(Shared.ICONS.book, jumlah.Alfa, 'Total Alfa', '#EF4444')}
           </div>
-          <div class="muted" style="font-size:12px;margin-bottom:8px">Kolom sesi berisi <b>Hadir/Izin/Sakit/Libur/Alfa</b>. Alfa = sesi tanpa catatan absensi di luar libur.</div>
+          <div class="muted" style="font-size:12px;margin-bottom:8px">Kolom sesi berisi <b>Hadir/Izin/Sakit/Libur/Alfa</b>. Alfa dihitung sesuai catatan yang dipilih guru/ustadz.</div>
           <div class="table-wrap"><table class="clay-table">
             <thead><tr><th class="center">No</th><th>Ustadz</th><th>Halaqah</th>${f.sesiList.map(sesi => `<th class="center">${UI.esc(sesi)}</th>`).join('')}<th class="center">Hadir</th><th class="center">Izin</th><th class="center">Sakit</th><th class="center">Libur</th><th class="center">Alfa</th><th class="center">%</th></tr></thead>
             <tbody>${body || '<tr><td colspan="11"><div class="empty">Tidak ada ustadz.</div></td></tr>'}</tbody>
@@ -2653,7 +2918,8 @@ const Admin = (() => {
     ['rk-dari', 'rk-sampai', 'rk-sesi', 'rk-halaqah'].forEach(id => {
       document.getElementById(id).onchange = apply;
     });
-    document.getElementById('rk-export').onclick = () => {
+    const btnRkExport = document.getElementById('rk-export');
+    if (btnRkExport) btnRkExport.onclick = () => {
       const f = filter();
       if (!f.dari || !f.sampai) { UI.toast('Pilih rentang tanggal', 'error'); return; }
       const periode = UI.fmtDate(f.dari) + ' - ' + UI.fmtDate(f.sampai);
@@ -2743,7 +3009,6 @@ const Admin = (() => {
   }
 
 /* ---------------- Absensi Ustadz ---------------- */
-  const SESI_ABSENSI = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
   const STATUS_ABSENSI = ['Hadir', 'Izin', 'Sakit', 'Libur'];
 
   function absensiBadgeClass(status) {
@@ -2782,6 +3047,7 @@ const Admin = (() => {
     Shared.shell('admin', nav('admin_absensi_ustadz'), '');
     Shared.setHeader('Absensi Ustadz', 'Kehadiran ustadz pengampu per sesi');
     const db = Store.get();
+    const SESI_ABSENSI = Store.sesiList();
     const ustadzAktif = db.ustadz.filter(u => u.status !== 'Nonaktif');
 
     document.getElementById('view-content').innerHTML = `
@@ -2795,7 +3061,7 @@ const Admin = (() => {
           <div style="flex:1;min-width:160px">${UI.field('Cari Ustadz', `<input class="clay-input" id="au-cari" type="search" placeholder="Nama ustadz" autocomplete="off">`)}</div>
         </div>
         <div class="row mt">
-          <button class="clay-btn secondary" id="au-export">Export Excel</button>
+          ${Store.hasFeature('exportExcel') ? '<button class="clay-btn secondary" id="au-export">Export Excel</button>' : ''}
           <button class="clay-btn ghost" data-au-preset="today">Hari Ini</button>
           <button class="clay-btn ghost" data-au-preset="7">7 Hari</button>
           <button class="clay-btn ghost" data-au-preset="thisweek">Minggu Ini</button>
@@ -2893,22 +3159,76 @@ const Admin = (() => {
       const total = ustadzAktif.length;
       const days = auDateRange(f.dari, f.sampai);
       const belum = days.length ? total * days.length : 0;
-      const kpi = sesiList.map(sesi => {
-        const list = allRows.filter(r => r.sesi === sesi);
-        const count = status => list.filter(r => r.rec && r.rec.status === status).length;
-        const tercatat = list.filter(r => r.rec).length;
-        const kosong = isDaily(f)
-          ? list.filter(r => !r.rec).length
-          : Math.max(0, belum - tercatat);
+
+      // Hitung ringkasan terpadu (4 KPI cards bersih, bukan 20 card terpisah)
+      let kpiHadirVal, kpiHadirLbl, kpiIzinVal, kpiSakitVal, kpiKosongVal, kpiKosongLbl;
+      if (f.sesi) {
+        const listSesi = allRows.filter(r => r.sesi === f.sesi);
+        const hadirSesi = listSesi.filter(r => r.rec && r.rec.status === 'Hadir').length;
+        const izinSesi = listSesi.filter(r => r.rec && r.rec.status === 'Izin').length;
+        const sakitSesi = listSesi.filter(r => r.rec && (r.rec.status === 'Sakit' || r.rec.status === 'Libur')).length;
+        const kosongSesi = isDaily(f)
+          ? listSesi.filter(r => !r.rec).length
+          : Math.max(0, belum - listSesi.filter(r => r.rec).length);
         const suffix = isDaily(f) ? '/' + total : '';
-        return `<div class="grid kpi">
-          ${Shared.statCard(Shared.ICONS.moon, count('Hadir') + suffix, sesi + ' - Hadir', '#22C55E')}
-          ${Shared.statCard(Shared.ICONS.users, count('Izin') + suffix, sesi + ' - Izin', '#FACC15')}
-          ${Shared.statCard(Shared.ICONS.teacher, count('Sakit') + suffix, sesi + ' - Sakit', '#3B82F6')}
-          ${Shared.statCard(Shared.ICONS.calendar, count('Libur') + suffix, sesi + ' - Libur', '#A855F7')}
-          ${Shared.statCard(Shared.ICONS.book, kosong + suffix, sesi + ' - Belum Absen', '#EF4444')}
-        </div>`;
-      }).join('');
+        kpiHadirVal = hadirSesi + suffix;
+        kpiHadirLbl = f.sesi + ' - Hadir';
+        kpiIzinVal = izinSesi + suffix;
+        kpiSakitVal = sakitSesi + suffix;
+        kpiKosongVal = kosongSesi + suffix;
+        kpiKosongLbl = f.sesi + ' - Belum Absen';
+      } else if (isDaily(f)) {
+        const hadirUstadzIds = new Set(allRows.filter(r => r.rec && r.rec.status === 'Hadir').map(r => r.ustadz.id));
+        const totalIzin = allRows.filter(r => r.rec && r.rec.status === 'Izin').length;
+        const totalSakitLibur = allRows.filter(r => r.rec && (r.rec.status === 'Sakit' || r.rec.status === 'Libur')).length;
+        const kosongSlots = allRows.filter(r => !r.rec).length;
+        kpiHadirVal = hadirUstadzIds.size + '/' + total;
+        kpiHadirLbl = 'Guru Hadir Hari Ini';
+        kpiIzinVal = totalIzin;
+        kpiSakitVal = totalSakitLibur;
+        kpiKosongVal = kosongSlots;
+        kpiKosongLbl = 'Sesi Belum Diisi';
+      } else {
+        const totalHadir = allRows.filter(r => r.rec && r.rec.status === 'Hadir').length;
+        const totalIzin = allRows.filter(r => r.rec && r.rec.status === 'Izin').length;
+        const totalSakitLibur = allRows.filter(r => r.rec && (r.rec.status === 'Sakit' || r.rec.status === 'Libur')).length;
+        const tercatat = allRows.filter(r => r.rec).length;
+        const kosongSlots = Math.max(0, (belum * SESI_ABSENSI.length) - tercatat);
+        kpiHadirVal = totalHadir;
+        kpiHadirLbl = 'Total Hadir';
+        kpiIzinVal = totalIzin;
+        kpiSakitVal = totalSakitLibur;
+        kpiKosongVal = kosongSlots;
+        kpiKosongLbl = 'Belum Absen';
+      }
+
+      const kpi = `
+        <div class="grid kpi mb">
+          ${Shared.statCard(Shared.ICONS.moon, kpiHadirVal, kpiHadirLbl, '#22C55E')}
+          ${Shared.statCard(Shared.ICONS.users, kpiIzinVal, 'Izin', '#FACC15')}
+          ${Shared.statCard(Shared.ICONS.teacher, kpiSakitVal, 'Sakit / Libur', '#3B82F6')}
+          ${Shared.statCard(Shared.ICONS.book, kpiKosongVal, kpiKosongLbl, '#EF4444')}
+        </div>
+      `;
+
+      // Jika melihat semua sesi di hari tertentu, sediakan ringkasan cepat per sesi (chips horizontal)
+      const sesiPills = (!f.sesi && isDaily(f)) ? `
+        <div class="clay-card pad-sm mb" style="background:#fff">
+          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <span style="font-size:12.5px;font-weight:600;color:var(--text-soft)">Kehadiran Guru per Sesi:</span>
+            <div class="row center" style="gap:6px;flex-wrap:wrap">
+              ${SESI_ABSENSI.map(sesi => {
+                const sList = allRows.filter(r => r.sesi === sesi);
+                const sHadir = sList.filter(r => r.rec && r.rec.status === 'Hadir').length;
+                const isFull = sHadir === total && total > 0;
+                return `<span class="badge ${isFull ? 'green' : (sHadir > 0 ? 'blue' : 'gray')}" style="font-size:11.5px;padding:4px 8px">
+                  ${sesi}: <b>${sHadir}/${total} Hadir</b>
+                </span>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+      ` : '';
 
       const showTanggal = !isDaily(f);
       const body = rows.map(r => {
@@ -2927,12 +3247,13 @@ const Admin = (() => {
       const heads = (showTanggal ? '<th>Tanggal</th>' : '') + '<th>Ustadz</th><th>Sesi</th><th>Status</th><th>Jam</th><th>Catatan</th><th></th>';
       document.getElementById('au-content').innerHTML = `
         ${kpi}
+        ${sesiPills}
         <div class="clay-card mt">
           <div class="row" style="justify-content:space-between">
             <div class="section-title" style="margin:0">${UI.esc(auRangeLabel(f.dari, f.sampai))}${f.sesi ? ' - ' + UI.esc(f.sesi) : ''}${days.length > 1 ? ' (' + days.length + ' hari)' : ''}</div>
             <span class="muted" style="font-size:13px">${rows.length} baris${auDateRange(document.getElementById('au-dari').value, document.getElementById('au-sampai').value).length > AU_MAX_HARI ? ' — periode dipotong maksimal ' + AU_MAX_HARI + ' hari' : ''}</span>
           </div>
-          <div class="table-wrap mt"><table class="clay-table">
+          <div class="table-wrap mt"><table class="clay-table table-wide">
             <thead><tr>${heads}</tr></thead>
             <tbody>${body || `<tr><td colspan="${showTanggal ? 7 : 6}"><div class="empty">Belum ada absensi ustadz.</div></td></tr>`}</tbody>
           </table></div>
@@ -2971,7 +3292,8 @@ const Admin = (() => {
         setRange(auAddDays(today, -(days - 1)), today);
       };
     });
-    document.getElementById('au-export').onclick = () => {
+    const btnAuExport = document.getElementById('au-export');
+    if (btnAuExport) btnAuExport.onclick = () => {
       const f = normalize(filter());
       const rows = rowsOf(f);
       if (!rows.length) { UI.toast('Tidak ada data untuk diekspor', 'error'); return; }
@@ -3016,12 +3338,14 @@ const Admin = (() => {
     Shared.setHeader('Rekap Setoran', 'Setoran dan kehadiran per santri dalam satu periode');
     const db = Store.get();
     const range = Shared.rekapSetoranRange();
+    const halaqahList = (db.halaqah || []).slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+    let selectedHalaqah = halaqahList[0] ? halaqahList[0].nama : '';
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card mb">
         <div class="row">
           <div style="flex:1;min-width:140px">${UI.field('Dari Tanggal', `<input type="date" class="clay-input" id="f-dari" value="${range.dari}">`)}</div>
           <div style="flex:1;min-width:140px">${UI.field('Sampai Tanggal', `<input type="date" class="clay-input" id="f-sampai" value="${range.sampai}">`)}</div>
-          <div style="flex:1">${UI.field('Ustadz', `<select class="clay-select" id="f-ustadz"><option value="">Semua Ustadz</option>${UI.optionsFromList(db.ustadz.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id')).map(u => ({ v: u.id, l: u.nama })), 'v', 'l')}</select>`)}</div>
+          <div style="flex:1;min-width:150px">${UI.field('Ustadz', `<select class="clay-select" id="f-ustadz"><option value="">Semua Ustadz</option>${UI.optionsFromList(db.ustadz.slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id')).map(u => ({ v: u.id, l: u.nama })), 'v', 'l')}</select>`)}</div>
         </div>
         <div class="row mt">
           <button class="clay-btn ghost" data-rs-preset="today">Hari Ini</button>
@@ -3031,12 +3355,18 @@ const Admin = (() => {
           <button class="clay-btn ghost" data-rs-preset="lastmonth">Bulan Lalu</button>
         </div>
       </div>
+      ${halaqahList.length > 1 ? `<div class="pill-tabs" id="rs-halaqah-tabs" style="margin-bottom:12px">
+        ${halaqahList.map(h => `<button class="pill ${selectedHalaqah === h.nama ? 'active' : ''}" type="button" data-rs-hal="${UI.esc(h.nama)}">${UI.esc(h.nama)}</button>`).join('')}
+        <button class="pill ${selectedHalaqah === '' ? 'active' : ''}" type="button" data-rs-hal="">Semua Halaqah</button>
+      </div>` : ''}
       <div id="rekap-setoran-content"></div>`;
     const apply = () => {
+      const ustadzId = document.getElementById('f-ustadz').value;
       const filters = {
         dari: document.getElementById('f-dari').value,
         sampai: document.getElementById('f-sampai').value,
-        ustadzId: document.getElementById('f-ustadz').value,
+        ustadzId,
+        halaqah: ustadzId ? '' : selectedHalaqah,
         allowMakeup: true,
         allowJpgDownload: true
       };
@@ -3049,6 +3379,13 @@ const Admin = (() => {
         }
       });
     };
+    document.querySelectorAll('[data-rs-hal]').forEach(btn => {
+      btn.onclick = () => {
+        selectedHalaqah = btn.dataset.rsHal;
+        document.querySelectorAll('[data-rs-hal]').forEach(b => b.classList.toggle('active', b.dataset.rsHal === selectedHalaqah));
+        apply();
+      };
+    });
     document.querySelectorAll('[data-rs-preset]').forEach(button => button.onclick = () => {
       const today = Store.todayStr();
       const preset = button.dataset.rsPreset;
@@ -3122,23 +3459,23 @@ const Admin = (() => {
         </table></div>
       </div>
       <div class="clay-card">
-        <div class="section-title">Ta’lim Malam</div>
-        <div class="muted" style="font-size:12px;margin-bottom:10px">Pilih ustadz pengampu dan isi materi default. Pilihan ini dipakai sebagai awal saat ustadz mengisi jurnal Ta’lim Malam.</div>
+        <div class="section-title">Kajian</div>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">Pilih ustadz pengampu dan isi materi default. Pilihan ini dipakai sebagai awal saat ustadz mengisi jurnal Kajian.</div>
         <div class="field-label">Ustadz Pengampu</div>
         <div class="clay-card pad-sm" id="talim-malam-ustadz" style="margin-top:6px"></div>
         <div class="row mt">
           <div style="flex:1">${UI.field('Judul Kitab Default', `<input class="clay-input" id="talim-malam-kitab" placeholder="Contoh: Riyadhus Shalihin">`)}</div>
           <div style="flex:1">${UI.field('Bab Default', `<input class="clay-input" id="talim-malam-bab" placeholder="Contoh: Bab Keikhlasan">`)}</div>
         </div>
-        <div class="row mt"><button class="clay-btn primary" id="btn-talim-malam-save" type="button">Simpan Ta’lim Malam</button></div>
+        <div class="row mt"><button class="clay-btn primary" id="btn-talim-malam-save" type="button">Simpan Kajian</button></div>
       </div>`;
   }
-  /* ---------------- Ta’lim ---------------- */
-  // Konfigurasi Ta'lim (mapel, penugasan mengajar, Ta'lim Malam) berdiri
+  /* ---------------- Kajian ---------------- */
+  // Konfigurasi Kajian (mapel, penugasan mengajar, materi default) berdiri
   // sebagai menu sendiri di sidebar, bukan tab di dalam Settings.
   function talim() {
     Shared.shell('admin', nav('admin_talim'), '');
-    Shared.setHeader('Ta’lim', 'Mapel, penugasan mengajar, dan Ta’lim Malam');
+    Shared.setHeader('Kajian', 'Mapel, penugasan mengajar, dan materi kajian default');
     document.getElementById('view-content').innerHTML = talimPanelHtml();
 
   const talimClassesByTingkat = () => Store.tingkatOptions().map(tingkat => ({
@@ -3159,11 +3496,11 @@ const Admin = (() => {
           <div class="clay-card pad-sm" id="m-existing-kitab-box" style="margin-bottom:8px;background:var(--bg)">
             <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
               <div>
-                <b>📖 ${UI.esc(mapelItem.kitabNama || 'Kitab PDF')}</b>
+                <b>${UI.esc(mapelItem.kitabNama || 'Kitab PDF')}</b>
                 <div class="muted" style="font-size:11px">${mapelItem.kitabSize ? (mapelItem.kitabSize / (1024 * 1024)).toFixed(1) + ' MB' : 'File tersimpan'}</div>
               </div>
               <div class="row" style="gap:6px">
-                <button class="clay-btn sm ghost" type="button" id="btn-preview-existing-kitab">📖 Baca</button>
+                <button class="clay-btn sm ghost" type="button" id="btn-preview-existing-kitab">Baca</button>
                 <button class="clay-btn sm danger" type="button" id="btn-delete-existing-kitab">✕ Hapus File</button>
               </div>
             </div>
@@ -3293,8 +3630,8 @@ const Admin = (() => {
       const sizeBadge = item.kitabSize ? ` <span class="badge blue" style="font-size:11px">${(item.kitabSize / (1024 * 1024)).toFixed(1)} MB</span>` : '';
       const kitabDisplay = item.kitabUrl ? `
         <div class="row center" style="gap:6px;flex-wrap:wrap">
-          <b>📖 ${UI.esc(item.kitabNama || 'Kitab PDF')}</b>${sizeBadge}
-          <button class="clay-btn sm ghost" type="button" data-read-kitab="${UI.esc(item.id)}">📖 Baca</button>
+          <b>${UI.esc(item.kitabNama || 'Kitab PDF')}</b>${sizeBadge}
+          <button class="clay-btn sm ghost" type="button" data-read-kitab="${UI.esc(item.id)}">Baca</button>
         </div>` : `<span class="muted" style="font-size:12px">Belum ada file kitab</span>`;
       return `<tr>
         <td><b>${UI.esc(item.nama)}</b></td>
@@ -3302,7 +3639,7 @@ const Admin = (() => {
         <td>${pengajar} ustadz</td>
         <td>
           <div class="row" style="gap:6px">
-            <button class="clay-btn sm ghost" type="button" data-edit-talim-mapel="${UI.esc(item.id)}">✏ Edit</button>
+            <button class="clay-btn sm ghost" type="button" data-edit-talim-mapel="${UI.esc(item.id)}">Edit</button>
             <button class="clay-btn sm danger" type="button" data-del-talim-mapel="${UI.esc(item.id)}" style="background:#EF4444;color:#fff;font-weight:600">Hapus</button>
           </div>
         </td>
@@ -3405,13 +3742,10 @@ const Admin = (() => {
     data.settings.talimMalam = { ustadzIds, judulKitab, bab };
     Store.save();
     renderTalimMalamSettings(ustadzIds);
-    UI.toast('Pengaturan Ta’lim Malam tersimpan', 'success');
+    UI.toast('Pengaturan Kajian tersimpan', 'success');
   };
   renderTalimMalamSettings();
   renderTalimSettings();
-  document.getElementById('talim-mapel-nama').onkeydown = (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-talim-add-mapel').click(); }
-  };
   }
   /* ---------------- Settings ---------------- */
   function settings() {
@@ -3437,11 +3771,34 @@ const Admin = (() => {
       <div class="pill-tabs" id="set-tab-bar">
         <button class="pill active" data-set-tab="lembaga">Lembaga</button>
         <button class="pill" data-set-tab="kelas">Kelas &amp; Tingkat</button>
-        <button class="pill" data-set-tab="notifikasi">Notifikasi</button>
-        <button class="pill" data-set-tab="wa">WhatsApp</button>
+        ${Store.hasFeature('notifikasi') ? '<button class="pill" data-set-tab="notifikasi">Notifikasi</button>' : ''}
+        ${Store.hasFeature('whatsapp') ? '<button class="pill" data-set-tab="wa">WhatsApp</button>' : ''}
         <button class="pill" data-set-tab="akun">Akun &amp; Data</button>
       </div>
       <div data-set-panel="lembaga">
+      ${(() => {
+        const subN = Store.subscriptionNotice();
+        const subRaw = s.subscription || {};
+        const statusText = subN
+          ? (subN.status === 'suspended' ? 'Ditangguhkan' : (subN.isGrace ? `Masa Tenggang (${subN.daysToSuspend} hari s.d. suspend)` : (subN.isBillingDue ? 'Tagihan Aktif' : 'Aktif')))
+          : 'Aktif (Tanpa Batas)';
+        const statusCls = subN && (subN.status === 'suspended' || subN.isGrace) ? 'danger' : (subN && subN.isBillingDue ? 'warn' : 'green');
+        const graceDays = Number.isFinite(Number(subRaw.graceDays)) ? Number(subRaw.graceDays) : 7;
+        return `
+      <div class="clay-card mb">
+        <div class="row center" style="justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <div class="section-title" style="margin:0">Status &amp; Tagihan Layanan Aplikasi</div>
+          <span class="badge ${statusCls}">${UI.esc(statusText)}</span>
+        </div>
+        <div class="grid cols-4" style="gap:10px;font-size:12.5px">
+          <div><div class="muted">Jadwal Penagihan</div><b>${subN && subN.effectiveBillingDate ? UI.esc(UI.fmtDate(subN.effectiveBillingDate)) + (subN.billingDate ? '' : ' (H-7)') : 'Belum diatur'}</b></div>
+          <div><div class="muted">Jatuh Tempo</div><b>${subRaw.validUntil ? UI.esc(UI.fmtDate(subRaw.validUntil)) : 'Tanpa Batas'}</b></div>
+          <div><div class="muted">Auto-Suspend (${graceDays} Hari)</div><b>${subN && subN.suspendDate ? UI.esc(UI.fmtDate(subN.suspendDate)) : '-'}</b></div>
+          <div><div class="muted">Nominal Tagihan</div><b>${Number(subRaw.nominal) > 0 ? 'Rp ' + Number(subRaw.nominal).toLocaleString('id-ID') : '-'}</b></div>
+        </div>
+        ${subRaw.note ? `<div class="muted" style="font-size:12px;margin-top:8px">Catatan Pengelola: <b>${UI.esc(subRaw.note)}</b></div>` : ''}
+      </div>`;
+      })()}
       <div class="clay-card mb">
         <div class="section-title">Informasi Lembaga</div>
         <div class="row">
@@ -3462,6 +3819,37 @@ const Admin = (() => {
           <div style="flex:1">${UI.field('Tahun Ajaran', `<input class="clay-input" id="s-thn" value="${UI.esc(s.tahunAjaran)}">`)}</div>
           <div style="flex:1">${UI.field('Semester', `<select class="clay-select" id="s-sem"><option ${s.semester === 'Ganjil' ? 'selected' : ''}>Ganjil</option><option ${s.semester === 'Genap' ? 'selected' : ''}>Genap</option></select>`)}</div>
         </div>
+        <div class="row">
+          <div style="flex:1">${UI.field('Kota / Tempat TTD Raport', `<input class="clay-input" id="s-kota" value="${UI.esc(s.kota || '')}" placeholder="Contoh: Yogyakarta">`)}</div>
+          <div style="flex:1">${UI.field('Jabatan Pimpinan (TTD)', `<input class="clay-input" id="s-jabatan-pimpinan" value="${UI.esc(s.jabatanPimpinan || 'Mudir / Kepala Lembaga')}">`)}</div>
+        </div>
+        ${UI.field('Nama Pimpinan / Mudir (TTD Raport)', `<input class="clay-input" id="s-nama-pimpinan" value="${UI.esc(s.namaPimpinan || '')}" placeholder="Nama pimpinan untuk tanda tangan raport & laporan PDF">`) }
+        <div class="row" style="gap:14px;flex-wrap:wrap;margin:8px 0 4px">
+          <div style="flex:1;min-width:220px">
+            <label class="field-label">TTD Kepala / Mudir (Raport)</label>
+            <div class="row center" style="gap:8px">
+              <div id="s-ttd-pimpinan-preview" style="width:140px;height:60px;border:1px dashed var(--border);border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden">
+                ${UI.safeUrl(s.ttdPimpinan) ? `<img src="${UI.esc(UI.safeUrl(s.ttdPimpinan))}" style="max-width:95%;max-height:54px;object-fit:contain">` : '<span class="muted" style="font-size:11px">Belum ada TTD</span>'}
+              </div>
+              <label class="clay-btn sm ghost" style="cursor:pointer">Upload
+                <input type="file" id="s-ttd-pimpinan-upload" accept="image/*" style="display:none">
+              </label>
+              <button class="clay-btn sm ghost" type="button" id="s-ttd-pimpinan-del" style="color:#dc2626">Hapus</button>
+            </div>
+          </div>
+          <div style="flex:1;min-width:220px">
+            <label class="field-label">Cap / Stempel Lembaga (Raport)</label>
+            <div class="row center" style="gap:8px">
+              <div id="s-cap-preview" style="width:90px;height:60px;border:1px dashed var(--border);border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden">
+                ${UI.safeUrl(s.capLembaga) ? `<img src="${UI.esc(UI.safeUrl(s.capLembaga))}" style="max-width:95%;max-height:54px;object-fit:contain">` : '<span class="muted" style="font-size:11px">Belum ada Cap</span>'}
+              </div>
+              <label class="clay-btn sm ghost" style="cursor:pointer">Upload
+                <input type="file" id="s-cap-upload" accept="image/*" style="display:none">
+              </label>
+              <button class="clay-btn sm ghost" type="button" id="s-cap-del" style="color:#dc2626">Hapus</button>
+            </div>
+          </div>
+        </div>
         ${UI.field('Standar Penilaian', `<input class="clay-input" id="s-standar" value="${UI.esc(s.standarPenilaian)}">`)}
         ${UI.field('Jam Belajar', `<input class="clay-input" id="s-jam" value="${UI.esc(s.jamBelajar)}">`)}
         ${UI.field('Format Password Default Wali', `<input class="clay-input" id="s-pass" value="${UI.esc(s.defaultPasswordFormat)}">`)}
@@ -3472,6 +3860,19 @@ const Admin = (() => {
             <span id="s-setoran-label" style="font-size:13px">${s.setoranMulti ? 'Berkali-kali per hari' : 'Sekali sehari'}</span>
           </label>
         </div>
+      </div>
+      <div class="clay-card mb" style="margin-top:16px">
+        <div class="row center" style="justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <div>
+            <div class="section-title" style="margin:0">Pertemuan / Sesi Halaqah</div>
+            <div class="muted" style="font-size:12px">Atur jumlah, nama sesi, dan jam pertemuan ngaji. Pemilihan sesi otomatis mengikuti jadwal ini.</div>
+          </div>
+          <button class="clay-btn sm secondary" type="button" id="btn-add-sesi">+ Tambah Sesi</button>
+        </div>
+        <div class="table-wrap"><table class="clay-table">
+          <thead><tr><th>Nama Pertemuan / Sesi</th><th style="width:130px">Jam Mulai</th><th style="width:130px">Jam Selesai</th><th class="center" style="width:90px">Aksi</th></tr></thead>
+          <tbody id="set-sesi-body"></tbody>
+        </table></div>
       </div>
       </div>
       <div data-set-panel="kelas" style="display:none">
@@ -3505,7 +3906,7 @@ const Admin = (() => {
       </div>
       <div data-set-panel="notifikasi">
       <div class="clay-card mb">
-        <div class="section-title"> Pengaturan Notifikasi</div>
+        <div class="section-title">Pengaturan Notifikasi</div>
         <div class="row">
           <label style="flex:1;display:flex;align-items:center;gap:8px;margin-top:12px">
             <button class="clay-toggle ${s.notifActive ? 'on' : ''}" id="s-notif-active"></button>
@@ -3540,7 +3941,7 @@ const Admin = (() => {
         <div class="muted" style="font-size:12px">Satu rekap diperbarui saat absensi dikoreksi, sehingga wali tidak menerima notifikasi ganda.</div>
       </div>
       <div class="clay-card mb">
-        <div class="section-title">📲 Notifikasi Perangkat &amp; PWA</div>
+        <div class="section-title">Notifikasi Perangkat &amp; PWA</div>
         <div class="muted" style="font-size:12px;margin-bottom:12px">
           Aplikasi dapat dipasang di layar HP / Laptop (PWA) dan mengirimkan notifikasi sistem secara langsung saat ada setoran atau absensi baru.
         </div>
@@ -3555,13 +3956,13 @@ const Admin = (() => {
         <div class="row mt" style="gap:8px;flex-wrap:wrap">
           <button class="clay-btn sm primary" type="button" id="btn-set-request-notif">Aktifkan Notifikasi Perangkat</button>
           <button class="clay-btn sm ghost" type="button" id="btn-set-test-notif">Kirim Tes Notifikasi</button>
-          <button class="clay-btn sm secondary pwa-install-btn" type="button" id="btn-set-install-pwa">📲 Pasang Aplikasi (PWA)</button>
+          <button class="clay-btn sm secondary pwa-install-btn" type="button" id="btn-set-install-pwa">Pasang Aplikasi (PWA)</button>
         </div>
       </div>
       </div>
       <div data-set-panel="wa">
       <div class="clay-card mb">
-        <div class="section-title"> Pemicu WA Otomatis</div>
+        <div class="section-title">Pemicu WA Otomatis</div>
         <div class="muted" style="font-size:12px;margin-bottom:10px">
           Pemicu "Setoran" dikirim langsung saat ustadz menyimpan setoran (jika aktif).
           Pemicu jadwal (Harian/Mingguan/Bulanan) memakai periode yang sudah selesai (kemarin / minggu lalu / bulan lalu) dan dijalankan di server, sehingga tidak perlu ada yang membuka aplikasi.
@@ -3590,7 +3991,7 @@ const Admin = (() => {
         <div style="max-width:160px;margin-top:10px">${UI.field('Jam Kirim (HH:MM)', `<input class="clay-input" id="s-wa-jam" type="time" value="${UI.esc(s.waAutoJam || '07:00')}">`)}</div>
       </div>
       <div class="clay-card mb">
-        <div class="section-title"> Informasi Laporan ke Wali (Komponen Pesan WA)</div>
+        <div class="section-title">Informasi Laporan ke Wali (Komponen Pesan WA)</div>
         <div class="muted" style="font-size:12px;margin-bottom:12px">
           Pilih informasi apa saja yang ingin dilaporkan ke WhatsApp wali santri. Bagian yang dinonaktifkan akan otomatis disembunyikan dari isi pesan laporan (harian, mingguan, bulanan, maupun saat setoran).
         </div>
@@ -3618,7 +4019,7 @@ const Admin = (() => {
         </div>
       </div>
       <div class="clay-card mb">
-        <div class="section-title"> Koneksi WA Bridge</div>
+        <div class="section-title">Koneksi WA Bridge</div>
         <div class="muted" style="font-size:12px;margin-bottom:10px">
           Hubungkan ke WA Bridge (Node) agar laporan terkirim ke WhatsApp wali.
           <br>Bridge: <code>npm install &amp;&amp; npm start</code> di folder <code>wa-bridge</code> (isi <code>WA_KEY</code> di <code>wa-bridge/.env</code>), lalu tekan <b>Cek Status</b> dan scan QR.
@@ -3697,7 +4098,7 @@ const Admin = (() => {
         </div>
         <div class="muted" style="font-size:12px;margin-top:8px">Tombol yang sama juga ada di kotak user pada sidebar.</div>
       </div>
-      <div class="clay-card mb">
+      <div class="clay-card mb" ${Store.hasFeature('liveMonitor') ? '' : 'style="display:none"'}>
         <div class="row center" style="justify-content:space-between;align-items:center">
           <div class="section-title" style="margin:0">Akun Pengawas (Supervisor)</div>
           <button class="clay-btn sm primary" id="btn-tambah-pengawas" type="button">+ Tambah Pengawas</button>
@@ -4036,11 +4437,96 @@ const Admin = (() => {
       reader.readAsDataURL(file);
     };
     let _logoData = s.logo || '';
+    let _ttdPimpinanData = UI.safeUrl(s.ttdPimpinan) || '';
+    let _capLembagaData = UI.safeUrl(s.capLembaga) || '';
+    const bindSetImageUpload = (inpId, prevId, delId, maxW, maxH, emptyTxt, setter) => {
+      const inp = document.getElementById(inpId);
+      const prev = document.getElementById(prevId);
+      const del = document.getElementById(delId);
+      if (inp) inp.onchange = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+          const url = await UI.readImageDataUrl(file, maxW, maxH);
+          setter(url);
+          if (prev) prev.innerHTML = `<img src="${UI.esc(url)}" style="max-width:95%;max-height:54px;object-fit:contain">`;
+        } catch (err) { UI.toast(err.message, 'error'); }
+      };
+      if (del) del.onclick = () => {
+        setter('');
+        if (prev) prev.innerHTML = `<span class="muted" style="font-size:11px">${emptyTxt}</span>`;
+      };
+    };
+    bindSetImageUpload('s-ttd-pimpinan-upload', 's-ttd-pimpinan-preview', 's-ttd-pimpinan-del', 420, 180, 'Belum ada TTD', v => { _ttdPimpinanData = v; });
+    bindSetImageUpload('s-cap-upload', 's-cap-preview', 's-cap-del', 280, 280, 'Belum ada Cap', v => { _capLembagaData = v; });
+
+    let draftSesi = Store.sesiConfig().map(x => Object.assign({}, x));
+    function renderSesiRows() {
+      const tbody = document.getElementById('set-sesi-body');
+      if (!tbody) return;
+      tbody.innerHTML = draftSesi.map((item, idx) => `
+        <tr data-sesi-idx="${idx}">
+          <td><input class="clay-input sm sesi-nama" value="${UI.esc(item.nama)}" placeholder="Contoh: Subuh / Pagi" style="margin:0"></td>
+          <td><input class="clay-input sm sesi-mulai" type="time" value="${UI.esc(item.jamMulai)}" style="margin:0"></td>
+          <td><input class="clay-input sm sesi-selesai" type="time" value="${UI.esc(item.jamSelesai)}" style="margin:0"></td>
+          <td class="center"><button class="clay-btn sm danger" type="button" data-del-sesi="${idx}">Hapus</button></td>
+        </tr>`).join('');
+      tbody.querySelectorAll('tr').forEach(tr => {
+        const idx = Number(tr.dataset.sesiIdx);
+        tr.querySelector('.sesi-nama').oninput = e => { draftSesi[idx].nama = e.target.value; };
+        tr.querySelector('.sesi-mulai').oninput = e => { draftSesi[idx].jamMulai = e.target.value; };
+        tr.querySelector('.sesi-selesai').oninput = e => { draftSesi[idx].jamSelesai = e.target.value; };
+      });
+      tbody.querySelectorAll('[data-del-sesi]').forEach(btn => {
+        btn.onclick = () => {
+          if (draftSesi.length <= 1) {
+            UI.toast('Minimal harus ada 1 sesi pertemuan', 'error');
+            return;
+          }
+          draftSesi.splice(Number(btn.dataset.delSesi), 1);
+          renderSesiRows();
+        };
+      });
+    }
+    renderSesiRows();
+    const btnAddSesi = document.getElementById('btn-add-sesi');
+    if (btnAddSesi) {
+      btnAddSesi.onclick = () => {
+        draftSesi.push({ nama: '', jamMulai: '07:00', jamSelesai: '08:30' });
+        renderSesiRows();
+        const inputs = document.querySelectorAll('#set-sesi-body .sesi-nama');
+        if (inputs.length) inputs[inputs.length - 1].focus();
+      };
+    }
 
     document.getElementById('btn-save').onclick = () => {
+      const cleanedSesi = [];
+      const seenSesi = new Set();
+      for (const it of draftSesi) {
+        const nama = String(it.nama || '').trim();
+        if (!nama) { UI.toast('Nama sesi pertemuan tidak boleh kosong', 'error'); return; }
+        if (Store.isTalimSesi(nama)) {
+          UI.toast('Nama "Kajian" sudah dipakai modul Kajian', 'error');
+          return;
+        }
+        const key = nama.toLowerCase();
+        if (seenSesi.has(key)) { UI.toast(`Nama sesi "${nama}" duplikat`, 'error'); return; }
+        seenSesi.add(key);
+        cleanedSesi.push({
+          nama,
+          jamMulai: /^\d{2}:\d{2}$/.test(it.jamMulai || '') ? it.jamMulai : '07:00',
+          jamSelesai: /^\d{2}:\d{2}$/.test(it.jamSelesai || '') ? it.jamSelesai : '08:00'
+        });
+      }
+      if (!cleanedSesi.length) { UI.toast('Minimal harus ada 1 sesi pertemuan', 'error'); return; }
+
       const db = Store.get();
+      db.settings.sesiHalaqah = cleanedSesi;
       db.settings.namaLembaga = document.getElementById('s-nama').value.trim();
       db.settings.alamat = document.getElementById('s-alamat').value.trim();
+      db.settings.kota = (document.getElementById('s-kota')?.value || '').trim();
+      db.settings.jabatanPimpinan = (document.getElementById('s-jabatan-pimpinan')?.value || '').trim() || 'Mudir / Kepala Lembaga';
+      db.settings.namaPimpinan = (document.getElementById('s-nama-pimpinan')?.value || '').trim();
       db.settings.tahunAjaran = document.getElementById('s-thn').value.trim();
       db.settings.semester = document.getElementById('s-sem').value;
       db.settings.standarPenilaian = document.getElementById('s-standar').value.trim();
@@ -4070,6 +4556,8 @@ const Admin = (() => {
       const jamWa = document.getElementById('s-wa-jam');
       if (jamWa) db.settings.waAutoJam = jamWa.value || '07:00';
       db.settings.logo = _logoData || '';
+      db.settings.ttdPimpinan = _ttdPimpinanData || '';
+      db.settings.capLembaga = _capLembagaData || '';
       Store.save(); Store.log('Update settings'); UI.toast('Settings tersimpan', 'success');
     };
     document.getElementById('btn-backup').onclick = () => {
@@ -4175,7 +4663,7 @@ const Admin = (() => {
       const pStatus = document.getElementById('wa-queue-progress-status');
       const pCount = document.getElementById('wa-queue-progress-count');
 
-      if (!qBadge) return;
+      if (!qBadge || !Store.hasFeature('whatsapp') || !(Store.getSettings().waBridgeUrl || '').trim()) return;
 
       const q = await Store.waQueueStatus();
       const pending = (q && q.pending) ? Number(q.pending) : 0;
@@ -4792,7 +5280,7 @@ const Admin = (() => {
     Shared.setHeader('Kalender Libur', 'Libur lembaga untuk semua halaqah & santri');
     const db = Store.get();
     const t = Store.todayStr();
-    const SESI_LIST = Store.SESI_REKAP;
+    const SESI_LIST = Store.sesiList();
 
     function sesiLabel(sesi) {
       if (sesi === 'semua' || !sesi) return 'Semua Sesi';
@@ -4937,5 +5425,526 @@ const Admin = (() => {
     renderLibur();
   }
 
-  return { nav, dashboard, liveMonitor, santri, ustadz, halaqah, master, absensiUstadz, riwayat, laporan, laporanMurojaah, rekapKehadiran, rekapSetoran, notif, talim, adminLibur, settings, importSantriDialog };
+  /* ---------------- Superuser Panel (Vendor Feature & Tenant Control) ---------------- */
+  const FEATURE_CATALOG = [
+    { key: 'tahsin', name: 'Program Tahsin / Bacaan', category: 'Program', desc: 'Tab & input setoran Tahsin (jilid/halaman/tilawah). Cocok untuk TPQ/Rumah Tahsin dasar.' },
+    { key: 'ziyadah', name: 'Program Ziyadah (Tahfidz)', category: 'Program', desc: 'Tab & input hafalan Al-Qur’an baru, peta hafalan, dan capaian juz/halaman.' },
+    { key: 'mutqin', name: 'Program Mutqin', category: 'Program', desc: 'Tab & input ujian/penguatan hafalan mutqin.' },
+    { key: 'murojaah', name: 'Program & Laporan Murojaah', category: 'Program', desc: 'Tab setoran murojaah bebas dan halaman Rekap/Laporan Murojaah khusus.' },
+    { key: 'presensi', name: 'Presensi & Kalender Libur', category: 'Operasional', desc: 'Absensi santri 4 sesi, absensi ustadz, rekap kehadiran, dan kalender libur.' },
+    { key: 'talim', name: 'Kajian & Kitab PDF', category: 'Operasional', desc: 'Penugasan mapel kajian, upload/baca kitab PDF, dan jurnal kajian ustadz.' },
+    { key: 'liveMonitor', name: 'Live Monitor & Pengawas', category: 'Monitoring', desc: 'Pantauan real-time guru & santri, widget dashboard, serta akun Pengawas.' },
+    { key: 'rekapSetoran', name: 'Rekap Setoran & Kartu JPG', category: 'Laporan', desc: 'Halaman Rekap Setoran periodik, bayar setoran, dan unduh kartu gambar JPG.' },
+    { key: 'laporanPdf', name: 'Laporan Capaian & Unduh PDF', category: 'Laporan', desc: 'Halaman Laporan Hafalan lengkap dan tombol cetak/unduh PDF.' },
+    { key: 'raport', name: 'Raport Santri & Cetak', category: 'Laporan', desc: 'Evaluasi semester, input sikap/catatan ustadz, serta cetak Raport Santri untuk Admin, Ustadz & Wali.' },
+    { key: 'importExcel', name: 'Import Excel Massal', category: 'Data', desc: 'Import data Santri & Ustadz massal via template Excel/CSV.' },
+    { key: 'exportExcel', name: 'Export Excel (.xlsx / .xls)', category: 'Data', desc: 'Tombol unduh laporan & master data ke format Excel.' },
+    { key: 'portalWali', name: 'Portal Wali Santri', category: 'Portal', desc: 'Akses login & dashboard orang tua/wali memantau perkembangan anak.' },
+    { key: 'notifikasi', name: 'Notifikasi Aplikasi & PWA', category: 'Integrasi', desc: 'Menu notifikasi in-app, pengingat setoran terlewat, dan push perangkat.' },
+    { key: 'whatsapp', name: 'WhatsApp Otomatis (WA Bridge)', category: 'Integrasi', desc: 'Pengaturan bridge, QR WhatsApp, kirim tes, dan laporan otomatis ke wali.' },
+    { key: 'quran', name: 'Al-Qur’an Digital', category: 'Utilitas', desc: 'Pembaca Mushaf Al-Qur’an digital terintegrasi untuk admin, ustadz, dan wali.' },
+    { key: 'spp', name: 'Pembayaran SPP & Jatuh Tempo', category: 'Keuangan', desc: 'Tagihan SPP bulanan santri, tanggal jatuh tempo, struk WA, dan status di Portal Wali.' }
+  ];
+  const FEATURE_PRESETS = {
+    tahsinOnly: { tahsin: true, ziyadah: false, mutqin: false, murojaah: false, presensi: false, talim: false, liveMonitor: false, rekapSetoran: false, laporanPdf: false, raport: false, importExcel: false, exportExcel: false, portalWali: false, notifikasi: false, whatsapp: false, quran: false, spp: false },
+    tahfidzOnly: { tahsin: false, ziyadah: true, mutqin: false, murojaah: false, presensi: false, talim: false, liveMonitor: false, rekapSetoran: false, laporanPdf: false, raport: false, importExcel: false, exportExcel: false, portalWali: false, notifikasi: false, whatsapp: false, quran: false, spp: false },
+    pro: { tahsin: true, ziyadah: true, mutqin: true, murojaah: true, presensi: true, talim: false, liveMonitor: true, rekapSetoran: true, laporanPdf: true, raport: true, importExcel: true, exportExcel: true, portalWali: true, notifikasi: true, whatsapp: false, quran: true, spp: true },
+    lengkap: { tahsin: true, ziyadah: true, mutqin: true, murojaah: true, presensi: true, talim: true, liveMonitor: true, rekapSetoran: true, laporanPdf: true, raport: true, importExcel: true, exportExcel: true, portalWali: true, notifikasi: true, whatsapp: true, quran: true, spp: true }
+  };
+
+  function superuserPanel() {
+    Shared.shell('superuser', nav('superuser_panel'), '');
+    Shared.setHeader('Kontrol Superuser', 'Aktivasi modul layanan & kelola akses admin lembaga');
+    const db = Store.get();
+    const s = db.settings || {};
+    const draftFeatures = Object.assign({}, Store.DEFAULT_FEATURES, s.features || {});
+
+    function activeCount() {
+      return FEATURE_CATALOG.filter(f => draftFeatures[f.key]).length;
+    }
+
+    function renderPanel() {
+      const count = activeCount();
+      const staffAccounts = (db.users || []).filter(u => u.role === 'admin' || u.role === 'pengawas');
+      document.getElementById('view-content').innerHTML = `
+        <div class="grid kpi mb">
+          ${Shared.statCard(Shared.ICONS.settings, count + ' / ' + FEATURE_CATALOG.length, 'Modul Aktif', 'var(--primary)')}
+          ${Shared.statCard(Shared.ICONS.users, (db.santri || []).length, 'Total Santri', '#2563eb')}
+          ${Shared.statCard(Shared.ICONS.teacher, (db.ustadz || []).length, 'Total Ustadz', '#10b981')}
+          ${Shared.statCard(Shared.ICONS.monitor, staffAccounts.length, 'Akun Admin/Pengawas', '#8b5cf6')}
+        </div>
+
+        <div class="clay-card mb">
+          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            <div>
+              <div class="section-title" style="margin:0">Aktivasi Fitur / Modul Layanan</div>
+              <div class="muted" style="font-size:12px;margin-top:2px">Fitur yang dimatikan otomatis hilang dari menu &amp; diblokir oleh server untuk Admin, Ustadz, Pengawas, dan Wali.</div>
+            </div>
+            <div class="row center" style="gap:6px;flex-wrap:wrap">
+              <button class="clay-btn sm ghost" type="button" data-su-preset="tahsinOnly">Tahsin Saja</button>
+              <button class="clay-btn sm ghost" type="button" data-su-preset="tahfidzOnly">Tahfidz Saja</button>
+              <button class="clay-btn sm ghost" type="button" data-su-preset="pro">Paket Pro</button>
+              <button class="clay-btn sm ghost" type="button" data-su-preset="lengkap">Full Fitur</button>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px" id="su-feature-list">
+            ${FEATURE_CATALOG.map(f => {
+              const on = !!draftFeatures[f.key];
+              return `
+                <div class="row center" style="justify-content:space-between;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:var(--radius-md);background:${on ? '#f0fdf4' : 'var(--slate-50)'}">
+                  <div style="flex:1;min-width:200px">
+                    <div class="row center" style="gap:8px;flex-wrap:wrap">
+                      <b style="font-size:13.5px;color:var(--text)">${UI.esc(f.name)}</b>
+                      <span class="badge ${on ? 'green' : 'gray'} sm">${UI.esc(f.category)}</span>
+                    </div>
+                    <div class="muted" style="font-size:12px;margin-top:3px;line-height:1.4">${UI.esc(f.desc)}</div>
+                  </div>
+                  <div class="row center" style="gap:10px;flex-shrink:0">
+                    <span class="badge ${on ? 'green' : 'gray'} sm" id="su-status-${f.key}">${on ? 'Aktif' : 'Nonaktif'}</span>
+                    <button type="button" class="clay-toggle ${on ? 'on' : ''}" data-su-toggle="${f.key}" aria-label="Toggle ${UI.esc(f.name)}"></button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+
+          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+            <span class="muted" style="font-size:12.5px">Modul aktif terpilih: <b id="su-active-summary">${count} / ${FEATURE_CATALOG.length}</b></span>
+            <button class="clay-btn primary" id="su-save-features" type="button">Simpan Konfigurasi Fitur</button>
+          </div>
+        </div>
+
+        <div class="clay-card mb">
+          <div class="section-title">Masa Aktif &amp; Tagihan Layanan Lembaga</div>
+          <div class="muted" style="font-size:12px;margin-bottom:10px">Atur jadwal penagihan dan jatuh tempo. Setelah melewati jatuh tempo + masa tenggang (default <b>7 hari</b>) tanpa perpanjangan, akun lembaga otomatis tersuspend.</div>
+          <div class="row" style="gap:10px;flex-wrap:wrap">
+            <div style="flex:1;min-width:150px">${UI.field('Status Layanan', `<select class="clay-select" id="su-sub-status"><option value="active" ${(s.subscription?.status || 'active') === 'active' ? 'selected' : ''}>Aktif</option><option value="suspended" ${s.subscription?.status === 'suspended' ? 'selected' : ''}>Ditangguhkan (Suspend)</option></select>`)}</div>
+            <div style="flex:1;min-width:155px">${UI.field('Tanggal Penagihan (Mulai Notif)', `<input type="date" class="clay-input" id="su-sub-billing" value="${UI.esc(s.subscription?.billingDate || '')}">`)}</div>
+            <div style="flex:1;min-width:155px">${UI.field('Jatuh Tempo Layanan', `<input type="date" class="clay-input" id="su-sub-until" value="${UI.esc(s.subscription?.validUntil || '')}">`)}</div>
+          </div>
+          <div class="row" style="gap:10px;flex-wrap:wrap">
+            <div style="flex:1;min-width:140px">${UI.field('Masa Tenggang (Hari)', `<input type="number" min="0" max="30" class="clay-input" id="su-sub-grace" value="${Number.isFinite(Number(s.subscription?.graceDays)) ? Number(s.subscription.graceDays) : 7}">`)}</div>
+            <div style="flex:1;min-width:160px">${UI.field('Nominal Tagihan (Rp, opsional)', `<input type="number" min="0" step="1000" class="clay-input" id="su-sub-nominal" value="${Number(s.subscription?.nominal) || ''}" placeholder="Contoh: 150000">`)}</div>
+          </div>
+          <div class="row mt" style="gap:6px;flex-wrap:wrap">
+            <button class="clay-btn sm ghost" type="button" data-su-sub-add="30">+30 Hari</button>
+            <button class="clay-btn sm ghost" type="button" data-su-sub-add="365">+1 Tahun</button>
+            <button class="clay-btn sm ghost" type="button" id="su-sub-bill-auto">Set Tagih H-7</button>
+            <button class="clay-btn sm ghost" type="button" id="su-sub-clear">Tanpa Batas</button>
+          </div>
+          <div class="muted" id="su-sub-preview" style="font-size:12px;margin:8px 0"></div>
+          ${UI.field('Catatan / Info Pembayaran ke Admin (opsional)', `<input class="clay-input" id="su-sub-note" value="${UI.esc(s.subscription?.note || '')}" placeholder="Contoh: Transfer ke BSI 1234567890 a.n. Pengelola">`) }
+          <div class="row mt" style="justify-content:flex-end">
+            <button class="clay-btn secondary" id="su-save-sub" type="button">Simpan Pengaturan Tagihan</button>
+          </div>
+        </div>
+
+        <div class="grid cols-2">
+          <div class="clay-card">
+            <div class="section-title">Identitas Lembaga Klien</div>
+            ${UI.field('Nama Lembaga', `<input class="clay-input" id="su-nama-lembaga" value="${UI.esc(s.namaLembaga || '')}">`)}
+            ${UI.field('Alamat', `<input class="clay-input" id="su-alamat-lembaga" value="${UI.esc(s.alamat || '')}">`)}
+            <div class="row mt" style="justify-content:flex-end">
+              <button class="clay-btn secondary" id="su-save-lembaga" type="button">Simpan Info Lembaga</button>
+            </div>
+          </div>
+
+          <div class="clay-card">
+            <div class="row center" style="justify-content:space-between;align-items:center;margin-bottom:10px">
+              <div class="section-title" style="margin:0">Akun Pengelola Lembaga</div>
+              <button class="clay-btn sm primary" id="su-add-admin" type="button">+ Tambah Admin</button>
+            </div>
+            <div class="table-wrap"><table class="clay-table">
+              <thead><tr><th>Username</th><th>Peran</th><th>Aksi</th></tr></thead>
+              <tbody>
+                ${staffAccounts.length ? staffAccounts.map(u => `
+                  <tr>
+                    <td><b>${UI.esc(u.username)}</b></td>
+                    <td><span class="badge ${u.role === 'admin' ? 'blue' : 'gray'} sm">${UI.esc(u.role.toUpperCase())}</span></td>
+                    <td>
+                      <div class="row" style="gap:6px">
+                        <button class="clay-btn sm ghost" type="button" data-su-reset="${u.id}">Reset Sandi</button>
+                        <button class="clay-btn sm danger" type="button" data-su-del="${u.id}">Hapus</button>
+                      </div>
+                    </td>
+                  </tr>
+                `).join('') : '<tr><td colspan="3"><div class="empty">Belum ada akun admin/pengawas.</div></td></tr>'}
+              </tbody>
+            </table></div>
+          </div>
+        </div>
+      `;
+
+      document.querySelectorAll('[data-su-toggle]').forEach(btn => {
+        btn.onclick = () => {
+          const k = btn.dataset.suToggle;
+          draftFeatures[k] = !draftFeatures[k];
+          renderPanel();
+        };
+      });
+
+      document.querySelectorAll('[data-su-preset]').forEach(btn => {
+        btn.onclick = () => {
+          const p = FEATURE_PRESETS[btn.dataset.suPreset];
+          if (!p) return;
+          Object.assign(draftFeatures, p);
+          renderPanel();
+          UI.toast('Preset ' + btn.textContent.trim() + ' diterapkan — klik Simpan untuk menyimpan', 'info');
+        };
+      });
+
+      document.getElementById('su-save-features').onclick = async () => {
+        const cur = Store.get();
+        cur.settings.features = Object.assign({}, draftFeatures);
+        if (await Store.save()) {
+          UI.toast('Konfigurasi fitur berhasil disimpan ✓', 'success');
+          renderPanel();
+        }
+      };
+
+      document.getElementById('su-save-lembaga').onclick = async () => {
+        const cur = Store.get();
+        cur.settings.namaLembaga = document.getElementById('su-nama-lembaga').value.trim();
+        cur.settings.alamat = document.getElementById('su-alamat-lembaga').value.trim();
+        if (await Store.save()) {
+          UI.toast('Identitas lembaga disimpan', 'success');
+          superuserPanel();
+        }
+      };
+
+      const updateSubPreview = () => {
+        const until = document.getElementById('su-sub-until').value;
+        const billing = document.getElementById('su-sub-billing').value;
+        const graceRaw = parseInt(document.getElementById('su-sub-grace').value, 10);
+        const grace = Number.isFinite(graceRaw) ? Math.max(0, Math.min(30, graceRaw)) : 7;
+        const pv = document.getElementById('su-sub-preview');
+        if (!pv) return;
+        if (!until) { pv.textContent = 'Layanan tanpa batas jatuh tempo.'; return; }
+        const effBill = billing || Store.tambahHari(until, -7);
+        const suspDate = Store.tambahHari(until, grace > 0 ? grace : 1);
+        pv.innerHTML = `Notifikasi tagihan aktif mulai <b>${UI.esc(UI.fmtDate(effBill))}</b> · Jatuh tempo <b>${UI.esc(UI.fmtDate(until))}</b> · Auto-suspend pada <b>${UI.esc(UI.fmtDate(suspDate))}</b> (${grace} hari tenggang).`;
+      };
+      ['su-sub-until', 'su-sub-billing', 'su-sub-grace'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.onchange = updateSubPreview;
+      });
+      updateSubPreview();
+
+      document.querySelectorAll('[data-su-sub-add]').forEach(btn => {
+        btn.onclick = () => {
+          const days = parseInt(btn.dataset.suSubAdd, 10) || 30;
+          const inp = document.getElementById('su-sub-until');
+          const base = (inp.value && inp.value >= Store.todayStr()) ? inp.value : Store.todayStr();
+          inp.value = Store.tambahHari(base, days);
+          updateSubPreview();
+        };
+      });
+      document.getElementById('su-sub-bill-auto').onclick = () => {
+        const until = document.getElementById('su-sub-until').value;
+        if (!until) { UI.toast('Isi tanggal jatuh tempo dulu', 'error'); return; }
+        document.getElementById('su-sub-billing').value = Store.tambahHari(until, -7);
+        updateSubPreview();
+      };
+      document.getElementById('su-sub-clear').onclick = () => {
+        document.getElementById('su-sub-until').value = '';
+        document.getElementById('su-sub-billing').value = '';
+        updateSubPreview();
+      };
+      document.getElementById('su-save-sub').onclick = async () => {
+        const cur = Store.get();
+        const graceRaw = parseInt(document.getElementById('su-sub-grace').value, 10);
+        const nomRaw = Number(document.getElementById('su-sub-nominal').value);
+        cur.settings.subscription = {
+          status: document.getElementById('su-sub-status').value,
+          billingDate: document.getElementById('su-sub-billing').value,
+          validUntil: document.getElementById('su-sub-until').value,
+          graceDays: Number.isFinite(graceRaw) ? Math.max(0, Math.min(30, graceRaw)) : 7,
+          nominal: Number.isFinite(nomRaw) && nomRaw > 0 ? Math.round(nomRaw) : 0,
+          note: document.getElementById('su-sub-note').value.trim()
+        };
+        if (await Store.save()) {
+          UI.toast('Pengaturan tagihan & masa aktif disimpan ✓', 'success');
+          renderPanel();
+        }
+      };
+
+      document.getElementById('su-add-admin').onclick = () => {
+        UI.openModal({
+          title: 'Tambah Akun Admin Lembaga',
+          bodyHTML: `
+            ${UI.field('Username', '<input class="clay-input" id="su-new-uname" placeholder="mis: admin_pondok">')}
+            ${UI.field('Password', '<input type="password" class="clay-input" id="su-new-pass" placeholder="Minimal 6 karakter" value="admin123">')}
+          `,
+          actions: [
+            { label: 'Batal', role: 'cancel' },
+            { label: 'Buat Akun', role: 'primary', onClick: async (modal) => {
+              const uname = modal.querySelector('#su-new-uname').value.trim();
+              const pass = modal.querySelector('#su-new-pass').value;
+              if (!uname) { UI.toast('Username wajib diisi', 'error'); return; }
+              if (!pass || pass.length < 6) { UI.toast('Password minimal 6 karakter', 'error'); return; }
+              if ((db.users || []).some(u => u.username.toLowerCase() === uname.toLowerCase())) {
+                UI.toast('Username sudah digunakan', 'error'); return;
+              }
+              db.users.push({ id: Store.uid('usr'), username: uname, password: pass, role: 'admin', refId: null });
+              if (await Store.save()) {
+                UI.closeModal();
+                UI.toast('Akun admin berhasil dibuat', 'success');
+                renderPanel();
+              }
+            }}
+          ]
+        });
+      };
+
+      document.querySelectorAll('[data-su-reset]').forEach(btn => {
+        btn.onclick = () => {
+          const uObj = db.users.find(x => x.id === btn.dataset.suReset);
+          if (!uObj) return;
+          UI.openModal({
+            title: 'Reset Password: ' + uObj.username,
+            bodyHTML: UI.field('Password Baru', '<input type="password" class="clay-input" id="su-rst-pass" placeholder="Minimal 6 karakter">'),
+            actions: [
+              { label: 'Batal', role: 'cancel' },
+              { label: 'Simpan', role: 'primary', onClick: async (modal) => {
+                const pass = modal.querySelector('#su-rst-pass').value;
+                if (!pass || pass.length < 6) { UI.toast('Password minimal 6 karakter', 'error'); return; }
+                uObj.password = pass;
+                if (await Store.save()) {
+                  UI.closeModal();
+                  UI.toast('Password berhasil direset', 'success');
+                }
+              }}
+            ]
+          });
+        };
+      });
+
+      document.querySelectorAll('[data-su-del]').forEach(btn => {
+        btn.onclick = () => {
+          const uObj = db.users.find(x => x.id === btn.dataset.suDel);
+          if (!uObj) return;
+          UI.confirmDialog('Hapus Akun', `Yakin menghapus akun <b>${UI.esc(uObj.username)}</b>?`, async () => {
+            db.users = db.users.filter(x => x.id !== uObj.id);
+            if (await Store.save()) {
+              UI.toast('Akun dihapus', 'success');
+              renderPanel();
+            }
+          });
+        };
+      });
+    }
+
+    renderPanel();
+  }
+
+  /* ---------------- Pembayaran SPP Santri ---------------- */
+  function spp() {
+    Shared.shell('admin', nav('admin_spp'), '');
+    Shared.setHeader('Pembayaran SPP', 'Tagihan bulanan, jatuh tempo, & riwayat pembayaran santri');
+    const db = Store.get();
+    const fmtRp = n => 'Rp ' + (Number(n) || 0).toLocaleString('id-ID');
+    let curBulan = Store.todayStr().slice(0, 7);
+    let curHalaqah = '';
+    let curStatus = '';
+    let curCari = '';
+
+    function renderSpp() {
+      const cfg = Store.sppConfig();
+      const targetHal = curHalaqah ? Store.findHalaqahById(curHalaqah) : null;
+      const term = curCari.trim().toLowerCase();
+      const allRows = (db.santri || [])
+        .filter(s => s.status !== 'Nonaktif')
+        .filter(s => !targetHal || Store.santriHasHalaqah(s, targetHal))
+        .filter(s => !term || (s.nama || '').toLowerCase().includes(term) || (s.nis || '').toLowerCase().includes(term))
+        .sort((a, b) => a.nama.localeCompare(b.nama, 'id'))
+        .map(s => Object.assign({ s }, Store.sppStatusSantri(s, curBulan)));
+
+      const lunasRows = allRows.filter(r => r.status === 'Lunas');
+      const overdueRows = allRows.filter(r => r.status === 'Jatuh Tempo');
+      const totalMasuk = lunasRows.reduce((sum, r) => sum + Number(r.paidRec?.nominal || r.nominal || 0), 0);
+      const wajibCount = allRows.filter(r => r.status !== 'Bebas').length;
+      const display = curStatus ? allRows.filter(r => r.status === curStatus) : allRows;
+      const hasWa = Store.hasFeature('whatsapp') && Store.waAutoEnabled();
+
+      const bodyRows = display.map((r, idx) => {
+        const badgeCls = r.status === 'Lunas' ? 'green' : r.status === 'Jatuh Tempo' ? 'danger' : r.status === 'Bebas' ? 'gray' : 'warn';
+        const isCustom = r.s.sppNominal !== undefined && r.s.sppNominal !== '';
+        const paidInfo = r.paidRec
+          ? `<div>${UI.esc(UI.fmtDate(r.paidRec.tanggalBayar || ''))}</div><div class="muted" style="font-size:11px">${UI.esc(r.paidRec.metode || 'Tunai')}${r.paidRec.catatan ? ' · ' + UI.esc(r.paidRec.catatan) : ''}</div>`
+          : '<span class="muted">-</span>';
+        const actions = r.paidRec
+          ? `<div class="row" style="gap:6px">
+              ${hasWa ? `<button class="clay-btn sm ghost" type="button" data-spp-wa-struk="${r.s.id}" style="color:#16a34a">Struk WA</button>` : ''}
+              <button class="clay-btn sm danger" type="button" data-spp-del="${r.paidRec.id}">Batal</button>
+            </div>`
+          : (r.nominal > 0
+            ? `<div class="row" style="gap:6px">
+                <button class="clay-btn sm primary" type="button" data-spp-pay="${r.s.id}">Catat Bayar</button>
+                ${hasWa ? `<button class="clay-btn sm ghost" type="button" data-spp-wa-tagih="${r.s.id}" style="color:#d97706">Tagih WA</button>` : ''}
+              </div>`
+            : '<span class="muted">-</span>');
+        return `<tr>
+          <td class="center">${idx + 1}</td>
+          <td><b>${UI.esc(r.s.nama)}</b><div class="muted" style="font-size:11px">${UI.esc(Store.halaqahSummaryForSantri(r.s))}</div></td>
+          <td><b>${fmtRp(r.paidRec ? r.paidRec.nominal : r.nominal)}</b>${isCustom ? ' <span class="badge blue sm">Khusus</span>' : ''}</td>
+          <td style="font-size:12px">${UI.esc(UI.fmtDate(r.dueDate))}</td>
+          <td><span class="badge ${badgeCls}">${UI.esc(r.status)}</span></td>
+          <td style="font-size:12px">${paidInfo}</td>
+          <td>${actions}</td>
+        </tr>`;
+      }).join('');
+
+      document.getElementById('view-content').innerHTML = `
+        <div class="grid kpi mb">
+          ${Shared.statCard(Shared.ICONS.setoran, lunasRows.length + ' / ' + wajibCount, 'Lunas Bulan Ini', '#22C55E')}
+          ${Shared.statCard(Shared.ICONS.calendar, overdueRows.length, 'Jatuh Tempo', '#EF4444')}
+          ${Shared.statCard(Shared.ICONS.award, fmtRp(totalMasuk), 'Total Terkumpul', '#2563eb')}
+        </div>
+
+        <div class="clay-card mb">
+          <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+            <div class="section-title" style="margin:0">Filter &amp; Pengaturan SPP</div>
+            <div class="row" style="gap:6px;flex-wrap:wrap">
+              <button class="clay-btn sm ghost" type="button" id="spp-cfg-btn">Atur Nominal &amp; Jatuh Tempo (${fmtRp(cfg.nominal)} · Tgl ${cfg.dueDay})</button>
+              ${Store.hasFeature('exportExcel') ? '<button class="clay-btn sm secondary" type="button" id="spp-export">Export Excel</button>' : ''}
+            </div>
+          </div>
+          <div class="row">
+            <div style="flex:1;min-width:140px">${UI.field('Bulan', `<input type="month" class="clay-input" id="spp-bulan" value="${UI.esc(curBulan)}">`)}</div>
+            <div style="flex:1;min-width:150px">${UI.field('Halaqah', `<select class="clay-select" id="spp-halaqah"><option value="">Semua Halaqah</option>${UI.optionsFromList(db.halaqah.map(h => ({ v: h.id, l: halaqahOptionLabel(h, false) })), 'v', 'l', curHalaqah)}</select>`)}</div>
+            <div style="flex:1;min-width:140px">${UI.field('Status', `<select class="clay-select" id="spp-status"><option value="">Semua</option>${['Lunas', 'Belum Bayar', 'Jatuh Tempo', 'Bebas'].map(st => `<option ${curStatus === st ? 'selected' : ''}>${st}</option>`).join('')}</select>`)}</div>
+            <div style="flex:1.2;min-width:170px">${UI.field('Cari Santri', `<input type="search" class="clay-input" id="spp-cari" value="${UI.esc(curCari)}" placeholder="Nama / NIS..." autocomplete="off">`)}</div>
+          </div>
+        </div>
+
+        <div class="clay-card">
+          <div class="row center" style="justify-content:space-between;margin-bottom:10px">
+            <div class="section-title" style="margin:0">Daftar SPP — ${UI.esc(Shared.bulanLabel(curBulan))}</div>
+            <span class="muted" style="font-size:12.5px">${display.length} santri</span>
+          </div>
+          <div class="table-wrap"><table class="clay-table table-wide">
+            <thead><tr><th class="center" style="width:40px">No</th><th>Santri</th><th>Nominal</th><th>Jatuh Tempo</th><th>Status</th><th>Pembayaran</th><th>Aksi</th></tr></thead>
+            <tbody>${bodyRows || '<tr><td colspan="7"><div class="empty">Tidak ada data santri.</div></td></tr>'}</tbody>
+          </table></div>
+        </div>`;
+
+      document.getElementById('spp-bulan').onchange = e => { curBulan = e.target.value || curBulan; renderSpp(); };
+      document.getElementById('spp-halaqah').onchange = e => { curHalaqah = e.target.value; renderSpp(); };
+      document.getElementById('spp-status').onchange = e => { curStatus = e.target.value; renderSpp(); };
+      Shared.bindSearchInput(document.getElementById('spp-cari'), () => { curCari = document.getElementById('spp-cari').value; renderSpp(); });
+
+      document.getElementById('spp-cfg-btn').onclick = () => {
+        UI.openModal({
+          title: 'Pengaturan SPP & Jatuh Tempo',
+          bodyHTML: `
+            ${UI.field('Nominal SPP Default / Bulan (Rp)', `<input type="number" class="clay-input" id="cfg-spp-nom" min="0" step="1000" value="${cfg.nominal}">`)}
+            ${UI.field('Tanggal Jatuh Tempo Tiap Bulan (1–28)', `<input type="number" class="clay-input" id="cfg-spp-due" min="1" max="28" value="${cfg.dueDay}"><div class="muted" style="font-size:12px;margin-top:4px">Santri yang belum membayar melewati tanggal ini otomatis berstatus <b>Jatuh Tempo</b>.</div>`)}
+          `,
+          actions: [
+            { label: 'Batal', role: 'cancel' },
+            { label: 'Simpan', role: 'primary', onClick: async (m) => {
+              db.settings.sppNominal = Math.max(0, parseInt(m.querySelector('#cfg-spp-nom').value, 10) || 0);
+              const d = parseInt(m.querySelector('#cfg-spp-due').value, 10);
+              db.settings.sppJatuhTempo = (d >= 1 && d <= 28) ? d : 10;
+              if (await Store.save()) {
+                UI.closeModal();
+                UI.toast('Pengaturan SPP disimpan ✓', 'success');
+                renderSpp();
+              }
+            }}
+          ]
+        });
+      };
+
+      const expBtn = document.getElementById('spp-export');
+      if (expBtn) expBtn.onclick = () => {
+        Shared.downloadXlsx('Laporan_SPP_' + curBulan, [{
+          name: 'SPP_' + curBulan,
+          columns: [
+            { key: 'nama', label: 'Nama Santri' }, { key: 'halaqah', label: 'Halaqah' },
+            { key: 'nominal', label: 'Nominal' }, { key: 'jatuhTempo', label: 'Jatuh Tempo' },
+            { key: 'status', label: 'Status' }, { key: 'tanggalBayar', label: 'Tanggal Bayar' },
+            { key: 'metode', label: 'Metode' }, { key: 'catatan', label: 'Catatan' }
+          ],
+          rows: display.map(r => ({
+            nama: r.s.nama, halaqah: Store.halaqahSummaryForSantri(r.s),
+            nominal: r.paidRec ? r.paidRec.nominal : r.nominal, jatuhTempo: r.dueDate,
+            status: r.status, tanggalBayar: r.paidRec ? (r.paidRec.tanggalBayar || '') : '',
+            metode: r.paidRec ? (r.paidRec.metode || '') : '', catatan: r.paidRec ? (r.paidRec.catatan || '') : ''
+          }))
+        }]);
+      };
+
+      document.querySelectorAll('[data-spp-pay]').forEach(btn => {
+        btn.onclick = () => {
+          const r = allRows.find(x => x.s.id === btn.dataset.sppPay);
+          if (!r) return;
+          UI.openModal({
+            title: 'Catat Pembayaran SPP — ' + r.s.nama,
+            bodyHTML: `
+              <div class="muted" style="font-size:12.5px;margin-bottom:8px">Periode: <b>${UI.esc(Shared.bulanLabel(curBulan))}</b></div>
+              ${UI.field('Nominal Dibayar (Rp)', `<input type="number" class="clay-input" id="pay-nom" min="0" value="${r.nominal}">`)}
+              <div class="row">
+                <div style="flex:1">${UI.field('Tanggal Bayar', `<input type="date" class="clay-input" id="pay-tgl" value="${Store.todayStr()}">`)}</div>
+                <div style="flex:1">${UI.field('Metode', `<select class="clay-select" id="pay-met"><option>Tunai</option><option>Transfer</option><option>QRIS</option></select>`)}</div>
+              </div>
+              ${UI.field('Catatan (opsional)', `<input class="clay-input" id="pay-cat" placeholder="Contoh: Lunas bulan ini">`)}
+            `,
+            actions: [
+              { label: 'Batal', role: 'cancel' },
+              { label: 'Simpan Pembayaran', role: 'primary', onClick: async (m) => {
+                if (!Array.isArray(db.pembayaranSpp)) db.pembayaranSpp = [];
+                db.pembayaranSpp.push({
+                  id: Store.uid('spp'),
+                  santriId: r.s.id,
+                  bulan: curBulan,
+                  nominal: Math.max(0, parseInt(m.querySelector('#pay-nom').value, 10) || 0),
+                  tanggalBayar: m.querySelector('#pay-tgl').value || Store.todayStr(),
+                  metode: m.querySelector('#pay-met').value || 'Tunai',
+                  status: 'Lunas',
+                  catatan: m.querySelector('#pay-cat').value.trim(),
+                  _created: Date.now()
+                });
+                if (await Store.save()) {
+                  Store.log('Catat SPP ' + r.s.nama + ' (' + curBulan + ')');
+                  UI.closeModal();
+                  UI.toast('Pembayaran SPP dicatat ✓', 'success');
+                  renderSpp();
+                }
+              }}
+            ]
+          });
+        };
+      });
+
+      document.querySelectorAll('[data-spp-del]').forEach(btn => {
+        btn.onclick = () => {
+          UI.confirmDialog('Batalkan Pembayaran', 'Yakin membatalkan catatan lunas SPP ini?', async () => {
+            db.pembayaranSpp = (db.pembayaranSpp || []).filter(p => p.id !== btn.dataset.sppDel);
+            if (await Store.save()) { UI.toast('Pembayaran dibatalkan', 'info'); renderSpp(); }
+          });
+        };
+      });
+
+      document.querySelectorAll('[data-spp-wa-tagih], [data-spp-wa-struk]').forEach(btn => {
+        btn.onclick = async () => {
+          const isStruk = !!btn.dataset.sppWaStruk;
+          const sid = btn.dataset.sppWaStruk || btn.dataset.sppWaTagih;
+          const r = allRows.find(x => x.s.id === sid);
+          if (!r) return;
+          const lembaga = (db.settings && db.settings.namaLembaga) || 'Tahfidzku';
+          const msg = isStruk
+            ? `*BUKTI PEMBAYARAN SPP - ${lembaga}*\n\nAssalamu'alaikum Wali dari *${r.s.nama}*.\nAlhamdulillah, pembayaran SPP bulan *${Shared.bulanLabel(curBulan)}* sebesar *${fmtRp(r.paidRec?.nominal || r.nominal)}* (${r.paidRec?.metode || 'Tunai'}) telah tercatat *LUNAS* pada ${UI.fmtDate(r.paidRec?.tanggalBayar || '')}.\nJazakumullahu khairan.`
+            : `*PENGINGAT SPP - ${lembaga}*\n\nAssalamu'alaikum Wali dari *${r.s.nama}*.\nMenginformasikan tagihan SPP bulan *${Shared.bulanLabel(curBulan)}* sebesar *${fmtRp(r.nominal)}* (jatuh tempo ${UI.fmtDate(r.dueDate)}).\nMohon konfirmasi apabila sudah melakukan pembayaran. Jazakumullahu khairan.`;
+          const ok = await Store.waSendWali(r.s.id, msg);
+          UI.toast(ok ? 'Pesan WA masuk antrian kirim ✓' : 'Gagal mengirim WA (cek WA Bridge)', ok ? 'success' : 'error');
+        };
+      });
+    }
+
+    renderSpp();
+  }
+
+  return { nav, dashboard, liveMonitor, santri, ustadz, halaqah, master, absensiUstadz, riwayat, laporan, laporanMurojaah, raport, rekapKehadiran, rekapSetoran, notif, talim, adminLibur, spp, settings, superuserPanel, importSantriDialog };
 })();

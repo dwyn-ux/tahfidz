@@ -172,11 +172,11 @@ function waPenandaTerkirim(string $trigger): array {
 
 /**
  * Rekap absensi satu Santri pada periode tertentu.
- * Dihitung server-side memakai aturan yang sama dengan rekap di aplikasi:
- * satu status per sesi (catatan terbaru), dan Alfa = slot sesi yang tidak
- * punya catatan sama sekali.
+ * Alfa hanya dihitung dari catatan berstatus "Alfa" yang dipilih guru/ustadz.
  */
 function waRekapSantri(array $records, string $santriId, string $dari, string $sampai): array {
+    $sesiList = sesiNames(getSettings());
+    $defaultSesi = $sesiList[0] ?? 'Subuh';
     $hari = [];
     $cursor = $dari;
     while ($cursor <= $sampai && count($hari) <= 366) {
@@ -186,14 +186,14 @@ function waRekapSantri(array $records, string $santriId, string $dari, string $s
     }
     $total = ['Hadir' => 0, 'Izin' => 0, 'Sakit' => 0, 'Libur' => 0, 'Alfa' => 0];
     $perSesi = [];
-    foreach (WA_SESI_REKAP as $sesi) $perSesi[$sesi] = ['Hadir' => 0, 'Izin' => 0, 'Sakit' => 0, 'Libur' => 0, 'Alfa' => 0];
+    foreach ($sesiList as $sesi) $perSesi[$sesi] = ['Hadir' => 0, 'Izin' => 0, 'Sakit' => 0, 'Libur' => 0, 'Alfa' => 0];
 
     foreach ($records as $record) {
         if (($record['santriId'] ?? '') !== $santriId) continue;
         $tanggal = (string)($record['tanggal'] ?? '');
         if (!in_array($tanggal, $hari, true)) continue;
-        $sesi = (string)($record['sesi'] ?? 'Subuh');
-        if (!in_array($sesi, WA_SESI_REKAP, true)) continue;
+        $sesi = (string)($record['sesi'] ?? $defaultSesi);
+        if (!in_array($sesi, $sesiList, true)) continue;
         $status = (string)($record['status'] ?? 'Hadir');
         if (!isset($total[$status])) continue;
         $perSesi[$sesi][$status]++;
@@ -204,14 +204,7 @@ function waRekapSantri(array $records, string $santriId, string $dari, string $s
         }
     }
 
-    // Alfa dihitung dari slot yang kosong: hari x sesi - catatan yang ada.
-    foreach (WA_SESI_REKAP as $sesi) {
-        $tercatat = $perSesi[$sesi]['Hadir'] + $perSesi[$sesi]['Izin']
-            + $perSesi[$sesi]['Sakit'] + $perSesi[$sesi]['Libur'];
-        $perSesi[$sesi]['Alfa'] = max(0, count($hari) - $tercatat);
-        $total['Alfa'] += $perSesi[$sesi]['Alfa'];
-    }
-    return ['total' => $total, 'perSesi' => $perSesi, 'hari' => $hari];
+    return ['total' => $total, 'perSesi' => $perSesi, 'hari' => $hari, 'sesiList' => $sesiList];
 }
 
 /** Format tanggal Indonesia (dd/mm/yyyy) untuk isi pesan. */
@@ -294,13 +287,15 @@ function waFormatHarian(array $santri, array $rekap, array $periode, string $lem
     $waktuStr = date('H:i') . ' WIB';
 
     $perSesi = $rekap['perSesi'] ?? [];
+    $sesiList = $rekap['sesiList'] ?? sesiNames(getSettings());
     $lines = [];
-    foreach (WA_SESI_REKAP as $sesi) {
-        $st = 'Alfa';
+    foreach ($sesiList as $sesi) {
+        $st = 'Belum Diabsen';
         $ket = $perSesi[$sesi]['_keterangan'] ?? '';
         if (!empty($perSesi[$sesi]['Hadir'])) $st = 'Hadir';
         elseif (!empty($perSesi[$sesi]['Izin'])) $st = 'Izin' . ($ket !== '' ? " ({$ket})" : '');
         elseif (!empty($perSesi[$sesi]['Sakit'])) $st = 'Sakit' . ($ket !== '' ? " ({$ket})" : '');
+        elseif (!empty($perSesi[$sesi]['Alfa'])) $st = 'Alfa';
         elseif (!empty($perSesi[$sesi]['Libur'])) $st = 'Libur';
         $sesiPad = str_pad($sesi, 13, ' ');
         $lines[] = "• {$sesiPad} : {$st}";
@@ -715,6 +710,11 @@ function waJalankanReminder(?DateTimeImmutable $now = null): array {
         'pemicu' => [],
     ];
 
+    if (!featureEnabled($settings, 'whatsapp')) {
+        $hasil['ok'] = false;
+        $hasil['detail'] = 'Modul WhatsApp belum diaktifkan.';
+        return $hasil;
+    }
     if (!waAutoEnabled($settings)) {
         $hasil['ok'] = false;
         $hasil['detail'] = 'WhatsApp Otomatis sedang nonaktif.';

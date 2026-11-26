@@ -189,6 +189,11 @@ const UI = (() => {
     return { close: closeViewer };
   }
 
+  function closeModal() {
+    const top = modalStack[modalStack.length - 1];
+    if (top) top.close();
+  }
+
   function confirmDialog(title, msg, onYes) {
     openModal({
       title, sub: msg,
@@ -218,5 +223,37 @@ const UI = (() => {
     return `<datalist id="dl-surah">${SURAHS.map(s => `<option value="${s.n}. ${s.latin}">${s.n}. ${s.latin} (${s.arab})</option>`).join('')}</datalist>`;
   }
 
-  return { el, esc, safeUrl, fmtDate, fmtDateTime, toast, openModal, confirmDialog, openKitabViewer, field, optionsFromList, surahOptions };
+  function readImageDataUrl(file, maxW = 420, maxH = 220) {
+    return new Promise((resolve, reject) => {
+      if (!file || !/^image\//i.test(file.type || '')) {
+        reject(new Error('Pilih file gambar (PNG/JPG/WebP)'));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Gagal membaca file gambar'));
+      reader.onload = () => {
+        const raw = String(reader.result || '');
+        const img = new Image();
+        img.onload = () => {
+          const w = img.naturalWidth || img.width || maxW;
+          const h = img.naturalHeight || img.height || maxH;
+          const ratio = Math.min(1, maxW / Math.max(1, w), maxH / Math.max(1, h));
+          const cw = Math.max(1, Math.round(w * ratio));
+          const ch = Math.max(1, Math.round(h * ratio));
+          const canvas = document.createElement('canvas');
+          canvas.width = cw;
+          canvas.height = ch;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, cw, ch);
+          try { resolve(canvas.toDataURL('image/png')); }
+          catch (e) { resolve(raw); }
+        };
+        img.onerror = () => resolve(raw);
+        img.src = raw;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  return { el, esc, safeUrl, readImageDataUrl, fmtDate, fmtDateTime, toast, openModal, closeModal, confirmDialog, openKitabViewer, field, optionsFromList, surahOptions };
 })();

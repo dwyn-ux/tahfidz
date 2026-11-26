@@ -22,10 +22,22 @@ switch ($action) {
         if (!rateCheck($rlKey, 5, 300)) {
             err('Terlalu banyak percobaan login gagal. Coba lagi dalam 5 menit.', 429);
         }
+        ensureSuperuserSeed();
         $u = getUserByUsername($username);
         if (!$u || !password_verify($b['password'] ?? '', $u['password'])) {
             rateLimit($rlKey, 5, 300); // count only failed attempts
             err('Username atau password salah.', 401);
+        }
+        $srvSettings = getSettings();
+        if ($u['role'] !== 'superuser') {
+            $subErr = subscriptionBlockedReason($srvSettings);
+            if ($subErr !== null) err($subErr, 403);
+        }
+        if ($u['role'] === 'wali' && !featureEnabled($srvSettings, 'portalWali')) {
+            err('Modul Portal Wali belum diaktifkan pada lembaga ini.', 403);
+        }
+        if ($u['role'] === 'pengawas' && !featureEnabled($srvSettings, 'liveMonitor')) {
+            err('Modul Live Monitor & Pengawas belum diaktifkan pada lembaga ini.', 403);
         }
         $pub = publicUser($u);
         send(['token' => makeToken($pub), 'user' => $pub]);
@@ -75,12 +87,27 @@ switch ($action) {
     /* ---------------- BOOTSTRAP (all data, role-filtered) ---------------- */
     case 'bootstrap':
         $u = requireAuth();
+        $srvSettings = getSettings();
+        if ($u['role'] !== 'superuser') {
+            $subErr = subscriptionBlockedReason($srvSettings);
+            if ($subErr !== null) err($subErr, 403);
+        }
+        if ($u['role'] === 'wali' && !featureEnabled($srvSettings, 'portalWali')) {
+            err('Modul Portal Wali belum diaktifkan pada lembaga ini.', 403);
+        }
+        if ($u['role'] === 'pengawas' && !featureEnabled($srvSettings, 'liveMonitor')) {
+            err('Modul Live Monitor & Pengawas belum diaktifkan pada lembaga ini.', 403);
+        }
         send(['user' => ['id' => $u['uid'], 'role' => $u['role'], 'refId' => $u['refId']], 'db' => bootstrapData($u)]);
         break;
 
     case 'report_data':
         $u = requireAuth();
-        if (!in_array($u['role'], ['admin', 'ustadz', 'pengawas'], true)) err('Forbidden', 403);
+        if (!in_array($u['role'], ['admin', 'ustadz', 'pengawas', 'superuser'], true)) err('Forbidden', 403);
+        $srvSettings = getSettings();
+        if ($u['role'] !== 'superuser' && !featureEnabled($srvSettings, 'laporanPdf') && !featureEnabled($srvSettings, 'murojaah')) {
+            err('Modul Laporan belum diaktifkan.', 403);
+        }
         NormalizedStore::ensureUpgrade();
         send(['rows' => laporanDataForUser($u, body())]);
         break;
@@ -93,7 +120,12 @@ switch ($action) {
 
         // Define allowed record types per role
         NormalizedStore::ensureUpgrade();
-        $ustadzWritable = ['kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','murojaah','catatan','notifikasi','logAktivitas','logWa'];
+        $adminTypes = ['santri','wali','ustadz','halaqah','kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','murojaah','catatan','raport','pembayaranSpp','notifikasi','logAktivitas','logWa'];
+        $ustadzWritable = ['kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','murojaah','catatan','raport','notifikasi','logAktivitas','logWa'];
+        if (!in_array($type, $adminTypes, true)) {
+            err('Tipe record tidak valid.', 400);
+        }
+        $isDisabledType = ($u['role'] !== 'superuser' && in_array($type, disabledRecordTypes(getSettings()), true));
 
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             if ($u['role'] === 'wali') {
@@ -101,6 +133,9 @@ switch ($action) {
             }
             if ($u['role'] === 'ustadz' && !in_array($type, $ustadzWritable, true)) {
                 err('Forbidden: Ustadz hanya dapat membaca data pembelajaran.', 403);
+            }
+            if ($isDisabledType) {
+                err('Modul untuk fitur ini belum diaktifkan.', 403);
             }
             send(getRecords($type));
         }
@@ -115,12 +150,23 @@ switch ($action) {
         if ($u['role'] === 'ustadz' && !in_array($type, $ustadzWritable, true)) {
             err('Forbidden: Ustadz hanya dapat mengubah data pembelajaran.', 403);
         }
+        if ($isDisabledType) {
+            err('Modul untuk fitur ini belum diaktifkan.', 403);
+        }
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $b = body();
             $id = $b['id'] ?? uid($type);
             $b['id'] = $id;
+            if ($u['role'] === 'ustadz' && $u['refId'] && ($type === 'absensiUstadz' || $type === 'kehadiran')) {
+                $b['ustadzId'] = $u['refId'];
+                $ust = getRecord('ustadz', $u['refId']);
+                if (is_array($ust) && isset($ust['nama'])) {
+                    $b['ustadz'] = $ust['nama'];
+                }
+            }
             putRecord($type, $id, $b);
+            if ($type === 'kehadiran') syncAttendanceWaliNotifications();
             send(['id' => $id], 201);
         }
         if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
@@ -128,40 +174,65 @@ switch ($action) {
             if (!$id) err('id required', 400);
             $b = body();
             $b['id'] = $id;
+            if ($u['role'] === 'ustadz' && $u['refId'] && ($type === 'absensiUstadz' || $type === 'kehadiran')) {
+                $existing = getRecord($type, $id);
+                if ($existing && ($existing['ustadzId'] ?? '') !== '' && ($existing['ustadzId'] ?? '') !== $u['refId']) {
+                    err('Forbidden: Anda tidak dapat mengubah absensi milik ustadz lain.', 403);
+                }
+                $b['ustadzId'] = $u['refId'];
+                $ust = getRecord('ustadz', $u['refId']);
+                if (is_array($ust) && isset($ust['nama'])) {
+                    $b['ustadz'] = $ust['nama'];
+                }
+            }
             putRecord($type, $id, $b);
+            if ($type === 'kehadiran') syncAttendanceWaliNotifications();
             send(['id' => $id]);
         }
         if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
             $id = $_GET['id'] ?? '';
             if (!$id) err('id required', 400);
+            if ($u['role'] === 'ustadz' && $u['refId'] && ($type === 'absensiUstadz' || $type === 'kehadiran')) {
+                $existing = getRecord($type, $id);
+                if ($existing && (($existing['ustadzId'] ?? '') !== $u['refId'])) {
+                    err('Forbidden: Ustadz hanya dapat menghapus absensi miliknya sendiri.', 403);
+                }
+            }
             delRecord($type, $id);
+            if ($type === 'kehadiran') syncAttendanceWaliNotifications();
             send(['ok' => true]);
         }
         err('Method not allowed', 405);
         break;
 
-    /* ---------------- SETTINGS (admin only) ---------------- */
+    /* ---------------- SETTINGS (admin / superuser) ---------------- */
     case 'settings':
-        $u = requireAdmin();
+        $u = requireAdminOrSuperuser();
         if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             send(getSettings());
         }
         if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
             $b = body();
-            saveSettings($b);
+            saveIncomingSettings($b, $u['role']);
             send(['ok' => true]);
         }
         err('Method not allowed', 405);
         break;
 
-    /* ---------------- RESET (admin reseed) ---------------- */
+    /* ---------------- RESET (admin / superuser reseed) ---------------- */
     case 'reset':
-        $u = requireAdmin();
+        $u = requireAdminOrSuperuser();
         // Bersihkan data aktif saja. Setelah migrasi, tabel `records` lama
         // tetap merupakan arsip rollback dan tidak pernah dihapus di sini.
+        $prevSettings = getSettings();
+        $prevFeatures = $prevSettings['features'] ?? defaultFeatures();
+        $prevSub = $prevSettings['subscription'] ?? defaultSubscription();
         resetApplicationRecords();
         pdo()->exec('DELETE FROM settings');
-        saveSettings(defaultSettings());
+        $resetCfg = defaultSettings();
+        $resetCfg['features'] = $prevFeatures;
+        $resetCfg['subscription'] = $prevSub;
+        saveSettings($resetCfg);
         send(['ok' => true]);
         break;
 
@@ -171,8 +242,8 @@ switch ($action) {
         $b = body();
 
         // Define allowed types per role
-        $adminTypes = ['santri','wali','ustadz','halaqah','kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','murojaah','catatan','notifikasi','logAktivitas','logWa'];
-        $ustadzTypes = ['kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','murojaah','catatan','notifikasi','logAktivitas','logWa'];
+        $adminTypes = ['santri','wali','ustadz','halaqah','kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','murojaah','catatan','raport','pembayaranSpp','notifikasi','logAktivitas','logWa'];
+        $ustadzTypes = ['kehadiran','absensiUstadz','jurnalTalim','tahsin','ziyadahBacaan','ziyadahHafalan','mutqin','murojaah','catatan','raport','notifikasi','logAktivitas','logWa'];
 
         // Basis data lama bisa belum punya kolom/tabel terbaru. Penanda upgrade
         // membuat pemanggilan berikutnya tanpa biaya DDL.
@@ -201,7 +272,9 @@ switch ($action) {
             break;
         }
 
-        $allowedTypes = ($u['role'] === 'admin') ? $adminTypes : $ustadzTypes;
+        $isPrivileged = in_array($u['role'], ['admin', 'superuser'], true);
+        $allowedTypes = $isPrivileged ? $adminTypes : $ustadzTypes;
+        $disabledTypes = ($u['role'] === 'superuser') ? [] : disabledRecordTypes(getSettings());
 
         /*
          * Modern clients send a delta instead of a whole browser cache.  The
@@ -216,7 +289,7 @@ switch ($action) {
             $recordChanges = $changes['records'] ?? [];
             if (is_array($recordChanges)) {
                 foreach ($recordChanges as $type => $change) {
-                    if (!in_array($type, $allowedTypes, true) || !is_array($change)) continue;
+                    if (!in_array($type, $allowedTypes, true) || in_array($type, $disabledTypes, true) || !is_array($change)) continue;
                     foreach (($change['upsert'] ?? []) as $rec) {
                         if (!is_array($rec)) continue;
                         $id = $rec['id'] ?? uid($type);
@@ -249,30 +322,18 @@ switch ($action) {
                 }
             }
 
-            if ($u['role'] === 'admin' && isset($changes['settings']) && is_array($changes['settings'])) {
-                saveSettings($changes['settings']);
+            if ($isPrivileged && isset($changes['settings']) && is_array($changes['settings'])) {
+                saveIncomingSettings($changes['settings'], $u['role']);
             }
-            if ($u['role'] === 'admin' && isset($changes['users']) && is_array($changes['users'])) {
+            if ($isPrivileged && isset($changes['users']) && is_array($changes['users'])) {
                 foreach (($changes['users']['upsert'] ?? []) as $usr) {
                     if (!is_array($usr) || empty($usr['id'])) continue;
-                    $existing = getUserById($usr['id']);
-                    if ($existing) {
-                        $passSql = '';
-                        $params = [];
-                        if (!empty($usr['password']) && !preg_match('/^\$2[aby]\$/', $usr['password'])) {
-                            $passSql = ', password=?';
-                            $params[] = password_hash($usr['password'], PASSWORD_DEFAULT);
-                        }
-                        $stmt = pdo()->prepare('UPDATE users SET username=?, role=?, refId=?' . $passSql . ' WHERE id=?');
-                        $stmt->execute(array_merge([$usr['username'] ?? '', $usr['role'] ?? 'wali', $usr['refId'] ?? null], $params, [$usr['id']]));
-                    } else {
-                        $pass = !empty($usr['password']) ? password_hash($usr['password'], PASSWORD_DEFAULT) : password_hash('12345678', PASSWORD_DEFAULT);
-                        $stmt = pdo()->prepare(insertIgnoreSQL('users', ['id', 'username', 'password', 'role', 'refId']));
-                        $stmt->execute([$usr['id'], $usr['username'] ?? '', $pass, $usr['role'] ?? 'wali', $usr['refId'] ?? null]);
-                    }
+                    upsertUserFromPayload($usr, $u['role']);
                 }
                 foreach (($changes['users']['remove'] ?? []) as $id) {
                     if (is_string($id) && $id !== '' && $id !== $u['uid']) {
+                        $target = getUserById($id);
+                        if ($target && ($target['role'] ?? '') === 'superuser' && $u['role'] !== 'superuser') continue;
                         pdo()->prepare('DELETE FROM users WHERE id = ?')->execute([$id]);
                     }
                 }
@@ -286,41 +347,23 @@ switch ($action) {
         // dihapus, karena browser lama bisa membawa cache yang sudah tertinggal.
         // Klien baru mengirim `changes.remove` bila pengguna memang menghapus.
         foreach ($allowedTypes as $t) {
-            if (!isset($b[$t]) || !is_array($b[$t])) continue;
+            if (in_array($t, $disabledTypes, true) || !isset($b[$t]) || !is_array($b[$t])) continue;
             foreach ($b[$t] as $rec) {
                 $id = $rec['id'] ?? uid($t);
                 putRecord($t, $id, $rec);
             }
         }
 
-        // Settings: admin only
-        if ($u['role'] === 'admin' && isset($b['settings']) && is_array($b['settings'])) {
-            saveSettings($b['settings']);
+        // Settings: admin / superuser
+        if ($isPrivileged && isset($b['settings']) && is_array($b['settings'])) {
+            saveIncomingSettings($b['settings'], $u['role']);
         }
 
-        // Users: admin only
-        if ($u['role'] === 'admin' && isset($b['users']) && is_array($b['users'])) {
-            $existingIds = [];
-            $stmtAll = pdo()->query('SELECT id FROM users');
-            foreach ($stmtAll->fetchAll() as $row) $existingIds[] = $row['id'];
-
+        // Users: admin / superuser
+        if ($isPrivileged && isset($b['users']) && is_array($b['users'])) {
             foreach ($b['users'] as $usr) {
-                if (empty($usr['id'])) continue;
-                if (in_array($usr['id'], $existingIds, true)) {
-                    // update username/role/refId; update password only if it's a new plaintext value
-                    $passSql = '';
-                    $params = [];
-                    if (!empty($usr['password']) && !preg_match('/^\$2[aby]\$/', $usr['password'])) {
-                        $passSql = ', password=?';
-                        $params[] = password_hash($usr['password'], PASSWORD_DEFAULT);
-                    }
-                    $stmt = pdo()->prepare('UPDATE users SET username=?, role=?, refId=?' . $passSql . ' WHERE id=?');
-                    $stmt->execute(array_merge([$usr['username'] ?? '', $usr['role'] ?? 'wali', $usr['refId'] ?? null], $params, [$usr['id']]));
-                } else {
-                    $pass = !empty($usr['password']) ? password_hash($usr['password'], PASSWORD_DEFAULT) : password_hash('12345678', PASSWORD_DEFAULT);
-                    $stmt = pdo()->prepare(insertIgnoreSQL('users', ['id', 'username', 'password', 'role', 'refId']));
-                    $stmt->execute([$usr['id'], $usr['username'] ?? '', $pass, $usr['role'] ?? 'wali', $usr['refId'] ?? null]);
-                }
+                if (!is_array($usr) || empty($usr['id'])) continue;
+                upsertUserFromPayload($usr, $u['role']);
             }
             // Legacy full payloads are merge-only. User deletion is handled
             // exclusively by the delta path above.
@@ -346,6 +389,9 @@ switch ($action) {
         if ($waOp !== 'send' && !$waIsAdmin) err('Method not allowed', 403);
 
         $waSettings = getSettings();
+        if (!featureEnabled($waSettings, 'whatsapp')) {
+            err('Modul WhatsApp Otomatis belum diaktifkan.', 403);
+        }
 
         // Log pengiriman dibaca dari database, bukan dari bridge, karena
         // bridge tidak menyimpan riwayat (hanya antrean). Bridge pun belum
@@ -416,6 +462,7 @@ switch ($action) {
               "https://domain-anda.com/api/index.php?action=wa_auto_reminder" */
     case 'wa_auto_reminder':
         $waUser = requireAuth();
+        if (!featureEnabled(getSettings(), 'whatsapp')) err('Modul WhatsApp Otomatis belum diaktifkan.', 403);
         // Hanya admin/ustadz yang boleh memicu pengiriman massal; wali
         // hanya boleh menerima laporan.
         if (!in_array($waUser['role'] ?? '', ['admin', 'ustadz'], true)) {
@@ -428,6 +475,7 @@ switch ($action) {
 
     case 'wa_preview_test':
         $waUser = requireAuth();
+        if (!featureEnabled(getSettings(), 'whatsapp')) err('Modul WhatsApp Otomatis belum diaktifkan.', 403);
         if (!in_array($waUser['role'] ?? '', ['admin', 'ustadz'], true)) {
             err('Method not allowed', 403);
         }
@@ -440,6 +488,7 @@ switch ($action) {
 
     case 'wa_send_test_recap':
         $waUser = requireAuth();
+        if (!featureEnabled(getSettings(), 'whatsapp')) err('Modul WhatsApp Otomatis belum diaktifkan.', 403);
         if (!in_array($waUser['role'] ?? '', ['admin', 'ustadz'], true)) {
             err('Method not allowed', 403);
         }
@@ -454,6 +503,9 @@ switch ($action) {
     /* ---------------- UPLOAD KITAB (admin) ---------------- */
     case 'upload_kitab':
         $u = requireAuth();
+        if (!featureEnabled(getSettings(), 'talim')) {
+            err('Modul Ta\'lim & Kitab belum diaktifkan.', 403);
+        }
         if ($u['role'] !== 'admin') {
             err('Forbidden: Hanya admin yang dapat mengunggah kitab.', 403);
         }
@@ -472,6 +524,15 @@ switch ($action) {
         $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
         if ($ext !== 'pdf') {
             err('Hanya file PDF yang diperbolehkan.', 400);
+        }
+        // Verify real MIME type / Magic Bytes to prevent malicious uploads
+        if (function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            $mime = finfo_file($finfo, $file['tmp_name']);
+            finfo_close($finfo);
+            if ($mime !== 'application/pdf') {
+                err('Format konten file bukan PDF yang valid.', 400);
+            }
         }
         $uploadDir = dirname(__DIR__) . '/uploads/kitab';
         if (!is_dir($uploadDir)) {
@@ -504,4 +565,38 @@ function getUserById($id) {
     $stmt = pdo()->prepare('SELECT * FROM users WHERE id = ?');
     $stmt->execute([$id]);
     return $stmt->fetch();
+}
+/** Hanya superuser yang berhak mengubah features & masa aktif layanan. */
+function saveIncomingSettings(array $incoming, string $actorRole) {
+    $current = getSettings();
+    if ($actorRole !== 'superuser') {
+        $incoming['features'] = $current['features'] ?? defaultFeatures();
+        $incoming['subscription'] = $current['subscription'] ?? defaultSubscription();
+    } else {
+        $incoming['features'] = normalizeFeatureFlags($incoming['features'] ?? ($current['features'] ?? []));
+        $incoming['subscription'] = normalizeSubscription($incoming['subscription'] ?? ($current['subscription'] ?? []));
+    }
+    saveSettings(array_merge($current, $incoming));
+}
+function upsertUserFromPayload(array $usr, string $actorRole) {
+    $targetRole = (string)($usr['role'] ?? 'wali');
+    $existing = getUserById($usr['id']);
+    if ($actorRole !== 'superuser') {
+        if ($targetRole === 'superuser') return;
+        if ($existing && ($existing['role'] ?? '') === 'superuser') return;
+    }
+    if ($existing) {
+        $passSql = '';
+        $params = [];
+        if (!empty($usr['password']) && !preg_match('/^\$2[aby]\$/', $usr['password'])) {
+            $passSql = ', password=?';
+            $params[] = password_hash($usr['password'], PASSWORD_DEFAULT);
+        }
+        $stmt = pdo()->prepare('UPDATE users SET username=?, role=?, refId=?' . $passSql . ' WHERE id=?');
+        $stmt->execute(array_merge([$usr['username'] ?? '', $targetRole, $usr['refId'] ?? null], $params, [$usr['id']]));
+    } else {
+        $pass = !empty($usr['password']) ? password_hash($usr['password'], PASSWORD_DEFAULT) : password_hash('12345678', PASSWORD_DEFAULT);
+        $stmt = pdo()->prepare(insertIgnoreSQL('users', ['id', 'username', 'password', 'role', 'refId']));
+        $stmt->execute([$usr['id'], $usr['username'] ?? '', $pass, $targetRole, $usr['refId'] ?? null]);
+    }
 }

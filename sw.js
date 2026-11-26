@@ -2,7 +2,7 @@
    Tahfidzku — Service Worker (PWA & Offline & Notifications)
    ============================================================ */
 
-const CACHE_NAME = 'tahfidzku-cache-v2';
+const CACHE_NAME = 'tahfidzku-cache-v3';
 const CORE_ASSETS = [
   './',
   './index.html',
@@ -23,6 +23,8 @@ const CORE_ASSETS = [
   './assets/icons/icon-512.png',
   './assets/icons/icon-maskable-192.png',
   './assets/icons/icon-maskable-512.png',
+  './assets/icons/notif-icon.png',
+  './assets/icons/notif-badge.png',
   './assets/icons/icon.svg'
 ];
 
@@ -108,8 +110,8 @@ self.addEventListener('push', (event) => {
   let data = {
     title: 'Tahfidzku',
     body: 'Ada pembaruan data hafalan/absensi di Tahfidzku.',
-    icon: 'assets/icons/icon-192.png',
-    badge: 'assets/icons/icon-192.png',
+    icon: 'assets/icons/notif-icon.png',
+    badge: 'assets/icons/notif-badge.png',
     data: './index.html'
   };
 
@@ -124,8 +126,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: data.icon || 'assets/icons/icon-192.png',
-    badge: data.badge || 'assets/icons/icon-192.png',
+    icon: data.icon || 'assets/icons/notif-icon.png',
+    badge: data.badge || 'assets/icons/notif-badge.png',
     vibrate: [150, 80, 150],
     data: data.data || './index.html',
     actions: [
@@ -176,8 +178,8 @@ self.addEventListener('message', (event) => {
     const title = payload.title || 'Tahfidzku';
     const options = {
       body: payload.body || 'Pemberitahuan dari Tahfidzku',
-      icon: payload.icon || 'assets/icons/icon-192.png',
-      badge: payload.badge || 'assets/icons/icon-192.png',
+      icon: payload.icon || 'assets/icons/notif-icon.png',
+      badge: payload.badge || 'assets/icons/notif-badge.png',
       vibrate: [150, 80, 150],
       data: payload.url || './index.html',
       tag: payload.tag || 'tahfidzku-notif-' + Date.now()

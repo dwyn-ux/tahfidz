@@ -84,7 +84,7 @@ const PWA = (() => {
     window.addEventListener('appinstalled', () => {
       deferredPrompt = null;
       if (typeof UI !== 'undefined' && UI.toast) {
-        UI.toast('🎉 Tahfidzku berhasil diinstall sebagai aplikasi!', 'success');
+        UI.toast('Tahfidzku berhasil diinstall sebagai aplikasi!', 'success');
       }
       renderInstallButtons();
     });
@@ -110,13 +110,13 @@ const PWA = (() => {
   function showIOSInstallModal() {
     if (typeof UI !== 'undefined' && UI.openModal) {
       UI.openModal({
-        title: '📲 Pasang Aplikasi di iPhone / iPad',
+        title: 'Pasang Aplikasi di iPhone / iPad',
         bodyHTML: `
           <div style="font-size:14px;line-height:1.6">
             <p>Untuk menginstall <b>Tahfidzku</b> di perangkat Apple (iOS / iPadOS):</p>
             <ol style="padding-left:20px;margin:12px 0">
               <li style="margin-bottom:8px">Ketuk tombol <b>Bagikan (Share)</b> <span style="font-size:18px">⎋</span> di bilah bawah browser Safari.</li>
-              <li style="margin-bottom:8px">Gulir ke bawah dan pilih <b>Tambahkan ke Layar Utama (Add to Home Screen)</b> <span style="font-size:18px">➕</span>.</li>
+              <li style="margin-bottom:8px">Gulir ke bawah dan pilih <b>Tambahkan ke Layar Utama (Add to Home Screen)</b>.</li>
               <li>Ketuk <b>Tambah (Add)</b> di pojok kanan atas.</li>
             </ol>
             <p class="muted" style="font-size:12px">Setelah terpasang, ikon Tahfidzku akan muncul di layar utama seperti aplikasi bawaan.</p>
@@ -182,8 +182,8 @@ const PWA = (() => {
 
     const payload = Object.assign({
       body: '',
-      icon: 'assets/icons/icon-192.png',
-      badge: 'assets/icons/icon-192.png',
+      icon: 'assets/icons/notif-icon.png',
+      badge: 'assets/icons/notif-badge.png',
       vibrate: [150, 80, 150],
       tag: 'tahfidzku-' + Date.now(),
       data: options.url || './index.html'

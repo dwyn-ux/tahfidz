@@ -12,7 +12,7 @@ final class NormalizedStore {
     // dinaikkan setiap kali ada tabel baru; ensureSchema() bersifat
     // idempotent (CREATE TABLE IF NOT EXISTS + kolom aditif), jadi instalasi
     // lama otomatis mendapat tabel baru tanpa kehilangan data.
-    public const UPGRADE_NAME = '2026_11_murojaah_table';
+    public const UPGRADE_NAME = '2026_11_raport_table';
 
     /**
      * Pemetaan nama rekaman yang dipakai frontend ke tabel dan kolom SQL.
@@ -165,6 +165,26 @@ final class NormalizedStore {
                     'tanggal' => ['tanggal', $date], 'isi' => ['isi', $text],
                 ],
                 'indexes' => [['santri_id', 'tanggal'], ['ustadz_id', 'tanggal']],
+            ],
+            'raport' => [
+                'table' => 'raport',
+                'fields' => [
+                    'santriId' => ['santri_id', $short], 'ustadzId' => ['ustadz_id', $short],
+                    'tahunAjaran' => ['tahun_ajaran', $short], 'semester' => ['semester', $short],
+                    'sikap' => ['sikap', $short], 'catatan' => ['catatan', $text],
+                    'rekomendasi' => ['rekomendasi', $text], '_created' => ['created_ms', $integer],
+                ],
+                'indexes' => [['santri_id', 'tahun_ajaran', 'semester'], ['ustadz_id']],
+            ],
+            'pembayaranSpp' => [
+                'table' => 'pembayaran_spp',
+                'fields' => [
+                    'santriId' => ['santri_id', $short], 'bulan' => ['bulan', $short],
+                    'nominal' => ['nominal', $integer], 'tanggalBayar' => ['tanggal_bayar', $date],
+                    'metode' => ['metode', $short], 'status' => ['status', $short],
+                    'catatan' => ['catatan', $text], '_created' => ['created_ms', $integer],
+                ],
+                'indexes' => [['santri_id', 'bulan'], ['bulan']],
             ],
             'notifikasi' => [
                 'table' => 'notifikasi',
@@ -360,11 +380,38 @@ final class NormalizedStore {
         }
     }
 
-    public static function getRecords(string $type): array {
+    public static function getRecords(string $type, ?int $limit = null): array {
         $definition = self::definition($type);
-        $stmt = pdo()->query('SELECT * FROM ' . self::identifier($definition['table']));
+        $sql = 'SELECT * FROM ' . self::identifier($definition['table']);
+        if ($limit !== null && $limit > 0) {
+            $orderCol = isset($definition['fields']['tanggal']) ? 'tanggal' : 'id';
+            $sql .= ' ORDER BY ' . self::identifier($orderCol) . ' DESC LIMIT ' . (int)$limit;
+        }
+        $stmt = pdo()->query($sql);
         $records = [];
         foreach ($stmt->fetchAll() as $row) $records[] = self::hydrate($definition, $row);
+        return $records;
+    }
+
+    public static function getRecordsForSantri(string $type, array $santriIds): array {
+        $definition = self::definition($type);
+        $santriIds = array_values(array_unique(array_filter($santriIds, 'is_string')));
+        if (!$santriIds) return [];
+
+        $col = ($type === 'santri') ? 'id' : (isset($definition['fields']['santriId']) ? 'santri_id' : null);
+        if (!$col) {
+            return self::getRecords($type);
+        }
+
+        $records = [];
+        foreach (array_chunk($santriIds, 500) as $ids) {
+            $placeholders = implode(', ', array_fill(0, count($ids), '?'));
+            $sql = 'SELECT * FROM ' . self::identifier($definition['table'])
+                . ' WHERE ' . self::identifier($col) . ' IN (' . $placeholders . ')';
+            $stmt = pdo()->prepare($sql);
+            $stmt->execute($ids);
+            foreach ($stmt->fetchAll() as $row) $records[] = self::hydrate($definition, $row);
+        }
         return $records;
     }
 

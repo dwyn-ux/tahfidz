@@ -10,6 +10,76 @@ const TOKEN_KEY = 'tahfidzku_token_v1';
 
 const Store = (() => {
   const DEFAULT_TINGKAT = ['TPQ', 'SD', 'SMP', 'SMA'];
+  const TALIM_SESI = 'Kajian';
+  const TALIM_SESI_ALIASES = ['Kajian', 'Materi Kajian', 'Ta’lim Malam', "Ta'lim Malam"];
+  function isTalimSesi(nama) {
+    const clean = String(nama || '').trim().toLowerCase();
+    return TALIM_SESI_ALIASES.some(a => a.toLowerCase() === clean);
+  }
+  const DEFAULT_SESI_HALAQAH = [
+    { nama: 'Subuh', jamMulai: '04:30', jamSelesai: '06:00' },
+    { nama: 'Ashar', jamMulai: '15:30', jamSelesai: '17:00' },
+    { nama: 'Maghrib', jamMulai: '18:00', jamSelesai: '19:15' },
+    { nama: 'Isya', jamMulai: '19:30', jamSelesai: '21:00' }
+  ];
+  function normalizeSesiHalaqah(raw) {
+    if (!Array.isArray(raw) || !raw.length) return DEFAULT_SESI_HALAQAH.map(x => Object.assign({}, x));
+    const out = [];
+    const seen = new Set();
+    const validTime = (v, fb) => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(v || '')) ? String(v) : fb;
+    raw.forEach(it => {
+      if (!it || typeof it !== 'object') return;
+      const nama = String(it.nama || '').trim();
+      if (!nama || isTalimSesi(nama)) return;
+      const key = nama.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({
+        nama,
+        jamMulai: validTime(it.jamMulai, '07:00'),
+        jamSelesai: validTime(it.jamSelesai, '08:00')
+      });
+    });
+    return out.length ? out : DEFAULT_SESI_HALAQAH.map(x => Object.assign({}, x));
+  }
+  function sesiConfig() {
+    normalizeSettings();
+    return db.settings.sesiHalaqah;
+  }
+  function sesiList() {
+    return sesiConfig().map(s => s.nama);
+  }
+  function sesiRangeLabel(nama) {
+    const found = sesiConfig().find(s => s.nama === nama);
+    return found ? `${found.jamMulai} - ${found.jamSelesai}` : '';
+  }
+  function defaultSesi() {
+    return sesiList()[0] || 'Subuh';
+  }
+  const DEFAULT_FEATURES = {
+    tahsin: true,
+    ziyadah: false,
+    mutqin: false,
+    murojaah: false,
+    presensi: false,
+    talim: false,
+    liveMonitor: false,
+    rekapSetoran: false,
+    laporanPdf: false,
+    raport: false,
+    importExcel: false,
+    exportExcel: false,
+    portalWali: false,
+    notifikasi: false,
+    whatsapp: false,
+    quran: false,
+    spp: false
+  };
+  function hasFeature(key) {
+    const f = db && db.settings && db.settings.features;
+    if (!f || typeof f !== 'object') return true;
+    return f[key] === undefined ? true : Boolean(f[key]);
+  }
   // Setiap nomor kelas punya dua rombongan (A dan B), jadi "Kelas 7A" dan
   // "Kelas 7B". Nilai ini hanya dipakai sebagai daftar awal; admin dapat
   // menambah/menghapusnya lewat Settings → Kelas & Tingkat.
@@ -100,16 +170,19 @@ const Store = (() => {
   // hanya mengirim perubahan, bukan menimpa seluruh database dengan cache
   // yang mungkin sudah tertinggal dari perangkat lain.
   let persisted = null;
-  const recordTypes = ['santri', 'wali', 'ustadz', 'halaqah', 'kehadiran', 'absensiUstadz', 'jurnalTalim', 'tahsin', 'ziyadahBacaan', 'ziyadahHafalan', 'mutqin', 'murojaah', 'catatan', 'notifikasi', 'logAktivitas', 'logWa'];
+  const recordTypes = ['santri', 'wali', 'ustadz', 'halaqah', 'kehadiran', 'absensiUstadz', 'jurnalTalim', 'tahsin', 'ziyadahBacaan', 'ziyadahHafalan', 'mutqin', 'murojaah', 'catatan', 'raport', 'pembayaranSpp', 'notifikasi', 'logAktivitas', 'logWa'];
 
   function defaultDB() {
     return {
       settings: {
         namaLembaga: 'Rumah Tahfidz Al-Hikmah', alamat: 'Jl. Pendidikan No. 10, Jakarta',
+        kota: '', jabatanPimpinan: 'Mudir / Kepala Lembaga', namaPimpinan: '',
         tahunAjaran: '2025/2026', semester: 'Ganjil',
         standarPenilaian: 'A (90-100), B (80-89), C (70-79), D (<70)',
-        jamBelajar: '07:00 - 09:00', tema: 'Claymorphism',
+        jamBelajar: '07:00 - 09:00', sesiHalaqah: DEFAULT_SESI_HALAQAH.map(x => Object.assign({}, x)), tema: 'Claymorphism',
         defaultPasswordFormat: '12345678', logo: '', setoranMulti: false,
+        sppNominal: 100000, sppJatuhTempo: 10,
+        subscription: { status: 'active', billingDate: '', validUntil: '', graceDays: 7, nominal: 0, note: '' },
         tingkat: DEFAULT_TINGKAT.slice(), kelasPerTingkat: defaultKelasPerTingkat(), talimMapel: [],
         talimMalam: { ustadzIds: [], judulKitab: '', bab: '' },
         juzOrder: [30,29,28,27,26,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25],
@@ -123,7 +196,7 @@ const Store = (() => {
       users: [], santri: [], wali: [], ustadz: [], halaqah: [],
       tingkat: DEFAULT_TINGKAT.slice(), kelas: [],
       levelTahfidz: ['Tahsin', 'Ziyadah', 'Mutqin'],
-      kehadiran: [], absensiUstadz: [], jurnalTalim: [], tahsin: [], ziyadahBacaan: [], ziyadahHafalan: [], mutqin: [], murojaah: [], catatan: [],
+      kehadiran: [], absensiUstadz: [], jurnalTalim: [], tahsin: [], ziyadahBacaan: [], ziyadahHafalan: [], mutqin: [], murojaah: [], catatan: [], raport: [], pembayaranSpp: [],
       tahunAjaran: ['2024/2025', '2025/2026', '2026/2027'], semester: ['Ganjil', 'Genap'],
       notifikasi: [], logAktivitas: [], logWa: [], setoranNotif: []
     };
@@ -144,7 +217,9 @@ const Store = (() => {
     try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
     if (!res.ok) {
       const msg = (data && data.error) ? data.error : ('HTTP ' + res.status + (text ? ' — ' + text.slice(0, 150) : ''));
-      throw new Error(msg);
+      const err = new Error(msg);
+      err.status = res.status;
+      throw err;
     }
     if (!data) {
       throw new Error('Respons server tidak valid (bukan JSON): ' + (text.slice(0, 150) || '(kosong)'));
@@ -213,14 +288,14 @@ const Store = (() => {
       // Data absensi dari versi awal belum memiliki sesi. Anggap sebagai
       // Subuh supaya tetap muncul di rekap, lalu semua input baru memakai
       // sesi yang eksplisit.
-      db.kehadiran = (db.kehadiran || []).map(k => k.sesi ? k : Object.assign({}, k, { sesi: 'Subuh' }));
+      db.kehadiran = (db.kehadiran || []).map(k => k.sesi ? k : Object.assign({}, k, { sesi: defaultSesi() }));
       db.absensiUstadz = db.absensiUstadz || [];
       db.jurnalTalim = db.jurnalTalim || [];
       persisted = snapshot(db);
       invalidateDerivedDataCaches();
       return db;
     } catch (e) {
-      if (String(e.message).includes('Unauthorized') || String(e.message).includes('401')) {
+      if ((e && (e.status === 401 || e.status === 403)) || String(e.message).includes('Unauthorized') || String(e.message).includes('401')) {
         clearSession();
       }
       throw e;
@@ -339,6 +414,7 @@ const Store = (() => {
   // "false". Jangan perlakukan nilai teks tersebut sebagai aktif karena bersifat
   // truthy di JavaScript.
   function waAutoEnabled() {
+    if (!hasFeature('whatsapp')) return false;
     const value = db.settings && db.settings.waAuto;
     return value === true || value === 1 || value === '1' || value === 'true';
   }
@@ -532,7 +608,7 @@ const Store = (() => {
     const format = d => {
       try { return d.split('-').reverse().join('/'); } catch(e) { return d; }
     };
-    return '📋 ' + judul + ' ' + santri.nama + ' (' +
+    return judul + ' ' + santri.nama + ' (' +
       format(dari) + (dari === sampai ? '' : ' - ' + format(sampai)) + '): ' +
       bagian.join(', ') + '.' + (lembaga ? ' — ' + lembaga : '');
   }
@@ -599,6 +675,11 @@ const Store = (() => {
 
   function availablePrograms() {
     return (db.levelTahfidz || ['Tahsin', 'Ziyadah', 'Mutqin']).filter(Boolean);
+  }
+
+  function enabledPrograms() {
+    const map = { Tahsin: 'tahsin', Ziyadah: 'ziyadah', Mutqin: 'mutqin' };
+    return availablePrograms().filter(p => !map[p] || hasFeature(map[p]));
   }
 
   function normalizeProgramList(programs, fallback) {
@@ -789,7 +870,85 @@ const Store = (() => {
     if (!settings.waReportContent || typeof settings.waReportContent !== 'object' || Array.isArray(settings.waReportContent)) {
       settings.waReportContent = { kehadiran: true, rincianSesi: true, hafalan: true, nilai: true, catatan: true };
     }
+    const rawFeat = (settings.features && typeof settings.features === 'object' && !Array.isArray(settings.features)) ? settings.features : {};
+    const normFeat = {};
+    Object.keys(DEFAULT_FEATURES).forEach(k => {
+      normFeat[k] = rawFeat[k] === undefined ? DEFAULT_FEATURES[k] : (rawFeat[k] === true || rawFeat[k] === 1 || rawFeat[k] === '1' || rawFeat[k] === 'true');
+    });
+    settings.features = normFeat;
+    settings.sppNominal = Math.max(0, Number(settings.sppNominal ?? 100000) || 0);
+    const due = parseInt(settings.sppJatuhTempo, 10);
+    settings.sppJatuhTempo = (due >= 1 && due <= 28) ? due : 10;
+    const rawSub = (settings.subscription && typeof settings.subscription === 'object') ? settings.subscription : {};
+    const parsedGrace = parseInt(rawSub.graceDays, 10);
+    const parsedNominal = Number(rawSub.nominal);
+    settings.subscription = {
+      status: rawSub.status === 'suspended' ? 'suspended' : 'active',
+      billingDate: String(rawSub.billingDate || ''),
+      validUntil: String(rawSub.validUntil || ''),
+      graceDays: Number.isFinite(parsedGrace) ? Math.max(0, Math.min(30, parsedGrace)) : 7,
+      nominal: Number.isFinite(parsedNominal) && parsedNominal > 0 ? Math.round(parsedNominal) : 0,
+      note: String(rawSub.note || '')
+    };
+    settings.sesiHalaqah = normalizeSesiHalaqah(settings.sesiHalaqah);
     return settings;
+  }
+
+  function sppConfig() {
+    normalizeSettings();
+    return { nominal: db.settings.sppNominal, dueDay: db.settings.sppJatuhTempo };
+  }
+  function sppNominalFor(santri) {
+    if (santri && santri.sppNominal !== undefined && santri.sppNominal !== null && santri.sppNominal !== '') {
+      const n = Number(santri.sppNominal);
+      if (!Number.isNaN(n) && n >= 0) return n;
+    }
+    return sppConfig().nominal;
+  }
+  function sppStatusSantri(santri, bulan) {
+    const b = bulan || todayStr().slice(0, 7);
+    const cfg = sppConfig();
+    const nominal = sppNominalFor(santri);
+    const dueDate = `${b}-${String(cfg.dueDay).padStart(2, '0')}`;
+    const paidRec = santri ? (db.pembayaranSpp || []).find(p => p.santriId === santri.id && p.bulan === b) : null;
+    let status = 'Belum Bayar';
+    if (paidRec) status = 'Lunas';
+    else if (nominal <= 0) status = 'Bebas';
+    else if (todayStr() > dueDate) status = 'Jatuh Tempo';
+    return { nominal, dueDay: cfg.dueDay, dueDate, paidRec, status };
+  }
+  function isoDaysDiff(a, b) {
+    return Math.round((Date.parse(a + 'T00:00:00Z') - Date.parse(b + 'T00:00:00Z')) / 86400000);
+  }
+  function subscriptionNotice() {
+    normalizeSettings();
+    const sub = db.settings.subscription;
+    if (!sub) return null;
+    if (!sub.validUntil && !sub.billingDate && sub.status !== 'suspended') return null;
+    const today = todayStr();
+    const graceDays = Number.isFinite(Number(sub.graceDays)) ? Number(sub.graceDays) : 7;
+    const suspendDate = sub.validUntil ? tambahHari(sub.validUntil, graceDays > 0 ? graceDays : 1) : '';
+    const effectiveBillingDate = sub.billingDate || (sub.validUntil ? tambahHari(sub.validUntil, -7) : '');
+    const daysLeft = sub.validUntil ? isoDaysDiff(sub.validUntil, today) : null;
+    const daysToSuspend = suspendDate ? isoDaysDiff(suspendDate, today) : null;
+    const isGrace = !!(sub.validUntil && today > sub.validUntil && (!suspendDate || today < suspendDate));
+    const isAutoSuspended = sub.status === 'suspended' || !!(suspendDate && today >= suspendDate);
+    const isBillingDue = !!(effectiveBillingDate && today >= effectiveBillingDate);
+    return {
+      status: sub.status,
+      billingDate: sub.billingDate,
+      effectiveBillingDate,
+      validUntil: sub.validUntil,
+      graceDays,
+      suspendDate,
+      nominal: sub.nominal || 0,
+      note: sub.note || '',
+      daysLeft,
+      daysToSuspend,
+      isBillingDue,
+      isGrace,
+      isAutoSuspended
+    };
   }
 
   // Pengaturan Ta'lim Malam: ustadz pengampu + materi default untuk jurnal.
@@ -1328,7 +1487,7 @@ const Store = (() => {
   async function terapkanLiburLembaga(tanggal) {
     const t = tanggal || todayStr();
     const info = getLiburLembagaInfo(t);
-    const SESI_ALL = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
+    const SESI_ALL = sesiList();
     const sesiArr = (info && info.sesi !== 'semua' && Array.isArray(info.sesi)) ? info.sesi : SESI_ALL;
     const alasan = (info && info.keterangan) ? info.keterangan : 'Libur Lembaga';
 
@@ -1344,7 +1503,7 @@ const Store = (() => {
       db.ustadz.forEach(u => {
         const user = db.users.find(x => x.role === 'ustadz' && x.refId === u.id);
         if (!user) return;
-        const pesan = '🗓️ Libur Lembaga ' + todayLocal(new Date(t + 'T00:00:00')) + ': ' + alasan +
+        const pesan = 'Libur Lembaga ' + todayLocal(new Date(t + 'T00:00:00')) + ': ' + alasan +
           ' (sesi: ' + sesiArr.join(', ') + '). Halaqah tidak perlu diabsen.';
         if (!db.notifikasi.some(n => n.userId === user.id && n.pesan === pesan)) {
           addNotif(user.id, 'ustadz', pesan);
@@ -1386,10 +1545,8 @@ const Store = (() => {
   }
 
   /* ---------- Rekap kehadiran (totalan per periode) ----------
-     Alfa dihitung dari slot yang tidak punya catatan sama sekali, bukan dari
-     status "Alfa": absensi ustadz hanya punya Hadir/Izin/Sakit, dan catatan
-     absensi bisa kosong ketika ustadz belum mencatat. Dengan begitu angka alfa
-     selalu konsisten dengan "total hari x sesi - jumlah catatan". */
+     Alfa hanya dihitung dari catatan berstatus "Alfa" yang dipilih guru/ustadz,
+     bukan otomatis dari slot yang belum diabsen. */
   const SESI_REKAP = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
 
   // Daftar tanggal inklusif. String YYYY-MM-DD bisa dibandingkan leksikografis
@@ -1417,69 +1574,56 @@ const Store = (() => {
     return { Hadir: 0, Izin: 0, Sakit: 0, Libur: 0, Alfa: 0, ...status };
   }
 
-  // Rekap kehadiran satu orang. `slotPerHari` = sesi mana saja yang dihitung,
-  // supaya sesi yang tidak dipakai tidak ikut menambah slot alfa.
-  function rekapKehadiranOrang(records, days, slotPerHari, sesiList) {
+  function rekapKehadiranOrang(records, days, slotPerHari, sesiListArg) {
+    const activeSesi = sesiListArg && sesiListArg.length ? sesiListArg : sesiList();
+    const fallbackSesi = defaultSesi();
     const total = kosongkanAngka();
-    sesiList.forEach(sesi => { total[sesi] = 0; });
+    activeSesi.forEach(sesi => { total[sesi] = 0; });
     const perSesi = {};
-    sesiList.forEach(sesi => { perSesi[sesi] = kosongkanAngka(); });
+    activeSesi.forEach(sesi => { perSesi[sesi] = kosongkanAngka(); });
 
     const daysSet = new Set(days);
     (records || []).forEach(r => {
       if (!daysSet.has(r.tanggal)) return;
-      const sesi = r.sesi || 'Subuh';
-      if (!sesiList.includes(sesi)) return;
+      const sesi = r.sesi || fallbackSesi;
+      if (!activeSesi.includes(sesi)) return;
       perSesi[sesi][r.status] = (perSesi[sesi][r.status] || 0) + 1;
       total[r.status] = (total[r.status] || 0) + 1;
       total[sesi] += 1;
     });
 
-    // Sisa slot kosong dihitung sebagai Alfa supaya total selalu konsisten:
-    // Libur dihitung sebagai tercatat sehingga tidak menjadi Alfa.
-    sesiList.forEach(sesi => {
-      const slot = days.length * (slotPerHari.includes(sesi) ? 1 : 0);
-      const tercatat = (perSesi[sesi].Hadir || 0) + (perSesi[sesi].Izin || 0) + (perSesi[sesi].Sakit || 0) + (perSesi[sesi].Libur || 0);
-      perSesi[sesi].Alfa = Math.max(0, slot - tercatat);
-      total.Alfa += perSesi[sesi].Alfa;
-    });
-    total.slot = days.length * slotPerHari.length;
-    total.slotEfektif = Math.max(0, total.slot - (total.Libur || 0));
-    total.persen = total.slotEfektif > 0 ? Math.round((total.Hadir / total.slotEfektif) * 100) : (total.Hadir ? 100 : 0);
+    const recordedEfektif = (total.Hadir || 0) + (total.Izin || 0) + (total.Sakit || 0) + (total.Alfa || 0);
+    total.slot = recordedEfektif + (total.Libur || 0);
+    total.slotEfektif = recordedEfektif;
+    total.persen = total.slotEfektif > 0 ? Math.round((total.Hadir / total.slotEfektif) * 100) : 0;
     return { total, perSesi };
   }
 
-  // Rekap kehadiran Santri per periode. Kehadiran dihitung satu status per sesi
-  // (paling baru), supaya koreksi absensi tidak terhitung dua kali.
-  function rekapKehadiranSantri(santriId, dari, sampai, sesiList) {
-    const list = sesiList || SESI_REKAP; const allDays = tanggalRange(dari, sampai); const records = dedupeKehadiran(db.kehadiran.filter(k => k.santriId === santriId && allDays.includes(k.tanggal))); const recDates = new Set(records.map(r => r.tanggal)); const days = allDays.filter(tgl => { const d = new Date(tgl + 'T12:00:00').getDay(); return (d >= 1 && d <= 5) || recDates.has(tgl); }); return rekapKehadiranOrang(records, days, list, list);
+  function rekapKehadiranSantri(santriId, dari, sampai, sesiArg) {
+    const list = sesiArg && sesiArg.length ? sesiArg : sesiList();
+    const allDays = tanggalRange(dari, sampai);
+    const records = dedupeKehadiran(db.kehadiran.filter(k => k.santriId === santriId && allDays.includes(k.tanggal)));
+    return rekapKehadiranOrang(records, allDays, list, list);
   }
-  function _oldRekapKehadiranSantri(santriId, dari, sampai, sesiList) {
-    const list = sesiList || SESI_REKAP;
-    const days = tanggalRange(dari, sampai);
-    const records = dedupeKehadiran(
-      db.kehadiran.filter(k => k.santriId === santriId && days.includes(k.tanggal)));
-    return rekapKehadiranOrang(records, days, list, list);
+  function _oldRekapKehadiranSantri(santriId, dari, sampai, sesiArg) {
+    return rekapKehadiranSantri(santriId, dari, sampai, sesiArg);
   }
 
-  // Rekap kehadiran Ustadz per periode. Alfa = sesi yang tanpa catatan absensi.
-  function rekapKehadiranUstadz(ustadzId, dari, sampai, sesiList) {
-    const list = sesiList || SESI_REKAP; const allDays = tanggalRange(dari, sampai); const records = dedupeAbsensiUstadz(db.absensiUstadz.filter(a => a.ustadzId === ustadzId && allDays.includes(a.tanggal))); const recDates = new Set(records.map(r => r.tanggal)); const days = allDays.filter(tgl => { const d = new Date(tgl + 'T12:00:00').getDay(); return (d >= 1 && d <= 5) || recDates.has(tgl); }); return rekapKehadiranOrang(records, days, list, list);
+  function rekapKehadiranUstadz(ustadzId, dari, sampai, sesiArg) {
+    const list = sesiArg && sesiArg.length ? sesiArg : sesiList();
+    const allDays = tanggalRange(dari, sampai);
+    const records = dedupeAbsensiUstadz(db.absensiUstadz.filter(a => a.ustadzId === ustadzId && allDays.includes(a.tanggal)));
+    return rekapKehadiranOrang(records, allDays, list, list);
   }
-  function _oldRekapKehadiranUstadz(ustadzId, dari, sampai, sesiList) {
-    const list = sesiList || SESI_REKAP;
-    const days = tanggalRange(dari, sampai);
-    const records = dedupeAbsensiUstadz(
-      db.absensiUstadz.filter(a => a.ustadzId === ustadzId && days.includes(a.tanggal)));
-    return rekapKehadiranOrang(records, days, list, list);
+  function _oldRekapKehadiranUstadz(ustadzId, dari, sampai, sesiArg) {
+    return rekapKehadiranUstadz(ustadzId, dari, sampai, sesiArg);
   }
 
-  // Absensi ustadz juga bisa terekam ganda bila ada koreksi cepat; ambil yang
-  // paling baru seperti pada kehadiran santri.
   function dedupeAbsensiUstadz(records) {
     const latest = {};
+    const fallbackSesi = defaultSesi();
     (records || []).forEach(a => {
-      const key = [a.ustadzId, a.tanggal, a.sesi || 'Subuh'].join('|');
+      const key = [a.ustadzId, a.tanggal, a.sesi || fallbackSesi].join('|');
       const prev = latest[key];
       if (!prev || (a._created || 0) >= (prev._created || 0)) latest[key] = a;
     });
@@ -1522,7 +1666,7 @@ const Store = (() => {
   }
 
   function checkSetoranTerlewat() {
-    if (!db.settings.notifActive) return;
+    if (!hasFeature('notifikasi') || !db.settings.notifActive) return;
     const today = todayStr();
     if (!db.setoranNotif) db.setoranNotif = [];
     const key = (sid, tgl) => sid + '\u0000' + tgl;
@@ -1574,7 +1718,7 @@ const Store = (() => {
                 ? ustadzPengampu.map(u => ustadzUsers.get(u.id)).filter(Boolean)
                 : [];
               const tglTxt = UI.fmtDate(tgl);
-              const pesan = '⚠️ ' + s.nama + ' belum setoran pada ' + tglTxt + '. Mohon dampingi anak untuk setoran.';
+              const pesan = s.nama + ' belum setoran pada ' + tglTxt + '. Mohon dampingi anak untuk setoran.';
               const pesanU = s.nama + ' belum setoran pada ' + tglTxt + '.';
               const waliKey = wUser && (wUser.id + '\u0000' + pesan);
               if (wUser && !notificationKeys.has(waliKey)) {
@@ -1606,16 +1750,39 @@ const Store = (() => {
     if (changed) save();
   }
 
+  function raportFor(santriId, tahunAjaran, semester) {
+    return (db.raport || [])
+      .filter(r => r && r.santriId === santriId && (!tahunAjaran || r.tahunAjaran === tahunAjaran) && (!semester || r.semester === semester))
+      .slice()
+      .sort((a, b) => (b._created || 0) - (a._created || 0))[0] || null;
+  }
+
+  function jurnalTalimForSantri(santri, dari, sampai) {
+    if (!santri) return [];
+    const key = talimClassKey(tingkatForSantri(santri), kelasForSantri(santri));
+    return (db.jurnalTalim || [])
+      .filter(j => {
+        if (!j || !padaRentang(j.tanggal, dari, sampai)) return false;
+        const keys = Array.isArray(j.kelasKeys) && j.kelasKeys.length
+          ? j.kelasKeys
+          : (j.tingkat || j.kelas ? [talimClassKey(j.tingkat, j.kelas)] : []);
+        return keys.includes(key);
+      })
+      .slice()
+      .sort((a, b) => String(a.tanggal || '').localeCompare(String(b.tanggal || '')) || ((a._created || 0) - (b._created || 0)));
+  }
+
   return {
     load, laporanData, save, get, reset, uid, log, nowISO, todayStr, invalidateDerivedDataCaches,
     santri: () => (db.santri || []),
     getSettings: () => (db.settings || {}),
+    DEFAULT_FEATURES, hasFeature,
     setToken, getToken, setSession: () => {}, getSession, clearSession, login, logout, changePassword,
     recalcHalaqah, findSantri, findWali, findUstadz, findUstadzByName, findHalaqahById, findHalaqahByName, ustadzIdsForHalaqah, ustadzNamesForHalaqah, halaqahHasUstadz, findHalaqahForUstadz,
-    activeProgramsForSantri, halaqahForSantriProgram, halaqahForSantri, santriHasProgram, santriHasHalaqah, programsForSantriHalaqah, configureSantriPrograms, programSummaryForSantri, halaqahSummaryForSantri,
+    activeProgramsForSantri, enabledPrograms, halaqahForSantriProgram, halaqahForSantri, santriHasProgram, santriHasHalaqah, programsForSantriHalaqah, configureSantriPrograms, programSummaryForSantri, halaqahSummaryForSantri,
     tingkatOptions, kelasOptions, tingkatForSantri, kelasForSantri, normalizeSantriEducation, kelasLabel, educationLabel,
     simpanTingkat, hapusTingkat, simpanKelas, hapusKelas, tingkatAda, kelasDipakaiDiTalim, jumlahSantriKelas, naturalKelasSort,
-    uploadKitab, talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, search,
+    uploadKitab, talimMapel, findTalimMapel, talimClassKey, talimClassFromKey, talimClassLabel, talimAssignmentsForUstadz, talimMalamSettings, jurnalTalimForSantri, TALIM_SESI, TALIM_SESI_ALIASES, isTalimSesi, search,
     waSend, waLog, waReady, waAutoEnabled, waSendWali, waNomorWali, waCleanPhone, healWaliRelations, waStatus, waQrDataUrl, waLogServer,
     waAutoTriggerSettings, waReportContentSettings, waAutoHour, waAutoReminder, waQueueStatus, waStopQueue, waLogout, waPreviewTest, waSendTestRecap, waAbsensiMessage,
     lastZiyadah, lastHafalan, totalHafalanSantri, totalMurojaahSantri, avgNilai, kehadiranBulan, kehadiranRentang, dedupeKehadiran,
@@ -1623,6 +1790,8 @@ const Store = (() => {
     absensiUstadzOf, absensiUstadzRow, absensiUstadzTanggal, absensiUstadzBulan, simpanAbsensiUstadz,
     liburkanHalaqah, batalkanLiburHalaqah, halaqahLiburInfo, getLiburLembaga, isLiburLembaga, getLiburLembagaInfo, tambahLiburLembaga, hapusLiburLembaga, terapkanLiburLembaga,
     rekapKehadiranSantri, rekapKehadiranUstadz, tanggalRange, tambahHari, SESI_REKAP,
+    sesiConfig, sesiList, sesiRangeLabel, defaultSesi,
+    sppConfig, sppNominalFor, sppStatusSantri, subscriptionNotice, raportFor,
     addNotif, notifFor, clearNotifs, checkSetoranTerlewat
   };
 })();

@@ -4,21 +4,72 @@
 const Wali = (() => {
 
   function nav(active) {
-    return [
-      { view: 'wali_dashboard', label: 'Dashboard', active: active === 'wali_dashboard' },
-      { view: 'wali_perkembangan', label: 'Perkembangan', active: active === 'wali_perkembangan' },
-      { view: 'wali_absensi', label: 'Absensi', active: active === 'wali_absensi' },
-      { view: 'wali_catatan', label: 'Catatan', active: active === 'wali_catatan' },
-      { view: 'wali_profil', label: 'Profil', active: active === 'wali_profil' },
-      { view: 'quran', label: 'Al-Qur\'an', active: active === 'quran' }
+    const items = [
+      { view: 'wali_dashboard', label: 'Dashboard', icon: Shared.icon('dashboard'), active: active === 'wali_dashboard' },
+      { view: 'wali_perkembangan', label: 'Perkembangan', icon: Shared.icon('laporan'), active: active === 'wali_perkembangan' },
+      { view: 'wali_raport', feature: 'raport', label: 'Raport', icon: Shared.icon('award'), active: active === 'wali_raport' },
+      { view: 'wali_absensi', feature: 'presensi', label: 'Absensi', icon: Shared.icon('calendar'), active: active === 'wali_absensi' },
+      { view: 'wali_spp', feature: 'spp', label: 'SPP', icon: Shared.icon('award'), active: active === 'wali_spp' },
+      { view: 'wali_catatan', label: 'Catatan', icon: Shared.icon('chat'), active: active === 'wali_catatan' },
+      { view: 'wali_profil', label: 'Profil', icon: Shared.icon('user'), active: active === 'wali_profil' },
+      { view: 'quran', feature: 'quran', label: 'Al-Qur\'an', icon: Shared.icon('quran'), active: active === 'quran' }
     ];
+    return items.filter(it => !it.feature || Store.hasFeature(it.feature));
   }
 
+  let activeSantriId = null;
+  try { activeSantriId = localStorage.getItem('tahfidzku_active_santri'); } catch (_) {}
+
   function mySantri() {
-    const session = Store.getSession();
-    const w = Store.findWali(session.refId);
     const db = Store.get();
-    return w ? db.santri.find(s => s.id === w.santriId) : null;
+    if (!db.santri || !db.santri.length) return null;
+    if (activeSantriId) {
+      const found = db.santri.find(s => s.id === activeSantriId);
+      if (found) return found;
+    }
+    const session = Store.getSession();
+    const w = Store.findWali(session ? session.refId : null);
+    if (w && w.santriId) {
+      const found = db.santri.find(s => s.id === w.santriId);
+      if (found) {
+        activeSantriId = found.id;
+        return found;
+      }
+    }
+    activeSantriId = db.santri[0].id;
+    return db.santri[0];
+  }
+
+  function switchSantri(id) {
+    activeSantriId = id;
+    try { localStorage.setItem('tahfidzku_active_santri', id); } catch (_) {}
+    const currentView = App.currentView ? App.currentView() : 'wali_dashboard';
+    App.navigate(currentView, { replaceHistory: true });
+  }
+
+  function santriSwitcherHtml(activeSantri) {
+    const db = Store.get();
+    if (!db.santri || db.santri.length <= 1) return '';
+    return `
+      <div class="santri-switcher clay-card pad-sm mb" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:var(--slate-50);border:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:34px;height:34px;border-radius:8px;background:var(--primary-light);color:var(--primary);display:grid;place-items:center">
+            ${Shared.icon('users')}
+          </div>
+          <div>
+            <b style="font-size:13px;color:var(--text)">Pilih Santri / Anak:</b>
+            <div class="muted" style="font-size:11.5px">${db.santri.length} anak terdaftar di akun wali ini</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${db.santri.map(s => `
+            <button type="button" class="clay-btn sm ${s.id === activeSantri.id ? 'primary' : 'ghost'}" onclick="Wali.switchSantri('${UI.esc(s.id)}')">
+              ${UI.esc(s.nama)}
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
   }
 
   function ustadzNamesForSantri(santri) {
@@ -42,22 +93,29 @@ const Wali = (() => {
     const db = Store.get();
     const h = Store.totalHafalanSantri(s.id);
     const bulan = Store.todayStr().slice(0, 7);
-    const halaqahKehadiran = Store.kehadiranBulan(s.id, bulan).filter(k => k.sesi !== 'Ta’lim Malam');
-    const hadirSubuh = halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Subuh').length;
-    const hadirAshar = halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Ashar').length;
-    const hadirMaghrib = halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Maghrib').length;
-    const hadirIsya = halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === 'Isya').length;
-    const totalHadir = hadirSubuh + hadirAshar + hadirMaghrib + hadirIsya;
+    const sesiList = Store.sesiList();
+    const halaqahKehadiran = Store.kehadiranBulan(s.id, bulan).filter(k => !Store.isTalimSesi(k.sesi));
+    const hadirPerSesi = sesiList.map(sesi => ({
+      sesi,
+      jam: Store.sesiRangeLabel(sesi),
+      count: halaqahKehadiran.filter(k => k.status === 'Hadir' && k.sesi === sesi).length
+    }));
+    const totalHadir = halaqahKehadiran.filter(k => k.status === 'Hadir').length;
     const totalLibur = halaqahKehadiran.filter(k => k.status === 'Libur').length;
     const totalEfektif = Math.max(0, halaqahKehadiran.length - totalLibur);
     const pct = totalEfektif ? Math.round((totalHadir / totalEfektif) * 100) : 0;
     const lastCat = db.catatan.filter(c => c.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal))[0];
     const ustadzNames = ustadzNamesForSantri(s);
 
+    const hasPresensi = Store.hasFeature('presensi');
+    const hasSpp = Store.hasFeature('spp');
+    const sppNow = hasSpp ? Store.sppStatusSantri(s, bulan) : null;
+    const sppBadgeCls = sppNow ? (sppNow.status === 'Lunas' ? 'green' : sppNow.status === 'Jatuh Tempo' ? 'danger' : sppNow.status === 'Bebas' ? 'gray' : 'warn') : '';
     document.getElementById('view-content').innerHTML = `
+      ${santriSwitcherHtml(s)}
       <div class="grid cols-2">
         <div class="clay-card" style="display:flex;gap:18px;align-items:center">
-          <div class="progress-circle" style="--val:${pct}"><span>${pct}%</span></div>
+          ${hasPresensi ? `<div class="progress-circle" style="--val:${pct}"><span>${pct}%</span></div>` : ''}
           <div>
             <h3>${UI.esc(s.nama)}</h3>
             <div class="muted">${UI.esc(Store.programSummaryForSantri(s))}</div>
@@ -66,21 +124,21 @@ const Wali = (() => {
           </div>
         </div>
         <div class="clay-card">
-          <div class="section-title"> Ringkasan</div>
+          <div class="section-title">Ringkasan</div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span>Total Hafalan</span><b>${h ? formatHafalan(h) : '-'}</b></div>
-          <div class="row" style="justify-content:space-between;padding:6px 0"><span>Kehadiran Bulan Ini</span><b>${totalHadir}/${totalEfektif} (${pct}%)${totalLibur ? ` <span class="muted" style="font-weight:normal;font-size:12px">(Libur: ${totalLibur})</span>` : ''}</b></div>
-          <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Subuh</span><b>${hadirSubuh}</b></div>
-          <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Ashar</span><b>${hadirAshar}</b></div>
-          <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Maghrib</span><b>${hadirMaghrib}</b></div>
-          <div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span> Isya</span><b>${hadirIsya}</b></div>
+          ${hasPresensi ? `
+            <div class="row" style="justify-content:space-between;padding:6px 0"><span>Kehadiran Bulan Ini</span><b>${totalHadir}/${totalEfektif} (${pct}%)${totalLibur ? ` <span class="muted" style="font-weight:normal;font-size:12px">(Libur: ${totalLibur})</span>` : ''}</b></div>
+            ${hadirPerSesi.map(item => `<div class="row" style="justify-content:space-between;padding:6px 0;font-size:13px"><span>${UI.esc(item.sesi)}${item.jam ? ` <span class="muted" style="font-size:11px">(${UI.esc(item.jam)})</span>` : ''}</span><b>${item.count}</b></div>`).join('')}
+          ` : ''}
+          ${sppNow ? `<div class="row" style="justify-content:space-between;padding:6px 0"><span>SPP Bulan Ini</span><b>Rp ${Number(sppNow.nominal).toLocaleString('id-ID')} <span class="badge ${sppBadgeCls} sm">${UI.esc(sppNow.status)}</span></b></div>` : ''}
           <div class="row" style="justify-content:space-between;padding:6px 0"><span>Rata-rata Nilai</span><b>${Store.avgNilai(s.id) || '-'}</b></div>
         </div>
       </div>
       <div class="clay-card mt">
-        <div class="section-title"> Catatan Terakhir Ustadz</div>
+        <div class="section-title">Catatan Terakhir Ustadz</div>
         ${lastCat ? `<div>${UI.esc(lastCat.isi)}</div><div class="muted" style="font-size:12px;margin-top:6px">${UI.fmtDate(lastCat.tanggal)}</div>` : '<div class="empty">Belum ada catatan.</div>'}
       </div>
-      ${renderNotifWali(Store.getSession().userId)}`;
+      ${Store.hasFeature('notifikasi') ? renderNotifWali(Store.getSession().userId) : ''}`;
   }
 
   function renderNotifWali(userId) {
@@ -93,7 +151,7 @@ const Wali = (() => {
       </div>`).join('');
     return `
       <div class="clay-card mt">
-        <div class="section-title"> Notifikasi</div>
+        <div class="section-title">Notifikasi</div>
         ${items}
       </div>`;
   }
@@ -129,40 +187,70 @@ const Wali = (() => {
       value: cakupanHalaman(urutSetoran.slice(0, i + 1)).full.size
     }));
 
+    const hasTahsin = Store.hasFeature('tahsin');
+    const hasZiyadah = Store.hasFeature('ziyadah');
+    const hasMutqin = Store.hasFeature('mutqin');
+    const hasMurojaah = Store.hasFeature('murojaah');
+    const showHafalan = hasZiyadah || hasMutqin;
+
+    const tabs = [
+      showHafalan ? { key: 'ringkasan', label: 'Grafik & Peta' } : null,
+      hasTahsin ? { key: 'tahsin', label: `Tahsin (${tahsin.length})` } : null,
+      hasZiyadah ? { key: 'ziyadah', label: `Ziyadah (${ziy.length})` } : null,
+      hasMutqin ? { key: 'mutqin', label: `Mutqin (${mut.length})` } : null,
+      hasMurojaah ? { key: 'murojaah', label: `Murojaah (${muro.length})` } : null,
+    ].filter(Boolean);
+    const defaultTab = tabs[0] ? tabs[0].key : 'empty';
+
     document.getElementById('view-content').innerHTML = `
-      <div class="grid kpi">
-        ${Shared.statCard('', h ? h.pages + ' hlm' : '-', 'Total Hafalan', '#16A34A')}
-        ${Shared.statCard('', ziy.length, 'Setoran Ziyadah', '#3B82F6')}
-        ${Shared.statCard('', mut.length, 'Murajaah Mutqin', '#FACC15')}
-        ${Shared.statCard('', totalMuro ? totalMuro.pages + ' hlm' : '-', 'Murojaah (terpisah)', '#7E22CE')}
-        ${Shared.statCard('', Store.avgNilai(s.id) || '-', 'Rata² Nilai', '#22C55E')}
+      ${santriSwitcherHtml(s)}
+      <div class="grid kpi mb">
+        ${showHafalan ? Shared.statCard(Shared.icon('quran'), h ? h.pages + ' hlm' : '-', 'Total Hafalan', 'var(--primary)') : ''}
+        ${hasTahsin ? Shared.statCard(Shared.icon('setoran'), tahsin.length, 'Setoran Tahsin', '#0d9488') : ''}
+        ${hasZiyadah ? Shared.statCard(Shared.icon('setoran'), ziy.length, 'Setoran Ziyadah', 'var(--secondary)') : ''}
+        ${hasMutqin ? Shared.statCard(Shared.icon('star'), mut.length, 'Murajaah Mutqin', '#ca8a04') : ''}
+        ${hasMurojaah ? Shared.statCard(Shared.icon('riwayat'), totalMuro ? totalMuro.pages + ' hlm' : '-', 'Murojaah Bebas', '#7e22ce') : ''}
+        ${Shared.statCard(Shared.icon('award'), Store.avgNilai(s.id) || '-', 'Rata² Nilai', '#16a34a')}
       </div>
-      <div class="clay-card mt">
-        <div class="section-title"> Grafik Perkembangan Hafalan</div>
-        ${chartData.length ? Shared.barChart(chartData, Math.max(1, ...chartData.map(d => d.value))) : '<div class="empty">Belum ada data setoran.</div>'}
-      </div>
-      <div class="clay-card mt">
-        <div class="section-title"> Peta Hafalan</div>
-        <div class="muted" style="font-size:12px;margin-bottom:8px">Abu-abu = belum disetor · Kuning = disetor sebagian · Hijau = selesai 1 halaman</div>
-        <div style="overflow:auto;max-height:340px">${Shared.hafalanMapHTML(s.id)}</div>
-      </div>
-      <div class="clay-card mt">
-        <div class="section-title"> Tahsin</div>
+      ${tabs.length ? `<div class="pill-tabs" id="wali-prog-tabs" style="margin-bottom:12px">
+        ${tabs.map(t => `<button class="pill ${t.key === defaultTab ? 'active' : ''}" type="button" data-wp-tab="${t.key}">${t.label}</button>`).join('')}
+      </div>` : '<div class="clay-card"><div class="empty">Belum ada program aktif.</div></div>'}
+      ${showHafalan ? `<div data-wp-panel="ringkasan" ${defaultTab === 'ringkasan' ? '' : 'style="display:none"'}>
+        <div class="clay-card mb">
+          <div class="section-title">Grafik Perkembangan Hafalan</div>
+          ${chartData.length ? Shared.barChart(chartData, Math.max(1, ...chartData.map(d => d.value))) : '<div class="empty">Belum ada data setoran.</div>'}
+        </div>
+        <div class="clay-card">
+          <div class="section-title">Peta Hafalan</div>
+          <div class="muted" style="font-size:12px;margin-bottom:8px">Abu-abu = belum disetor · Kuning = disetor sebagian · Hijau = selesai 1 halaman</div>
+          <div style="overflow:auto;max-height:340px">${Shared.hafalanMapHTML(s.id)}</div>
+        </div>
+      </div>` : ''}
+      ${hasTahsin ? `<div class="clay-card" data-wp-panel="tahsin" ${defaultTab === 'tahsin' ? '' : 'style="display:none"'}>
+        <div class="section-title">Tahsin</div>
         <div class="table-wrap"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Halaman</th><th>Nilai</th><th>Catatan</th></tr></thead><tbody>${tahsinRows || '<tr><td colspan="4"><div class="empty">Belum ada.</div></td></tr>'}</tbody></table></div>
-      </div>
-      <div class="clay-card mt">
-        <div class="section-title"> Ziyadah</div>
+      </div>` : ''}
+      ${hasZiyadah ? `<div class="clay-card" data-wp-panel="ziyadah" ${defaultTab === 'ziyadah' ? '' : 'style="display:none"'}>
+        <div class="section-title">Ziyadah</div>
         <div class="table-wrap"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Setoran</th><th>Total</th><th>Nilai</th></tr></thead><tbody>${ziyRows || '<tr><td colspan="4"><div class="empty">Belum ada.</div></td></tr>'}</tbody></table></div>
-      </div>
-      <div class="clay-card mt">
-        <div class="section-title"> Mutqin</div>
+      </div>` : ''}
+      ${hasMutqin ? `<div class="clay-card" data-wp-panel="mutqin" ${defaultTab === 'mutqin' ? '' : 'style="display:none"'}>
+        <div class="section-title">Mutqin</div>
         <div class="table-wrap"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Murajaah</th><th>Total</th><th>Nilai</th></tr></thead><tbody>${mutRows || '<tr><td colspan="4"><div class="empty">Belum ada.</div></td></tr>'}</tbody></table></div>
-      </div>
-      <div class="clay-card mt">
-        <div class="section-title"> Murojaah (Bebas)</div>
+      </div>` : ''}
+      ${hasMurojaah ? `<div class="clay-card" data-wp-panel="murojaah" ${defaultTab === 'murojaah' ? '' : 'style="display:none"'}>
+        <div class="section-title">Murojaah (Bebas)</div>
         <div class="muted" style="font-size:12px;margin-bottom:8px">${totalMuro ? `${muro.length} setoran · ${totalMuro.ayahs} ayat · <b>${totalMuro.pages} halaman penuh</b>` : 'Belum ada setoran murojaah.'} Angka ini tidak menambah Total Hafalan di atas.</div>
         <div class="table-wrap"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Setoran</th><th>Capaian</th><th>Nilai</th></tr></thead><tbody>${muroRows || '<tr><td colspan="4"><div class="empty">Belum ada.</div></td></tr>'}</tbody></table></div>
-      </div>`;
+      </div>` : ''}`;
+
+    document.querySelectorAll('[data-wp-tab]').forEach(btn => {
+      btn.onclick = () => {
+        const key = btn.dataset.wpTab;
+        document.querySelectorAll('[data-wp-tab]').forEach(b => b.classList.toggle('active', b.dataset.wpTab === key));
+        document.querySelectorAll('[data-wp-panel]').forEach(p => { p.style.display = p.dataset.wpPanel === key ? '' : 'none'; });
+      };
+    });
   }
 
   /* ---------------- Absensi (multi-sesi) ---------------- */
@@ -182,15 +270,16 @@ const Wali = (() => {
       return `<tr><td>${UI.fmtDate(k.tanggal)}</td><td>${k.sesi ? '<span class="pill sm" style="font-size:11px;padding:2px 8px">' + UI.esc(k.sesi) + '</span>' : ''}</td><td><span class="badge ${cls}">${UI.esc(k.status)}</span>${catatanText}</td></tr>`;
     }).join('');
     document.getElementById('view-content').innerHTML = `
+      ${santriSwitcherHtml(s)}
       <div class="grid kpi">
-        ${Shared.statCard('', counts.Hadir, 'Hadir', '#22C55E')}
-        ${Shared.statCard('', counts.Izin, 'Izin', '#FACC15')}
-        ${Shared.statCard('', counts.Sakit, 'Sakit', '#3B82F6')}
-        ${counts.Libur ? Shared.statCard('', counts.Libur, 'Libur', '#A855F7') : ''}
-        ${Shared.statCard('', counts.Alfa, 'Alfa', '#EF4444')}
+        ${Shared.statCard(Shared.icon('presensi'), counts.Hadir, 'Hadir', '#16a34a')}
+        ${Shared.statCard(Shared.icon('setoran'), counts.Izin, 'Izin', '#ca8a04')}
+        ${Shared.statCard(Shared.icon('users'), counts.Sakit, 'Sakit', 'var(--secondary)')}
+        ${counts.Libur ? Shared.statCard(Shared.icon('calendar'), counts.Libur, 'Libur', '#7e22ce') : ''}
+        ${Shared.statCard(Shared.icon('calendar'), counts.Alfa, 'Alfa', '#dc2626')}
       </div>
       <div class="clay-card mt">
-        <div class="section-title">📅 Riwayat Kehadiran</div>
+        <div class="section-title">Riwayat Kehadiran</div>
         <div class="table-wrap"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Sesi</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="3"><div class="empty">Belum ada.</div></td></tr>'}</tbody></table></div>
       </div>`;
   }
@@ -204,6 +293,7 @@ const Wali = (() => {
     const db = Store.get();
     const list = db.catatan.filter(c => c.santriId === s.id).sort((a, b) => b.tanggal.localeCompare(a.tanggal));
     document.getElementById('view-content').innerHTML = `
+      ${santriSwitcherHtml(s)}
       <div class="clay-card">
         ${list.length ? list.map(c => `<div class="row center" style="justify-content:space-between;padding:12px 0;border-bottom:1px solid #eee"><div>${UI.esc(c.isi)}</div><span class="muted" style="font-size:12px">${UI.fmtDate(c.tanggal)}</span></div>`).join('') : '<div class="empty">Belum ada catatan.</div>'}
       </div>`;
@@ -218,9 +308,10 @@ const Wali = (() => {
     const db = Store.get();
     const ustadzNames = ustadzNamesForSantri(s);
     document.getElementById('view-content').innerHTML = `
+      ${santriSwitcherHtml(s)}
       <div class="grid cols-2">
         <div class="clay-card">
-          <div class="section-title"> Data Santri</div>
+          <div class="section-title">Data Santri</div>
           ${s ? `
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Nama</span><b>${UI.esc(s.nama)}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">NIS</span><b>${UI.esc(s.nis)}</b></div>
@@ -231,14 +322,14 @@ const Wali = (() => {
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Ustadz</span><b>${UI.esc(ustadzNames.join(', ') || '-')}</b></div>` : '<div class="empty">-</div>'}
         </div>
         <div class="clay-card">
-          <div class="section-title"> Data Wali</div>
+          <div class="section-title">Data Wali</div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Nama Wali</span><b>${w ? UI.esc(w.nama) : '-'}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">No HP</span><b>${w ? UI.esc(w.noHp) : '-'}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Username Login</span><b>${w ? UI.esc((db.users.find(u => u.refId === w.id) || {}).username || '-') : '-'}</b></div>
           <div class="row" style="justify-content:space-between;padding:6px 0"><span class="muted">Password</span><b>••••••••</b></div>
           <div class="row mt" style="gap:8px">
-            <button class="clay-btn sm secondary" id="btn-edit-profil">✏️ Edit Profil</button>
-            <button class="clay-btn sm ghost" id="btn-ganti-pass">🔑 Ganti Password</button>
+            <button class="clay-btn sm secondary" id="btn-edit-profil">Edit Profil</button>
+            <button class="clay-btn sm ghost" id="btn-ganti-pass">Ganti Password</button>
           </div>
         </div>
       </div>`;
@@ -271,5 +362,63 @@ const Wali = (() => {
     });
   }
 
-  return { nav, dashboard, perkembangan, absensi, catatan, profil };
+  /* ---------------- SPP Santri ---------------- */
+  function spp() {
+    Shared.shell('wali', nav('wali_spp'), '');
+    const s = mySantri();
+    if (!s) { document.getElementById('view-content').innerHTML = '<div class="empty">Data anak tidak ditemukan.</div>'; return; }
+    Shared.setHeader('Pembayaran SPP', s.nama);
+    const db = Store.get();
+    const bulanIni = Store.todayStr().slice(0, 7);
+    const nowInfo = Store.sppStatusSantri(s, bulanIni);
+    const badgeCls = nowInfo.status === 'Lunas' ? 'green' : nowInfo.status === 'Jatuh Tempo' ? 'danger' : nowInfo.status === 'Bebas' ? 'gray' : 'warn';
+    const history = (db.pembayaranSpp || []).filter(p => p.santriId === s.id).sort((a, b) => String(b.bulan || '').localeCompare(String(a.bulan || '')));
+    const rows = history.map(p => `<tr>
+      <td><b>${UI.esc(Shared.bulanLabel(p.bulan || ''))}</b></td>
+      <td>Rp ${Number(p.nominal || 0).toLocaleString('id-ID')}</td>
+      <td>${UI.esc(UI.fmtDate(p.tanggalBayar || ''))}</td>
+      <td>${UI.esc(p.metode || 'Tunai')}</td>
+      <td><span class="badge green sm">Lunas</span></td>
+      <td class="muted">${UI.esc(p.catatan || '-')}</td>
+    </tr>`).join('');
+    document.getElementById('view-content').innerHTML = `
+      ${santriSwitcherHtml(s)}
+      <div class="clay-card mb">
+        <div class="row center" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <div>
+            <div class="muted" style="font-size:12px">Tagihan Bulan ${UI.esc(Shared.bulanLabel(bulanIni))}</div>
+            <div style="font-size:22px;font-weight:700;margin-top:2px">Rp ${Number(nowInfo.nominal).toLocaleString('id-ID')}</div>
+            <div class="muted" style="font-size:12px;margin-top:4px">Jatuh tempo setiap tanggal <b>${nowInfo.dueDay}</b> (${UI.esc(UI.fmtDate(nowInfo.dueDate))})</div>
+          </div>
+          <span class="badge ${badgeCls}" style="font-size:13px;padding:6px 14px">${UI.esc(nowInfo.status)}</span>
+        </div>
+      </div>
+      <div class="clay-card">
+        <div class="section-title">Riwayat Pembayaran SPP</div>
+        <div class="table-wrap"><table class="clay-table table-wide">
+          <thead><tr><th>Bulan</th><th>Nominal</th><th>Tanggal Bayar</th><th>Metode</th><th>Status</th><th>Catatan</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="6"><div class="empty">Belum ada riwayat pembayaran SPP.</div></td></tr>'}</tbody>
+        </table></div>
+      </div>`;
+  }
+
+  function raport() {
+    const s = mySantri();
+    Shared.shell('wali', nav('wali_raport'), '');
+    if (!s) {
+      Shared.setHeader('Raport Santri', '-');
+      document.getElementById('view-content').innerHTML = '<div class="empty">Data santri tidak ditemukan.</div>';
+      return;
+    }
+    Shared.setHeader('Raport Santri', s.nama);
+    const root = document.getElementById('view-content');
+    root.innerHTML = `${santriSwitcherHtml(s)}<div id="wali-raport-wrap"></div>`;
+    Shared.renderRaportPage(document.getElementById('wali-raport-wrap'), {
+      mode: 'wali',
+      canEdit: false,
+      santriList: [s]
+    });
+  }
+
+  return { nav, dashboard, perkembangan, raport, absensi, catatan, profil, spp, switchSantri };
 })();

@@ -6,18 +6,25 @@ const Ustadz = (() => {
   function nav(active) {
     const session = Store.getSession();
     const unreadCount = session ? Store.notifFor(session.userId).filter(n => !n.read).length : 0;
-    const notifLabel = 'Notifikasi' + (unreadCount > 0 ? ` <span class="badge blue" style="font-size:10px;padding:2px 6px;margin-left:4px">${unreadCount}</span>` : '');
-    return [
-      { view: 'ustadz_dashboard', label: 'Dashboard', active: active === 'ustadz_dashboard' },
-      { view: 'ustadz_absensi', label: 'Absensi', active: active === 'ustadz_absensi' },
-      { view: 'ustadz_talim', label: 'Ta’lim Malam', active: active === 'ustadz_talim' },
-      { view: 'ustadz_pembelajaran', label: 'Pembelajaran', active: active === 'ustadz_pembelajaran' },
-      { view: 'ustadz_riwayat', label: 'Riwayat', active: active === 'ustadz_riwayat' },
-      { view: 'ustadz_laporan', label: 'Laporan', active: active === 'ustadz_laporan' },
-      { view: 'ustadz_laporan_murojaah', label: 'Laporan Murojaah', active: active === 'ustadz_laporan_murojaah' },
-      { view: 'ustadz_notif', label: notifLabel, active: active === 'ustadz_notif' },
-      { view: 'quran', label: 'Al-Qur\'an', active: active === 'quran' }
+    const notifLabel = 'Notifikasi' + (unreadCount > 0 ? ` <span class="badge blue sm" style="margin-left:4px">${unreadCount}</span>` : '');
+    const items = [
+      { group: 'Utama' },
+      { view: 'ustadz_dashboard', label: 'Dashboard', icon: Shared.icon('dashboard'), active: active === 'ustadz_dashboard' },
+      { group: 'Aktivitas Harian' },
+      { view: 'ustadz_absensi', feature: 'presensi', label: 'Absensi Santri', icon: Shared.icon('presensi'), active: active === 'ustadz_absensi' },
+      { view: 'ustadz_pembelajaran', label: 'Setoran & Hafalan', icon: Shared.icon('setoran'), active: active === 'ustadz_pembelajaran' },
+      { view: 'ustadz_talim', feature: 'talim', label: 'Kajian', icon: Shared.icon('book'), active: active === 'ustadz_talim' },
+      { group: 'Laporan & Rekap' },
+      { view: 'ustadz_rekap_setoran', feature: 'rekapSetoran', label: 'Rekap Setoran', icon: Shared.icon('setoran'), active: active === 'ustadz_rekap_setoran' },
+      { view: 'ustadz_laporan', feature: 'laporanPdf', label: 'Laporan Capaian', icon: Shared.icon('laporan'), active: active === 'ustadz_laporan' },
+      { view: 'ustadz_laporan_murojaah', feature: 'murojaah', label: 'Laporan Murojaah', icon: Shared.icon('award'), active: active === 'ustadz_laporan_murojaah' },
+      { view: 'ustadz_raport', feature: 'raport', label: 'Raport Santri', icon: Shared.icon('award'), active: active === 'ustadz_raport' },
+      { view: 'ustadz_riwayat', label: 'Riwayat Setoran', icon: Shared.icon('riwayat'), active: active === 'ustadz_riwayat' },
+      { group: 'Lainnya' },
+      { view: 'quran', feature: 'quran', label: 'Al-Qur\'an Digital', icon: Shared.icon('quran'), active: active === 'quran' },
+      { view: 'ustadz_notif', feature: 'notifikasi', label: notifLabel, icon: Shared.icon('bell'), active: active === 'ustadz_notif' }
     ];
+    return items.filter(it => !it.feature || Store.hasFeature(it.feature));
   }
 
   // _scope: 'saya' (ustadz hanya halaqahnya) atau 'all' (admin lihat semua)
@@ -83,6 +90,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
 
   function waReport(santriId, message) {
     try {
+      if (!Store.hasFeature('whatsapp')) return Promise.resolve(false);
       const tr = Store.waAutoTriggerSettings();
       if (!tr.setoran) return Promise.resolve(false);
       if (!Store.waAutoEnabled()) return Promise.resolve(false);
@@ -103,6 +111,17 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const u = Store.findUstadz(session.refId);
     const h = Store.findHalaqahForUstadz(u);
     return h ? h.nama : (u ? u.halaqah : null);
+  }
+  function myHalaqahs() {
+    const db = Store.get();
+    if (_scope === 'all') return db.halaqah || [];
+    const session = Store.getSession();
+    const u = Store.findUstadz(session.refId);
+    if (!u) return [];
+    const list = (db.halaqah || []).filter(h => Store.halaqahHasUstadz(h, u));
+    if (list.length) return list;
+    const fallback = Store.findHalaqahForUstadz(u);
+    return fallback ? [fallback] : [];
   }
   function mySantri(program) {
     const db = Store.get();
@@ -133,8 +152,9 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const t = Store.todayStr();
     // Rekap memakai satu status per sesi walau beberapa ustadz sama-sama
     // mencatat halaqah yang sama.
+    const sesiAktifList = Store.sesiList();
     const hadirHariIni = Store.dedupeKehadiran(db.kehadiran.filter(k => k.tanggal === t && santri.some(x => x.id === k.santriId)));
-    const sesiStats = SESI.map(s => {
+    const sesiStats = sesiAktifList.map(s => {
       const records = hadirHariIni.filter(k => k.sesi === s);
       const h = records.filter(k => k.status === 'Hadir').length;
       const i = records.filter(k => k.status === 'Izin').length;
@@ -147,7 +167,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const selfUstadz = (c.role === 'ustadz' && session) ? Store.findUstadz(session.refId) : null;
     const absenUstadzCard = selfUstadz ? `
       <div class="section-title mt">Absensi Ustadz Hari Ini</div>
-      ${SESI.map(s => {
+      ${sesiAktifList.map(s => {
       const rec = Store.absensiUstadzOf(selfUstadz.id, t, s);
       return `<div class="row center" style="justify-content:space-between;padding:5px 0">
           <span style="font-size:13px">${UI.esc(s)}</span>
@@ -155,51 +175,64 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         </div>`;
     }).join('')}
       <button class="clay-btn primary mt" id="btn-dashboard-absen-ustadz" style="width:100%;justify-content:center">Absen Ustadz</button>` : '';
-    const bulanIni = Store.todayStr().slice(0, 7);
-    const kehadiranBulan = santri.map(s => {
-      const k = Store.kehadiranBulan(s.id, bulanIni);
-      return {
-        subuh: k.filter(k => k.sesi === 'Subuh' && k.status === 'Hadir').length,
-        ashar: k.filter(k => k.sesi === 'Ashar' && k.status === 'Hadir').length,
-        maghrib: k.filter(k => k.sesi === 'Maghrib' && k.status === 'Hadir').length,
-        isya: k.filter(k => k.sesi === 'Isya' && k.status === 'Hadir').length
-      };
-    });
-    const totalSubuh = kehadiranBulan.reduce((a, b) => a + b.subuh, 0);
-    const totalAshar = kehadiranBulan.reduce((a, b) => a + b.ashar, 0);
-    const totalMaghrib = kehadiranBulan.reduce((a, b) => a + b.maghrib, 0);
-    const totalIsya = kehadiranBulan.reduce((a, b) => a + b.isya, 0);
+    const sesiAktif = sesiSaatIni();
+    const stAktif = sesiStats.find(s => s.s === sesiAktif) || { h: 0 };
+    const setoranHariIniCount = santri.filter(s =>
+      (db.ziyadahHafalan || []).some(z => z.tanggal === t && z.santriId === s.id) ||
+      (db.tahsin || []).some(th => th.tanggal === t && th.santriId === s.id) ||
+      (db.mutqin || []).some(m => m.tanggal === t && m.santriId === s.id) ||
+      (db.ziyadahBacaan || []).some(zb => zb.tanggal === t && zb.santriId === s.id)
+    ).length;
+    const hasPresensi = Store.hasFeature('presensi');
+    const recSelfUstadz = (selfUstadz && hasPresensi) ? Store.absensiUstadzOf(selfUstadz.id, t, sesiAktif) : null;
+    const statusGuruLabel = recSelfUstadz ? recSelfUstadz.status : 'Belum Absen';
 
     document.getElementById('view-content').innerHTML = `
-      <div class="grid kpi">
-        ${Shared.statCard(Shared.ICONS.users, santri.length, 'Santri Diampu', '#16A34A')}
-        ${sesiStats.map(st => Shared.statCard(
-          st.s === 'Subuh' || st.s === 'Ashar' ? Shared.ICONS.sun : st.s === 'Maghrib' ? Shared.ICONS.sunset : Shared.ICONS.moon,
-          st.h + '/' + santri.length + ' Hadir', st.s, '#22C55E')).join('')}
+      <div class="grid kpi mb">
+        ${Shared.statCard(Shared.ICONS.users, santri.length, 'Santri di Halaqah', 'var(--primary)')}
+        ${hasPresensi ? Shared.statCard(Shared.ICONS.presensi, stAktif.h + ' / ' + santri.length, 'Presensi Sesi ' + sesiAktif, '#2563eb') : ''}
+        ${Shared.statCard(Shared.ICONS.setoran, setoranHariIniCount + ' Santri', 'Sudah Setoran Hari Ini', '#10b981')}
+        ${hasPresensi ? Shared.statCard(Shared.ICONS.teacher, statusGuruLabel, 'Status Absensi Ustadz', recSelfUstadz ? '#10b981' : '#f59e0b') : ''}
       </div>
-      <div class="grid kpi mt">
-        ${Shared.statCard(Shared.ICONS.sun, totalSubuh, 'Kehadiran Subuh (Bulan Ini)', '#22C55E')}
-        ${Shared.statCard(Shared.ICONS.sun, totalAshar, 'Kehadiran Ashar (Bulan Ini)', '#22C55E')}
-        ${Shared.statCard(Shared.ICONS.sunset, totalMaghrib, 'Kehadiran Maghrib (Bulan Ini)', '#22C55E')}
-        ${Shared.statCard(Shared.ICONS.moon, totalIsya, 'Kehadiran Isya (Bulan Ini)', '#22C55E')}
-      </div>
-      <div class="grid cols-2 mt">
+      <div class="grid cols-2">
         <div class="clay-card">
-          <div class="section-title">Shortcut</div>
-          <div class="row">
-            <button class="clay-btn primary" data-go="ustadz_absensi">Absensi${selfUstadz ? ` · ${UI.esc(sesiSaatIni())}` : ''}</button>
-            <button class="clay-btn secondary" data-go="ustadz_pembelajaran"> Pembelajaran</button>
-            ${selfUstadz ? '<button class="clay-btn ghost" id="btn-dashboard-liburkan" style="color:#7e22ce;border:1px solid #d8b4fe">Liburkan Halaqah</button>' : ''}
+          <div class="section-title">${hasPresensi ? 'Menu Cepat &amp; Absensi Sesi' : 'Menu Cepat'}</div>
+          <div class="row mb">
+            ${hasPresensi ? `<button class="clay-btn primary" data-go="ustadz_absensi">Buka Absensi Sesi ${UI.esc(sesiAktif)}</button>` : ''}
+            <button class="clay-btn secondary" data-go="ustadz_pembelajaran">Setoran &amp; Hafalan</button>
+            ${Store.hasFeature('raport') ? '<button class="clay-btn ghost" data-go="ustadz_raport">Raport Halaqah</button>' : ''}
+            ${(selfUstadz && hasPresensi) ? `<button class="clay-btn ghost" id="btn-dashboard-liburkan" style="color:#6d28d9;border-color:#ddd6fe">Liburkan Halaqah</button>` : ''}
           </div>
-          ${selfUstadz ? `<div class="muted" style="font-size:12px;margin-top:6px">Tombol Absensi membuka sesi <b>${UI.esc(sesiSaatIni())}</b> sesuai jam sekarang. Sesi lain tetap bisa dipilih manual di halaman absensi.</div>` : ''}
-          ${absenUstadzCard}
+          ${hasPresensi ? `
+            <div class="section-title" style="margin-top:20px">Kehadiran Santri Per Sesi Hari Ini</div>
+            <div class="grid" style="grid-template-columns:repeat(auto-fit, minmax(95px, 1fr));gap:8px;margin-bottom:14px">
+              ${sesiStats.map(st => `
+                <div style="background:var(--slate-50);border:1px solid var(--border);border-radius:var(--radius-md);padding:10px;text-align:center">
+                  <div style="font-size:11.5px;color:var(--text-soft);font-weight:600">${st.s}</div>
+                  <div style="font-size:16px;font-weight:700;color:var(--text);margin-top:2px">${st.h} <span style="font-size:11px;font-weight:normal" class="muted">/ ${santri.length}</span></div>
+                </div>
+              `).join('')}
+            </div>
+            ${absenUstadzCard}
+          ` : ''}
         </div>
         <div class="clay-card">
-          <div class="section-title"> Daftar Santri</div>
-          ${santri.map(s => {
-            const h = Store.totalHafalanSantri(s.id);
-            return `<div class="row center" style="justify-content:space-between;padding:6px 0"><span>${UI.esc(s.nama)} <span class="muted" style="font-size:12px">(${UI.esc(Store.programSummaryForSantri(s))})</span></span><span class="badge green">${h ? formatHafalan(h) : '-'}</span></div>`;
-          }).join('') || '<div class="empty">Tidak ada santri.</div>'}
+          <div class="row center" style="justify-content:space-between;margin-bottom:12px">
+            <div class="section-title" style="margin:0">Daftar Santri Halaqah</div>
+            <span class="badge gray sm">${santri.length} Santri</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            ${santri.map(s => {
+              const h = Store.totalHafalanSantri(s.id);
+              return `<div class="row center" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--slate-100)">
+                <div>
+                  <b style="font-size:13px;color:var(--text)">${UI.esc(s.nama)}</b>
+                  <div class="muted" style="font-size:11.5px">${UI.esc(Store.programSummaryForSantri(s))}</div>
+                </div>
+                <span class="badge green sm">${h ? formatHafalan(h) : '-'}</span>
+              </div>`;
+            }).join('') || '<div class="empty">Tidak ada santri.</div>'}
+          </div>
         </div>
       </div>`;
     document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => App.navigate(b.dataset.go));
@@ -209,37 +242,26 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     if (btnDashLibur) btnDashLibur.onclick = () => dialogLiburkanHalaqah(selfUstadz, myHalaqah(), sesiSaatIni(), t, () => dashboard());
   }
 
-  /* ---------------- Absensi (multi-sesi) ---------------- */
-  const SESI = ['Subuh', 'Ashar', 'Maghrib', 'Isya'];
+  /* ---------------- Absensi (multi-sesi dinamis) ---------------- */
   const STATUS_USTADZ = ['Hadir', 'Izin', 'Sakit', 'Libur'];
 
-  // Batas ATAS tiap sesi: sesi tetap berlaku sampai menit ini (eksklusif).
-  // Subuh berlaku sampai pukul 12.00, Ashar sampai 18.00, Maghrib sampai
-  // 19.30, Isya sampai 20.00, dan setelah itu Ta'lim Malam. Dengan begitu
-  // membuka absensi pukul 15.15 masuk sesi Ashar dan pukul 18.10 masuk sesi
-  // Maghrib.
-  const BATAS_SESI_OTOMATIS = [
-    { batasMenit: 12 * 60, sesi: 'Subuh' },
-    { batasMenit: 18 * 60, sesi: 'Ashar' },
-    { batasMenit: 19 * 60 + 30, sesi: 'Maghrib' }
-  ];
-  const SESI_SETELAH_BATAS = 'Isya';
+  function parseMenit(hhmm) {
+    const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return 0;
+    return (parseInt(m[1], 10) || 0) * 60 + (parseInt(m[2], 10) || 0);
+  }
 
-  // Sesi yang aktif menurut jam sekarang; halaman absensi tetap membuka sesi
-  // ini walaupun catatannya sudah tersimpan, supaya koreksi siang hari mudah.
-  // Sesi ini hanya pilihan awal — ustadz bebas memilih sesi lain.
-  // Objek waktu diterima sebagai parameter agar batas jam bisa diuji langsung.
   function sesiSaatIni(now = new Date()) {
-    // Objek waktu dari realm lain (mis. iframe) tidak selalu lolos
-    // `instanceof Date`, jadi dicek dari metodenya.
     if (!now || typeof now.getHours !== 'function' || typeof now.getMinutes !== 'function') {
       now = new Date();
     }
+    const list = Store.sesiConfig().slice().sort((a, b) => parseMenit(a.jamMulai) - parseMenit(b.jamMulai));
+    if (!list.length) return 'Subuh';
     const menit = Number(now.getHours()) * 60 + Number(now.getMinutes());
-    for (let i = 0; i < BATAS_SESI_OTOMATIS.length; i++) {
-      if (menit < BATAS_SESI_OTOMATIS[i].batasMenit) return BATAS_SESI_OTOMATIS[i].sesi;
+    for (let i = 0; i < list.length; i++) {
+      if (menit <= parseMenit(list[i].jamSelesai)) return list[i].nama;
     }
-    return SESI_SETELAH_BATAS;
+    return list[list.length - 1].nama;
   }
 
   // Dipakai layar lain (mis. penanda sesi otomatis di halaman absensi) tanpa
@@ -256,10 +278,10 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     btn.className = 'clay-btn sm ghost';
     btn.style = '';
     if (status === 'Hadir') btn.className = 'clay-btn sm primary';
-    if (status === 'Izin') { btn.className = 'clay-btn sm'; btn.style = 'background:#FACC15;color:#000'; }
-    if (status === 'Sakit') btn.className = 'clay-btn sm secondary';
+    if (status === 'Izin') { btn.className = 'clay-btn sm'; btn.style = 'background:#fffbeb;color:#b45309;border:1px solid #fde68a;font-weight:600'; }
+    if (status === 'Sakit') { btn.className = 'clay-btn sm'; btn.style = 'background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;font-weight:600'; }
     if (status === 'Alfa') btn.className = 'clay-btn sm danger';
-    if (status === 'Libur') { btn.className = 'clay-btn sm'; btn.style = 'background:#a855f7;color:#fff'; }
+    if (status === 'Libur') { btn.className = 'clay-btn sm'; btn.style = 'background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;font-weight:600'; }
   }
 
   /* Dialog absen ustadz sendiri. Dipakai dari dashboard dan dari halaman
@@ -341,6 +363,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const t = tanggal || Store.todayStr();
     const halaqah = halaqahNama ? Store.findHalaqahByName(halaqahNama) : Store.findHalaqahForUstadz(ustadz);
     const hNama = halaqah ? halaqah.nama : (ustadz.halaqah || halaqahNama || 'Halaqah');
+    const sesiAllList = Store.sesiList();
     const existingAU = Store.absensiUstadzOf(ustadz.id, t, initialSesi);
     const existingCatatan = (existingAU && existingAU.catatan) || '';
 
@@ -364,7 +387,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           </label>
           <label class="clay-card pad-sm" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;margin:0">
             <input type="radio" name="libur-scope" value="hari">
-            <span data-libur-hari-label>Semua Sesi Hari Ini (${SESI.length} Sesi)</span>
+            <span data-libur-hari-label>Semua Sesi Hari Ini (${sesiAllList.length} Sesi)</span>
           </label>
           <label class="clay-card pad-sm" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;padding:8px 12px;margin:0">
             <input type="radio" name="libur-scope" value="custom">
@@ -374,7 +397,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         <div id="libur-sesi-custom" style="display:none;margin-bottom:12px;padding:8px 12px;background:var(--bg);border-radius:var(--radius-md)">
           <div class="muted" style="font-size:12px;margin-bottom:6px">Centang sesi yang diliburkan:</div>
           <div class="row" style="gap:10px;flex-wrap:wrap">
-            ${SESI.map(s => `<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" data-libur-sesi-check value="${UI.esc(s)}" ${s === initialSesi ? 'checked' : ''}> ${UI.esc(s)}</label>`).join('')}
+            ${sesiAllList.map(s => `<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" data-libur-sesi-check value="${UI.esc(s)}" ${s === initialSesi ? 'checked' : ''}> ${UI.esc(s)}</label>`).join('')}
           </div>
         </div>
         <div class="mt">
@@ -402,7 +425,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
             const scope = m.querySelector('input[name="libur-scope"]:checked')?.value || 'sesi';
             let sesiList = [initialSesi];
             if (scope === 'hari') {
-              sesiList = SESI.slice();
+              sesiList = sesiAllList.slice();
             } else if (scope === 'custom') {
               sesiList = [...m.querySelectorAll('[data-libur-sesi-check]:checked')].map(cb => cb.value);
               if (!sesiList.length) {
@@ -438,7 +461,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         const sub = modal.querySelector('.modal-sub');
         if (sub) sub.textContent = `${hNama} — ${UI.fmtDate(tgl)}`;
         const hariLabel = modal.querySelector('[data-libur-hari-label]');
-        if (hariLabel) hariLabel.textContent = (tgl === Store.todayStr() ? 'Semua Sesi Hari Ini' : 'Semua Sesi Tanggal Terpilih') + ` (${SESI.length} Sesi)`;
+        if (hariLabel) hariLabel.textContent = (tgl === Store.todayStr() ? 'Semua Sesi Hari Ini' : 'Semua Sesi Tanggal Terpilih') + ` (${sesiAllList.length} Sesi)`;
       };
     }
 
@@ -473,17 +496,17 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
 
   function absensi(initialSesi = '') {
     const c = ctx(); _scope = c.scope;
-    const isTalimSession = (s) => (s === 'Ta’lim Malam' || s === "Ta'lim Malam");
+    const isTalimSession = (s) => Store.isTalimSesi(s);
     let isTalim = isTalimSession(initialSesi);
     // Tanpa sesi dari pemanggil: pilih sesi dari jam sekarang, sehingga tombol
     // Absensi di dashboard langsung membuka sesi yang sedang berjalan.
     // Sesi yang dipilih sistem ini hanya nilai awal — ustadz tetap bebas
     // mengklik sesi lain kapan saja.
-    const sesiOtomatis = !SESI.includes(initialSesi) && !isTalim;
+    const sesiOtomatis = !Store.sesiList().includes(initialSesi) && !isTalim;
     if (sesiOtomatis) initialSesi = sesiSaatIni();
     const navItems = (c.role === 'admin') ? Admin.nav(isTalim ? 'ustadz_talim' : 'ustadz_absensi') : nav(isTalim ? 'ustadz_talim' : 'ustadz_absensi');
     Shared.shell(c.role, navItems, '');
-    Shared.setHeader(isTalim ? 'Absensi Ta’lim Malam' : 'Absensi', 'Absen ustadz sendiri, lalu pilih status untuk Santri yang diabsen');
+    Shared.setHeader(isTalim ? 'Absensi Kajian' : 'Absensi', 'Absen ustadz sendiri, lalu pilih status untuk Santri yang diabsen');
     const db = Store.get();
     // Opsi "Semua Santri" memang harus memperlihatkan seluruh roster,
     // sedangkan opsi kedua membatasi ke halaqah ustadz yang sedang login.
@@ -576,20 +599,15 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         else if (cur === 'Izin') countIzin++;
         else if (cur === 'Sakit') countSakit++;
         else if (cur === 'Libur') countLibur++;
-        else countAlfa++;
+        else if (cur === 'Alfa') countAlfa++;
       });
 
       const rows = santri.map(s => {
         const cur = pendingStatus[s.id] || existing[s.id] || '';
         const curKet = pendingKeterangan[s.id] !== undefined ? pendingKeterangan[s.id] : (existingKet[s.id] || '');
-        let badgeHtml = '';
-        if (cur) {
-          badgeHtml = `<span class="badge ${statusBadgeClass(cur)}">${UI.esc(cur)}</span>`;
-        } else if (isTalimNow) {
-          badgeHtml = `<span class="badge danger" style="opacity:0.85;background:#fee2e2;color:#b91c1c;border:1px dashed #f87171" title="Otomatis tercatat Alfa jika tidak dicentang Hadir">Alfa (Otomatis)</span>`;
-        } else {
-          badgeHtml = `<span class="muted">Belum dipilih</span>`;
-        }
+        const badgeHtml = cur
+          ? `<span class="badge ${statusBadgeClass(cur)}">${UI.esc(cur)}</span>`
+          : `<span class="muted">Belum dipilih</span>`;
 
         let ketHtml = badgeHtml;
         if (cur === 'Izin' || cur === 'Sakit') {
@@ -703,7 +721,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
                   ? '<span class="badge green">Sudah tersimpan</span><button class="clay-btn ghost" id="btn-edit"> Edit Absensi</button>'
                   : (isLocked ? '<span class="badge warn">Menunggu absensi ustadz</span>' : '<button class="clay-btn primary" id="btn-save"> Simpan Absensi</button>')}
               `}
-              ${isTalimNow && hasSaved && !isLibur ? '<button class="clay-btn primary" id="btn-isi-jurnal">Isi Jurnal Ta’lim</button>' : ''}
+              ${isTalimNow && hasSaved && !isLibur ? '<button class="clay-btn primary" id="btn-isi-jurnal">Isi Jurnal Kajian</button>' : ''}
             </div>
           </div>
           <div class="row mb" style="margin-top:12px;align-items:flex-end">
@@ -715,12 +733,12 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           <div class="row mb" style="margin-top:12px;align-items:center;flex-wrap:wrap;gap:8px">
             <span class="muted" style="font-size:13px">Sesi:</span>
             ${isTalimNow ? `
-              <span class="pill active" style="font-weight:600">🌙 Ta’lim Malam</span>
+              <span class="pill active" style="font-weight:600">Kajian</span>
               <button class="clay-btn sm ghost" type="button" id="btn-switch-halaqah" style="font-size:12px;margin-left:8px">← Ke Absensi Halaqah</button>
             ` : `
-              ${SESI.map(s => `<button class="pill ${s === sesiAktif ? 'active' : ''}" data-sesi="${s}">${s === 'Subuh' ? '' : s === 'Maghrib' ? '' : ''} ${s}${s === sesiAktif && sesiOtomatisAktif ? ' · Otomatis' : ''}</button>`).join('')}
+              ${Store.sesiList().map(s => `<button class="pill ${s === sesiAktif ? 'active' : ''}" data-sesi="${UI.esc(s)}" title="${UI.esc(Store.sesiRangeLabel(s))}">${UI.esc(s)}${s === sesiAktif && sesiOtomatisAktif ? ' · Otomatis' : ''}</button>`).join('')}
               ${sesiOtomatisAktif ? `<span class="badge blue" title="Dipilih dari jam perangkat">Otomatis · ${UI.esc(sesiUntukWaktu())}</span>` : ''}
-              <button class="clay-btn sm ghost" type="button" id="btn-switch-talim" style="font-size:12px;margin-left:auto">🌙 Absensi Ta’lim Malam →</button>
+              <button class="clay-btn sm ghost" type="button" id="btn-switch-talim" style="font-size:12px;margin-left:auto">Absensi Kajian →</button>
             `}
           </div>
           <div class="row mb" style="align-items:flex-end">
@@ -755,7 +773,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
               </div>
             </div>
             <div class="muted" style="font-size:12px;margin-top:6px">
-              💡 <b>Alur Ceklis Ta'lim:</b> Santri yang dicentang berstatus <b>Hadir</b>. Santri yang tidak dicentang otomatis disimpan sebagai <b>Alfa</b>.
+              <b>Catatan Kajian:</b> Gunakan <b>Centang Semua Hadir</b> untuk menandai seluruh santri hadir. Status lain (Izin, Sakit, Alfa) tetap dipilih manual pada tombol tiap santri.
             </div>
           </div>` : ''}
           <div class="table-wrap mt"><table class="clay-table">
@@ -877,11 +895,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           btn.onclick = () => {
             if (!isEditing) return;
             const targetSt = btn.dataset.st;
-            if (isTalimNow && targetSt === 'Hadir' && (pendingStatus[id] === 'Hadir' || (!pendingStatus[id] && existing[id] === 'Hadir'))) {
-              pendingStatus[id] = 'Alfa';
-            } else {
-              pendingStatus[id] = targetSt;
-            }
+            pendingStatus[id] = targetSt;
             renderAbsensi();
             if (targetSt === 'Izin' || targetSt === 'Sakit') {
               setTimeout(() => {
@@ -949,10 +963,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         const allState = {};
         roster.forEach(s => {
           const previous = sessionRecords.find(k => k.santriId === s.id);
-          let status = pendingStatus[s.id] || (previous ? previous.status : '');
-          if (isTalimNow && !status) {
-            status = 'Alfa';
-          }
+          const status = pendingStatus[s.id] || (previous ? previous.status : '');
           if (status) allState[s.id] = status;
         });
         // Hanya baris milik ustadz ini yang diganti, supaya catatan ustadz
@@ -1018,12 +1029,12 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     mintaAbsenUstadz();
   }
 
-  /* ---------------- Ta’lim Malam ---------------- */
+  /* ---------------- Kajian ---------------- */
   function talim() {
     const c = ctx(); _scope = c.scope;
     const navItems = (c.role === 'admin') ? Admin.nav('ustadz_talim') : nav('ustadz_talim');
     Shared.shell(c.role, navItems, '');
-    Shared.setHeader('Ta’lim Malam', 'Jurnal kemajuan dan absensi santri');
+    Shared.setHeader('Kajian', 'Jurnal kemajuan dan absensi santri');
     const db = Store.get();
     if (!db.jurnalTalim) db.jurnalTalim = [];
     const myUstadz = Store.findUstadz(Store.getSession()?.refId);
@@ -1051,10 +1062,10 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           <div class="row" style="justify-content:space-between;align-items:flex-start">
             <div>
               <div style="font-size:12px;color:var(--text-soft);font-weight:600">${UI.esc(m.nama)}</div>
-              <div style="font-weight:bold;margin-top:2px;font-size:14px">📖 ${UI.esc(m.kitabNama || m.nama)}</div>
+              <div style="font-weight:bold;margin-top:2px;font-size:14px">${UI.esc(m.kitabNama || m.nama)}</div>
               <div class="muted" style="font-size:11px;margin-top:2px">Format PDF${sizeStr}</div>
             </div>
-            ${m.kitabUrl ? `<button class="clay-btn sm primary" type="button" data-buka-kitab="${UI.esc(m.id)}">📖 Baca</button>` : ''}
+            ${m.kitabUrl ? `<button class="clay-btn sm primary" type="button" data-buka-kitab="${UI.esc(m.id)}">Baca</button>` : ''}
           </div>
         </div>`;
     }).join('') : '<div class="muted" style="font-size:13px">Belum ada kitab untuk mapel yang Anda ampu. Hubungi admin jika penugasan mapel belum sesuai.</div>';
@@ -1063,7 +1074,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       <div class="clay-card mb">
         <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
           <div>
-            <div class="section-title" style="margin:0">📖 Kitab Pegangan Ta’lim</div>
+            <div class="section-title" style="margin:0">Kitab Pegangan Kajian</div>
             <div class="muted" style="font-size:12px;margin-top:2px">Akses dan baca materi kitab langsung dari web untuk mempermudah saat mengajar.</div>
           </div>
         </div>
@@ -1071,14 +1082,14 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       </div>
       <div class="clay-card">
         <div class="row" style="justify-content:space-between;gap:10px;flex-wrap:wrap">
-          <div><div class="section-title" style="margin:0">Jurnal Kemajuan Ta’lim Malam</div><div class="muted" style="font-size:13px">Gunakan tombol Lanjutkan pada histori untuk memakai data jurnal sebelumnya.</div></div>
+          <div><div class="section-title" style="margin:0">Jurnal Kemajuan Kajian</div><div class="muted" style="font-size:13px">Gunakan tombol Lanjutkan pada histori untuk memakai data jurnal sebelumnya.</div></div>
           <div class="row" style="gap:8px">
-            <button class="clay-btn ghost" id="btn-talim-absen">Absensi Ta’lim Malam</button>
+            <button class="clay-btn ghost" id="btn-talim-absen">Absensi Kajian</button>
             <button class="clay-btn primary" id="btn-talim-add">+ Isi Jurnal</button>
           </div>
         </div>
         <div class="table-wrap mt"><table class="clay-table"><thead><tr><th>Tanggal</th><th>Ustadz</th><th>Mapel</th><th>Tingkat & Kelas</th><th>Judul Kitab</th><th>Bab</th><th>Pembahasan</th><th>Halaman</th><th>Aksi</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="9"><div class="empty">Belum ada jurnal ta’lim malam.</div></td></tr>'}</tbody></table></div>
+          <tbody>${rows || '<tr><td colspan="9"><div class="empty">Belum ada jurnal kajian.</div></td></tr>'}</tbody></table></div>
       </div>`;
     const btnTalimAbs = document.getElementById('btn-talim-absen');
     if (btnTalimAbs) btnTalimAbs.onclick = () => App.navigate('ustadz_talim_absensi');
@@ -1135,13 +1146,13 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       ${UI.field('Judul Kitab', `
         <div class="row" style="gap:8px">
           <input class="clay-input" id="f-talim-kitab" placeholder="Contoh: Riyadhus Shalihin" value="${UI.esc(source.judulKitab || malamDefaults.judulKitab)}" style="flex:1">
-          <button class="clay-btn sm secondary" type="button" id="btn-talim-buka-kitab-form" style="display:none;white-space:nowrap">📖 Buka Kitab</button>
+          <button class="clay-btn sm secondary" type="button" id="btn-talim-buka-kitab-form" style="display:none;white-space:nowrap">Buka Kitab</button>
         </div>`)}
       ${UI.field('Bab', `<input class="clay-input" id="f-talim-bab" placeholder="Contoh: Bab Keikhlasan" value="${UI.esc(source.bab || malamDefaults.bab)}">`)}
       ${UI.field('Pembahasan', `<textarea class="clay-textarea" id="f-talim-bahas" placeholder="Ringkasan materi yang dibahas">${UI.esc(source.pembahasan || '')}</textarea>`)}
       ${UI.field('Halaman', `<input class="clay-input" id="f-talim-halaman" placeholder="Contoh: 12–15" value="${UI.esc(source.halaman || '')}">`)}`;
     const modal = UI.openModal({
-      title: sourceJournal ? 'Lanjutkan Jurnal Ta’lim Malam' : 'Isi Jurnal Ta’lim Malam', bodyHTML: body,
+      title: sourceJournal ? 'Lanjutkan Jurnal Kajian' : 'Isi Jurnal Kajian', bodyHTML: body,
       actions: [
         { label: 'Batal', cls: 'ghost', onClick: (m, close) => close() },
         { label: 'Simpan', cls: 'primary', onClick: async (m, close) => {
@@ -1167,14 +1178,14 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           const existingIndex = db.jurnalTalim.findIndex(j => j.id === journalId);
           if (existingIndex === -1) {
             db.jurnalTalim.push(journal);
-            Store.log('Isi jurnal Ta’lim Malam');
+            Store.log('Isi jurnal Kajian');
           } else {
             // Jika simpan sebelumnya gagal lalu dicoba ulang, perbarui entri
             // sementara yang sama tanpa menambah duplikat di memori.
             db.jurnalTalim[existingIndex] = journal;
           }
           if (!await Store.save()) return;
-          close(); UI.toast('Jurnal Ta’lim Malam tersimpan', 'success'); talim();
+          close(); UI.toast('Jurnal Kajian tersimpan', 'success'); talim();
         } }
       ]
     });
@@ -1216,7 +1227,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       if (currentMapelObj && currentMapelObj.kitabUrl) {
         if (btnBukaKitab) {
           btnBukaKitab.style.display = 'inline-flex';
-          btnBukaKitab.textContent = '📖 Buka Kitab (' + (currentMapelObj.kitabNama || currentMapelObj.nama) + ')';
+          btnBukaKitab.textContent = 'Buka Kitab (' + (currentMapelObj.kitabNama || currentMapelObj.nama) + ')';
           btnBukaKitab.onclick = () => {
             UI.openKitabViewer({
               title: currentMapelObj.kitabNama || currentMapelObj.nama,
@@ -1242,9 +1253,21 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     const c = ctx(); _scope = c.scope;
     const navItems = (c.role === 'admin') ? Admin.nav('ustadz_pembelajaran') : nav('ustadz_pembelajaran');
     Shared.shell(c.role, navItems, '');
-    Shared.setHeader('Pembelajaran', 'Tahsin · Ziyadah · Mutqin · Murojaah · Umum');
-    const validTabs = ['tahsin', 'ziyadah', 'mutqin', 'murojaah', 'umum'];
-    let currentTab = 'tahsin';
+    const tabMeta = [
+      Store.hasFeature('tahsin') ? { key: 'tahsin', label: 'Tahsin' } : null,
+      Store.hasFeature('ziyadah') ? { key: 'ziyadah', label: 'Ziyadah' } : null,
+      Store.hasFeature('mutqin') ? { key: 'mutqin', label: 'Mutqin' } : null,
+      Store.hasFeature('murojaah') ? { key: 'murojaah', label: 'Murojaah' } : null,
+    ].filter(Boolean);
+    if (!tabMeta.length) {
+      Shared.setHeader('Pembelajaran', 'Belum ada program aktif');
+      document.getElementById('view-content').innerHTML = '<div class="clay-card"><div class="empty">Belum ada program pembelajaran yang diaktifkan untuk lembaga ini.</div></div>';
+      return;
+    }
+    Shared.setHeader('Pembelajaran', [...tabMeta.map(t => t.label), 'Umum'].join(' · '));
+    tabMeta.push({ key: 'umum', label: 'Umum' });
+    const validTabs = tabMeta.map(t => t.key);
+    let currentTab = validTabs[0];
     try {
       const saved = sessionStorage.getItem('tahfidz_pembelajaran_tab');
       if (saved && validTabs.includes(saved)) currentTab = saved;
@@ -1252,11 +1275,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
 
     document.getElementById('view-content').innerHTML = `
       <div class="pill-tabs" id="tabs">
-        <button class="pill ${currentTab === 'tahsin' ? 'active' : ''}" data-tab="tahsin"> Tahsin</button>
-        <button class="pill ${currentTab === 'ziyadah' ? 'active' : ''}" data-tab="ziyadah"> Ziyadah</button>
-        <button class="pill ${currentTab === 'mutqin' ? 'active' : ''}" data-tab="mutqin"> Mutqin</button>
-        <button class="pill ${currentTab === 'murojaah' ? 'active' : ''}" data-tab="murojaah"> Murojaah</button>
-        <button class="pill ${currentTab === 'umum' ? 'active' : ''}" data-tab="umum"> Umum</button>
+        ${tabMeta.map(t => `<button class="pill ${currentTab === t.key ? 'active' : ''}" data-tab="${t.key}"> ${t.label}</button>`).join('')}
       </div>
       <div id="tab-content"></div>`;
     const tabs = document.getElementById('tabs');
@@ -1276,8 +1295,8 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
   function modeSelector(onChange) {
     return `<div class="row mb">
       <span class="muted" style="font-size:13px">Mode:</span>
-      <button class="pill active" data-mode="saya"> Halaqah Saya</button>
-      <button class="pill" data-mode="umum">🌐 Halaqah Umum</button>
+      <button class="pill active" data-mode="saya">Halaqah Saya</button>
+      <button class="pill" data-mode="umum">Halaqah Umum</button>
     </div>`;
   }
   function bindMode(container, getSantriFn, rerender) {
@@ -1301,7 +1320,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     }).join('');
     document.getElementById('tab-content').innerHTML = `
       <div class="clay-card">
-        <div class="section-title"> Input Tahsin</div>
+        <div class="section-title">Input Tahsin</div>
         <div class="table-wrap"><table class="clay-table">
           <thead><tr><th>Santri</th><th>Terakhir</th><th>Nilai</th><th></th></tr></thead>
           <tbody>${rows || '<tr><td colspan="4"><div class="empty">Tidak ada santri.</div></td></tr>'}</tbody>
@@ -1366,6 +1385,19 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     return update;
   }
 
+  function quickScoreButtons(targetInputId = 'f-nilai') {
+    return `
+      <div class="row" style="gap:4px;margin-top:6px;flex-wrap:wrap">
+        <button type="button" class="clay-btn sm ghost" style="padding:3px 7px;font-size:11px" onclick="const el=document.getElementById('${targetInputId}');if(el){el.value=75;el.dispatchEvent(new Event('input'))}">75 (C)</button>
+        <button type="button" class="clay-btn sm ghost" style="padding:3px 7px;font-size:11px" onclick="const el=document.getElementById('${targetInputId}');if(el){el.value=80;el.dispatchEvent(new Event('input'))}">80 (B)</button>
+        <button type="button" class="clay-btn sm ghost" style="padding:3px 7px;font-size:11px" onclick="const el=document.getElementById('${targetInputId}');if(el){el.value=85;el.dispatchEvent(new Event('input'))}">85 (B+)</button>
+        <button type="button" class="clay-btn sm ghost" style="padding:3px 7px;font-size:11px" onclick="const el=document.getElementById('${targetInputId}');if(el){el.value=90;el.dispatchEvent(new Event('input'))}">90 (A)</button>
+        <button type="button" class="clay-btn sm ghost" style="padding:3px 7px;font-size:11px" onclick="const el=document.getElementById('${targetInputId}');if(el){el.value=95;el.dispatchEvent(new Event('input'))}">95 (A+)</button>
+        <button type="button" class="clay-btn sm ghost" style="padding:3px 7px;font-size:11px" onclick="const el=document.getElementById('${targetInputId}');if(el){el.value=100;el.dispatchEvent(new Event('input'))}">100 (Mumtaz)</button>
+      </div>
+    `;
+  }
+
   function tahsinForm(santriId, tanggalTarget) {
     const s = Store.findSantri(santriId);
     const today = Store.todayStr();
@@ -1387,7 +1419,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       </div>
       <div class="row">
         <div style="flex:1">${UI.field('Total Halaman', `<input class="clay-input" id="f-total-hlm" type="number" step="0.5" min="0.5" value="2">`)}</div>
-        <div style="flex:1">${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80">`)}</div>
+        <div style="flex:1">${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80">${quickScoreButtons('f-nilai')}`)}</div>
       </div>
       ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat"></textarea>`)}`;
     const modal = UI.openModal({
@@ -1472,7 +1504,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     }).join('');
     document.getElementById('tab-content').innerHTML = `
       <div class="clay-card">
-        <div class="section-title"> Input Ziyadah</div>
+        <div class="section-title">Input Ziyadah</div>
         <div class="table-wrap"><table class="clay-table">
           <thead><tr><th>Santri</th><th>Lanjutan Terakhir</th><th>Total Hafalan</th><th></th></tr></thead>
           <tbody>${rows || '<tr><td colspan="4"><div class="empty">Tidak ada santri.</div></td></tr>'}</tbody>
@@ -1547,7 +1579,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       `)}
       <hr style="border:none;border-top:1px solid var(--border,#ddd);margin:12px 0">
       <div id="sec-bacaan" class="clay-card pad-sm mb" style="display:${bacaanRequired ? 'block' : 'none'};background:var(--bg);${bacaanLocked}">
-        <div class="section-title" style="font-size:14px;margin:0 0 8px 0">📖 Setoran Bacaan</div>
+        <div class="section-title" style="font-size:14px;margin:0 0 8px 0">Setoran Bacaan</div>
         <div class="row">
           <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="b-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off" ${bacaanDisabled}>`)}</div>
           <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="b-aa" type="number" min="1" max="${getSurah(defSA) ? getSurah(defSA).ayahs : 286}" value="${Math.min(defAA, getSurah(defSA) ? getSurah(defSA).ayahs : 286)}" ${bacaanDisabled}>`)}</div>
@@ -1556,12 +1588,12 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="b-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off" ${bacaanDisabled}>`)}</div>
           <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="b-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}" ${bacaanDisabled}>`)}</div>
         </div>
-        <button class="clay-btn ghost sm setoran-quran-btn" id="b-open-quran" type="button" hidden>📖 Buka Al-Qur’an</button>
-        <button class="clay-btn primary" id="btn-simpan-bacaan" style="margin-top:8px" ${btnBacaanHide}>💾 Simpan Bacaan</button>
+        <button class="clay-btn ghost sm setoran-quran-btn" id="b-open-quran" type="button" hidden>Buka Al-Qur’an</button>
+        <button class="clay-btn primary" id="btn-simpan-bacaan" style="margin-top:8px" ${btnBacaanHide}>Simpan Bacaan</button>
         <span id="bacaan-ok" ${bacaanOkShow} style="margin-top:8px;color:var(--green)">✓ Bacaan tersimpan</span>
       </div>
       <div id="sec-hafalan" class="clay-card pad-sm mb" style="background:var(--bg);${hafalanActive}">
-        <div class="section-title" style="font-size:14px;margin:0 0 8px 0">📝 Setoran Hafalan</div>
+        <div class="section-title" style="font-size:14px;margin:0 0 8px 0">Setoran Hafalan</div>
         <div class="muted" style="font-size:12px;margin-bottom:8px">${lanjutanLabel ? 'Dilanjutkan dari ' + UI.esc(lanjutanLabel) : 'Belum ada riwayat setoran'}</div>
         <div class="row">
           <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="h-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off" ${hafalanDisabled}>`)}</div>
@@ -1571,11 +1603,11 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="h-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off" ${hafalanDisabled}>`)}</div>
           <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="h-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}" ${hafalanDisabled}>`)}</div>
         </div>
-        <button class="clay-btn ghost sm setoran-quran-btn" id="h-open-quran" type="button" hidden>📖 Buka Al-Qur’an</button>
+        <button class="clay-btn ghost sm setoran-quran-btn" id="h-open-quran" type="button" hidden>Buka Al-Qur’an</button>
         <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg);font-size:13px"></div>
-        ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80" ${hafalanDisabled}>`)}
+        ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80" ${hafalanDisabled}>${quickScoreButtons('f-nilai')}`)}
         ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat" ${hafalanDisabled}></textarea>`)}
-        <button class="clay-btn primary" id="btn-simpan-hafalan" style="margin-top:8px" ${btnHafalanDisabled}>💾 Simpan Hafalan</button>
+        <button class="clay-btn primary" id="btn-simpan-hafalan" style="margin-top:8px" ${btnHafalanDisabled}>Simpan Hafalan</button>
       </div>
       <div class="clay-card pad-sm" style="background:var(--bg)"><b>Peta Hafalan</b> <span class="muted" style="font-size:11px">· abu-abu = belum disetor · kuning = disetor sebagian · hijau = selesai 1 halaman</span><div id="hafalan-map" style="margin-top:8px;overflow:auto;max-height:300px">${Shared.hafalanMapHTML(santriId)}</div></div>
       <div class="clay-card pad-sm" style="background:var(--bg);font-size:13px"><b> Riwayat 3 setoran terakhir:</b> <div id="riwayat-list">${riwayatSingkat()}</div></div>`;
@@ -1760,11 +1792,11 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       const tomorrowDone = (db.mutqin || []).some(m => m.santriId === s.id && m.tanggal === tmrw);
       const tmrwBadge = tomorrowDone ? ' <span class="badge purple" title="Sudah murajaah maju untuk besok">Besok ✓</span>' : '';
       const surahInfo = rec ? ((getSurah(rec.sAkhir) ? getSurah(rec.sAkhir).latin : (rec.sAkhir || '-')) + ':' + rec.aAkhir) : '<span class="muted">-</span>';
-      return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${surahInfo}</td><td>${rec ? rec.totalHafalan + ' hlm' : '-'}</td><td><button class="clay-btn sm primary" data-input="${s.id}">+ Murajaah</button>${tmrwBadge}</td></tr>`;
+      return `<tr><td><b>${UI.esc(s.nama)}</b></td><td>${surahInfo}</td><td>${rec ? rec.totalHafalan + ' hlm' : '-'}</td><td><button class="clay-btn sm primary" data-input="${s.id}">+ Mutqin</button>${tmrwBadge}</td></tr>`;
     }).join('');
     document.getElementById('tab-content').innerHTML = `
       <div class="clay-card">
-        <div class="section-title"> Input Mutqin (Murajaah)</div>
+        <div class="section-title">Input Mutqin (Murajaah)</div>
         <div class="table-wrap"><table class="clay-table">
           <thead><tr><th>Santri</th><th>Terakhir</th><th>Total</th><th></th></tr></thead>
           <tbody>${rows || '<tr><td colspan="4"><div class="empty">Tidak ada santri.</div></td></tr>'}</tbody>
@@ -1798,7 +1830,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="m-ak" type="number" min="1" max="286" value="5">`)}</div>
       </div>
       ${UI.field('Total Hafalan Mutqin (manual, halaman)', `<input class="clay-input" id="m-total" type="number" min="0" value="0">`)}
-      ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80">`)}
+      ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80">${quickScoreButtons('f-nilai')}`)}
       ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat"></textarea>`)}`;
     const modal = UI.openModal({
       title: 'Murajaah Mutqin', bodyHTML: body,
@@ -1894,7 +1926,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     }).join('');
     document.getElementById('tab-content').innerHTML = `
       <div class="clay-card">
-        <div class="section-title"> Input Murojaah</div>
+        <div class="section-title">Input Murojaah</div>
         <div class="muted" style="font-size:12px;margin-bottom:8px">Bebas untuk semua santri: pilih surat/ayat mana saja, boleh beberapa kali sehari, nilai boleh kosong. Satu halaman dihitung setelah seluruh ayatnya selesai dimurojaah (boleh terkumpul dari beberapa setoran).</div>
         <div class="table-wrap"><table class="clay-table">
           <thead><tr><th>Santri</th><th>Terakhir</th><th>Total Murojaah</th><th>Hari Ini</th><th></th></tr></thead>
@@ -1929,9 +1961,9 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="mr-sk" list="dl-surah" type="text" value="${surahLabel(1)}" autocomplete="off">`)}</div>
         <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="mr-ak" type="number" min="1" max="286" value="7">`)}</div>
       </div>
-      <button class="clay-btn ghost sm setoran-quran-btn" id="mr-open-quran" type="button" hidden>📖 Buka Al-Qur’an</button>
+      <button class="clay-btn ghost sm setoran-quran-btn" id="mr-open-quran" type="button" hidden>Buka Al-Qur’an</button>
       <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg);font-size:13px"></div>
-      ${UI.field('Nilai (opsional)', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" placeholder="Kosongkan bila tidak dinilai">`)}
+      ${UI.field('Nilai (opsional)', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" placeholder="Kosongkan bila tidak dinilai">${quickScoreButtons('f-nilai')}`)}
       ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat"></textarea>`)}`;
     const modal = UI.openModal({
       title: 'Input Murojaah', bodyHTML: body,
@@ -2094,11 +2126,10 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     updateSantriList();
   }
 
-  /* ---------------- Laporan ---------------- */
-  function laporan() {
+  function renderUstadzPeriodView(viewKey, title, sub, bodyId, onApply) {
     const c = ctx(); _scope = c.scope;
-    Shared.shell(c.role, nav('ustadz_laporan'), '');
-    Shared.setHeader('Laporan Halaqah', 'Rekap setoran dan laporan santri yang Anda ampu');
+    Shared.shell(c.role, nav(viewKey), '');
+    Shared.setHeader(title, sub);
     const range = Shared.rekapSetoranRange();
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card mb">
@@ -2113,26 +2144,18 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           <button class="clay-btn ghost" data-ul-preset="lastmonth">Bulan Lalu</button>
         </div>
       </div>
-      <div id="rekap-setoran"></div>
-      <div id="lap"></div>`;
+      <div id="${bodyId}"></div>`;
     const apply = () => {
       const dari = document.getElementById('f-dari').value;
       const sampai = document.getElementById('f-sampai').value;
       Shared.setRekapSetoranRange(dari, sampai);
       const ownHalaqah = myHalaqah();
+      const targetEl = document.getElementById(bodyId);
       if (!ownHalaqah && _scope !== 'all') {
-        document.getElementById('rekap-setoran').innerHTML = '<div class="empty">Anda belum ditugaskan ke halaqah. Hubungi admin untuk pengaturan halaqah.</div>';
-        document.getElementById('lap').innerHTML = '';
+        targetEl.innerHTML = '<div class="empty">Anda belum ditugaskan ke halaqah. Hubungi admin untuk pengaturan halaqah.</div>';
         return;
       }
-      document.getElementById('rekap-setoran').innerHTML = Shared.renderRekapSetoranMingguan({
-        halaqah: ownHalaqah,
-        dari,
-        sampai,
-        allowMakeup: true
-      });
-      Shared.bindRekapSetoranBayar(({ santriId, tanggal, programs }) => bayarSetoran(santriId, tanggal, programs));
-      Shared.loadLaporan(document.getElementById('lap'), { halaqah: ownHalaqah, dari, sampai, bulan: (dari || '').slice(0, 7) });
+      onApply({ targetEl, ownHalaqah, dari, sampai, apply });
     };
     document.querySelectorAll('[data-ul-preset]').forEach(button => button.onclick = () => {
       const today = Store.todayStr();
@@ -2157,6 +2180,26 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     });
     ['f-dari', 'f-sampai'].forEach(id => document.getElementById(id).onchange = apply);
     apply();
+  }
+
+  /* ---------------- Rekap Setoran ---------------- */
+  function rekapSetoran() {
+    renderUstadzPeriodView('ustadz_rekap_setoran', 'Rekap Setoran', 'Rekap mingguan & bayar setoran halaqah yang Anda ampu', 'rekap-setoran', ({ targetEl, ownHalaqah, dari, sampai, apply }) => {
+      targetEl.innerHTML = Shared.renderRekapSetoranMingguan({
+        halaqah: ownHalaqah,
+        dari,
+        sampai,
+        allowMakeup: true
+      });
+      Shared.bindRekapSetoranBayar(({ santriId, tanggal, programs }) => bayarSetoran(santriId, tanggal, programs, () => apply()));
+    });
+  }
+
+  /* ---------------- Laporan ---------------- */
+  function laporan() {
+    renderUstadzPeriodView('ustadz_laporan', 'Laporan Capaian', 'Laporan capaian santri yang Anda ampu', 'lap', ({ targetEl, ownHalaqah, dari, sampai }) => {
+      Shared.loadLaporan(targetEl, { halaqah: ownHalaqah, dari, sampai, bulan: (dari || '').slice(0, 7) });
+    });
   }
 
   /* ---------------- Laporan Murojaah (terpisah dari setoran) ---------------- */
@@ -2191,16 +2234,17 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
         body.innerHTML = '<tr><td colspan="6"><div class="empty">Tidak ada santri.</div></td></tr>';
         return;
       }
+      const enabledSet = new Set(Store.enabledPrograms());
       body.innerHTML = santri.map(s => {
         const totalH = Store.totalHafalanSantri(s.id);
         const avg = Store.avgNilai(s.id);
-        const programs = Store.activeProgramsForSantri(s);
+        const programs = Store.activeProgramsForSantri(s).filter(p => enabledSet.has(p));
         const badges = programs.map(program => {
           const cls = program === 'Tahsin' ? 'blue' : program === 'Ziyadah' ? 'green' : 'warn';
           return `<span class="badge ${cls}" style="margin:0 3px 3px 0">${UI.esc(program)}</span>`;
         }).join('');
         const actions = programs.map(program => {
-          const label = program === 'Ziyadah' ? '+ Setoran' : program === 'Mutqin' ? '+ Murajaah' : '+ Tahsin';
+          const label = program === 'Ziyadah' ? '+ Setoran' : program === 'Mutqin' ? '+ Mutqin' : '+ Tahsin';
           const cls = program === 'Ziyadah' ? 'secondary' : program === 'Mutqin' ? 'success' : 'primary';
           return `<button class="clay-btn sm ${cls}" data-input="${s.id}" data-program="${UI.esc(program)}">${label}</button>`;
         }).join(' ');
@@ -2240,7 +2284,8 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
 
   function bayarSetoran(santriId, tanggal, programs, onSaved) {
     const santri = Store.findSantri(santriId);
-    const activePrograms = [...new Set(programs || [])].filter(program => santri && Store.santriHasProgram(santri, program));
+    const enabledSet = new Set(Store.enabledPrograms());
+    const activePrograms = [...new Set(programs || [])].filter(program => enabledSet.has(program) && santri && Store.santriHasProgram(santri, program));
     if (!santri || !activePrograms.length) { UI.toast('Jenis setoran santri tidak ditemukan', 'error'); return; }
     const isMaju = tanggal > Store.todayStr();
     const openInput = program => umumInput(santriId, program, tanggal, () => {
@@ -2354,7 +2399,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       const bacaanSection = `
         <hr style="border:none;border-top:1px solid var(--border,#ddd);margin:12px 0">
         <div id="sec-bacaan" class="clay-card pad-sm mb" style="display:${bacaanRequired ? 'block' : 'none'};background:var(--bg);${bacaanLocked}">
-          <div class="section-title" style="font-size:14px;margin:0 0 8px 0">📖 Setoran Bacaan</div>
+          <div class="section-title" style="font-size:14px;margin:0 0 8px 0">Setoran Bacaan</div>
           <div class="row">
             <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="b-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off" ${bacaanDisabled}>`)}</div>
             <div style="flex:1">${UI.field('Awal Ayat', `<input class="clay-input" id="b-aa" type="number" min="1" max="${getSurah(defSA) ? getSurah(defSA).ayahs : 286}" value="${Math.min(defAA, getSurah(defSA) ? getSurah(defSA).ayahs : 286)}" ${bacaanDisabled}>`)}</div>
@@ -2363,14 +2408,14 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
             <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="b-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off" ${bacaanDisabled}>`)}</div>
             <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="b-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}" ${bacaanDisabled}>`)}</div>
           </div>
-          <button class="clay-btn ghost sm setoran-quran-btn" id="b-open-quran" type="button" hidden>📖 Buka Al-Qur’an</button>
-          <button class="clay-btn primary" id="btn-simpan-bacaan" style="margin-top:8px" ${btnBacaanHide}>💾 Simpan Bacaan</button>
+          <button class="clay-btn ghost sm setoran-quran-btn" id="b-open-quran" type="button" hidden>Buka Al-Qur’an</button>
+          <button class="clay-btn primary" id="btn-simpan-bacaan" style="margin-top:8px" ${btnBacaanHide}>Simpan Bacaan</button>
           <span id="bacaan-ok" ${bacaanOkShow} style="margin-top:8px;color:var(--green)">✓ Bacaan tersimpan</span>
         </div>`;
 
       const hafalanSection = `
         <div id="sec-hafalan" class="clay-card pad-sm mb" style="background:var(--bg);${hafalanActive}">
-          <div class="section-title" style="font-size:14px;margin:0 0 8px 0">📝 Setoran Hafalan</div>
+          <div class="section-title" style="font-size:14px;margin:0 0 8px 0">Setoran Hafalan</div>
           <div class="muted" style="font-size:12px;margin-bottom:8px">${lanjutanLabel ? 'Dilanjutkan dari ' + UI.esc(lanjutanLabel) : 'Belum ada riwayat setoran'}</div>
           <div class="row">
             <div style="flex:1">${UI.field('Awal Surat', `<input class="clay-input" id="h-sa" list="dl-surah" type="text" value="${surahLabel(defSA)}" autocomplete="off" ${hafalanDisabled}>`)}</div>
@@ -2380,11 +2425,11 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
             <div style="flex:1">${UI.field('Akhir Surat', `<input class="clay-input" id="h-sk" list="dl-surah" type="text" value="${surahLabel(defSK)}" autocomplete="off" ${hafalanDisabled}>`)}</div>
             <div style="flex:1">${UI.field('Akhir Ayat', `<input class="clay-input" id="h-ak" type="number" min="1" max="${getSurah(defSK) ? getSurah(defSK).ayahs : 286}" value="${Math.min(defAK, getSurah(defSK) ? getSurah(defSK).ayahs : 286)}" ${hafalanDisabled}>`)}</div>
           </div>
-          <button class="clay-btn ghost sm setoran-quran-btn" id="h-open-quran" type="button" hidden>📖 Buka Al-Qur’an</button>
+          <button class="clay-btn ghost sm setoran-quran-btn" id="h-open-quran" type="button" hidden>Buka Al-Qur’an</button>
           <div id="calc-preview" class="clay-card pad-sm mt" style="background:var(--bg);font-size:13px"></div>
           ${UI.field('Nilai', `<input class="clay-input" id="f-nilai" type="number" min="0" max="100" value="80" ${hafalanDisabled}>`)}
           ${UI.field('Catatan', `<textarea class="clay-textarea" id="f-cat" ${hafalanDisabled}></textarea>`)}
-          <button class="clay-btn primary" id="btn-simpan-hafalan" style="margin-top:8px" ${btnHafalanDisabled}>💾 Simpan Hafalan</button>
+          <button class="clay-btn primary" id="btn-simpan-hafalan" style="margin-top:8px" ${btnHafalanDisabled}>Simpan Hafalan</button>
         </div>`;
 
       body += bacaanSection + hafalanSection;
@@ -2660,6 +2705,28 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     }
   }
 
+  /* ---------------- Raport Santri ---------------- */
+  function raport() {
+    const c = ctx(); _scope = c.scope;
+    const db = Store.get();
+    const session = Store.getSession();
+    const halaqahs = myHalaqahs();
+    const santriList = _scope === 'all'
+      ? (db.santri || [])
+      : (db.santri || []).filter(s => halaqahs.some(h => Store.santriHasHalaqah(s, h)));
+    Shared.shell(c.role, nav('ustadz_raport'), '');
+    Shared.setHeader('Raport Santri', 'Evaluasi semester, catatan pembimbing, dan cetak / unduh raport halaqah');
+    Shared.renderRaportPage(document.getElementById('view-content'), {
+      mode: 'staff',
+      canEdit: true,
+      isUstadzScope: _scope !== 'all',
+      ustadzId: _scope !== 'all' ? (session?.refId || '') : '',
+      halaqahId: halaqahs.length === 1 ? halaqahs[0].id : '',
+      halaqahList: halaqahs,
+      santriList
+    });
+  }
+
   /* ---------------- Notifikasi ---------------- */
   function notif() {
     const c = ctx(); _scope = c.scope;
@@ -2677,5 +2744,5 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     };
   }
 
-  return { nav, dashboard, absensi, talim, pembelajaran, riwayat, laporan, laporanMurojaah, notif, sesiSaatIni, formatPesanSetoranWA, bayarSetoran, umumInput, murojaahForm };
+  return { nav, dashboard, absensi, talim, pembelajaran, riwayat, rekapSetoran, laporan, laporanMurojaah, raport, notif, sesiSaatIni, formatPesanSetoranWA, bayarSetoran, umumInput, murojaahForm };
 })();
