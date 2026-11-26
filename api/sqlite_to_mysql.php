@@ -237,10 +237,24 @@ try {
     foreach ($ddlStatements as $sql) {
         $mysql->exec($sql);
     }
+    $colCheck = $mysql->prepare('SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?');
+    foreach ($descriptors as $table => $colKinds) {
+        foreach ($colKinds as $col => $kind) {
+            if ($col === 'id') continue;
+            $colCheck->execute([$table, $col]);
+            if ($colCheck->fetchColumn()) continue;
+            $typeSql = ($table === 'settings' && $col === 'data') ? 'LONGTEXT' : mysqlType($kind);
+            $mysql->exec("ALTER TABLE `{$table}` ADD COLUMN `{$col}` {$typeSql} NULL");
+        }
+    }
+    $statCheck = $mysql->prepare('SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?');
+    $statCheck->execute(['kehadiran', 'idx_kehadiran_santri_id_tanggal_sesi']);
+    if ($statCheck->fetchColumn()) {
+        $mysql->exec('ALTER TABLE `kehadiran` DROP INDEX `idx_kehadiran_santri_id_tanggal_sesi`');
+    }
     foreach ($indexSpecs as $ix) {
-        $exists = $mysql->prepare('SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?');
-        $exists->execute([$ix['table'], $ix['name']]);
-        if (!$exists->fetchColumn()) {
+        $statCheck->execute([$ix['table'], $ix['name']]);
+        if (!$statCheck->fetchColumn()) {
             $u = $ix['unique'] ? 'UNIQUE ' : '';
             $c = implode(', ', array_map(fn($col) => "`{$col}`", $ix['columns']));
             $mysql->exec("CREATE {$u}INDEX `{$ix['name']}` ON `{$ix['table']}` ({$c})");
