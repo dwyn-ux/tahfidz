@@ -237,6 +237,10 @@ try {
     foreach ($ddlStatements as $sql) {
         $mysql->exec($sql);
     }
+    $roleCol = $mysql->query("SHOW COLUMNS FROM `users` LIKE 'role'")->fetch();
+    if ($roleCol && stripos((string)($roleCol['Type'] ?? ''), 'enum') !== false && stripos((string)$roleCol['Type'], 'superuser') === false) {
+        $mysql->exec("ALTER TABLE `users` MODIFY COLUMN `role` VARCHAR(32) NOT NULL");
+    }
     $colCheck = $mysql->prepare('SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?');
     foreach ($descriptors as $table => $colKinds) {
         foreach ($colKinds as $col => $kind) {

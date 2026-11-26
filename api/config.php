@@ -803,6 +803,12 @@ function getUserByUsername($username) {
 function ensureSuperuserSeed(): void {
     global $envVars;
     try {
+        if (DB_DRIVER !== 'sqlite') {
+            $col = pdo()->query("SHOW COLUMNS FROM `users` LIKE 'role'")->fetch();
+            if ($col && stripos((string)($col['Type'] ?? ''), 'enum') !== false && stripos((string)$col['Type'], 'superuser') === false) {
+                pdo()->exec("ALTER TABLE `users` MODIFY COLUMN `role` VARCHAR(32) NOT NULL");
+            }
+        }
         $exists = (int)pdo()->query("SELECT COUNT(*) FROM users WHERE role = 'superuser'")->fetchColumn();
         if ($exists > 0) return;
         $username = trim((string)($envVars['SUPERUSER_USERNAME'] ?? 'superuser'));
@@ -812,7 +818,7 @@ function ensureSuperuserSeed(): void {
         $stmt = pdo()->prepare(insertIgnoreSQL('users', ['id', 'username', 'password', 'role', 'refId']));
         $stmt->execute([uid('usr'), $username, password_hash($password, PASSWORD_DEFAULT), 'superuser', null]);
     } catch (Throwable $e) {
-        // Table users belum ada sebelum install; abaikan dengan aman.
+        error_log('[tahfidzku] ensureSuperuserSeed error: ' . $e->getMessage());
     }
 }
 function publicUser($u) {
