@@ -814,7 +814,15 @@ function ensureSuperuserSeed(): void {
         $username = trim((string)($envVars['SUPERUSER_USERNAME'] ?? 'superuser'));
         $password = (string)($envVars['SUPERUSER_PASSWORD'] ?? 'superuser123');
         if ($username === '' || $password === '') return;
-        if (getUserByUsername($username)) return;
+        $existingUser = getUserByUsername($username);
+        if ($existingUser) {
+            // MySQL non-strict ENUM sebelumnya memotong 'superuser' menjadi string kosong ''.
+            if (trim((string)($existingUser['role'] ?? '')) === '') {
+                $upd = pdo()->prepare("UPDATE users SET role = 'superuser' WHERE id = ?");
+                $upd->execute([$existingUser['id']]);
+            }
+            return;
+        }
         $stmt = pdo()->prepare(insertIgnoreSQL('users', ['id', 'username', 'password', 'role', 'refId']));
         $stmt->execute([uid('usr'), $username, password_hash($password, PASSWORD_DEFAULT), 'superuser', null]);
     } catch (Throwable $e) {
