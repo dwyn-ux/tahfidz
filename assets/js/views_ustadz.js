@@ -165,6 +165,10 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     // supaya bisa absen tanpa membuka halaman absensi.
     const session = Store.getSession();
     const selfUstadz = (c.role === 'ustadz' && session) ? Store.findUstadz(session.refId) : null;
+    const sesiAktif = sesiSaatIni();
+    const hasPresensi = Store.hasFeature('presensi');
+    const recSelfUstadz = (selfUstadz && hasPresensi) ? Store.absensiUstadzOf(selfUstadz.id, t, sesiAktif) : null;
+    const statusGuruLabel = recSelfUstadz ? recSelfUstadz.status : 'Belum Absen';
     const absenUstadzCard = selfUstadz ? `
       <div class="section-title mt">Absensi Ustadz Hari Ini</div>
       ${sesiAktifList.map(s => {
@@ -177,7 +181,6 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       ${recSelfUstadz
         ? `<button class="clay-btn ghost mt" type="button" disabled style="width:100%;justify-content:center;opacity:.85;cursor:not-allowed">Sudah Absen (${UI.esc(recSelfUstadz.status)}) · Sesi ${UI.esc(sesiAktif)}</button>`
         : `<button class="clay-btn primary mt" id="btn-dashboard-absen-ustadz" style="width:100%;justify-content:center">Absen Ustadz</button>`}` : '';
-    const sesiAktif = sesiSaatIni();
     const stAktif = sesiStats.find(s => s.s === sesiAktif) || { h: 0 };
     const setoranHariIniCount = santri.filter(s =>
       (db.ziyadahHafalan || []).some(z => z.tanggal === t && z.santriId === s.id) ||
@@ -185,9 +188,6 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
       (db.mutqin || []).some(m => m.tanggal === t && m.santriId === s.id) ||
       (db.ziyadahBacaan || []).some(zb => zb.tanggal === t && zb.santriId === s.id)
     ).length;
-    const hasPresensi = Store.hasFeature('presensi');
-    const recSelfUstadz = (selfUstadz && hasPresensi) ? Store.absensiUstadzOf(selfUstadz.id, t, sesiAktif) : null;
-    const statusGuruLabel = recSelfUstadz ? recSelfUstadz.status : 'Belum Absen';
 
     document.getElementById('view-content').innerHTML = `
       <div class="grid kpi mb">
