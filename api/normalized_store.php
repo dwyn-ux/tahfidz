@@ -359,7 +359,7 @@ final class NormalizedStore {
             }
             $legacy = [];
             foreach (array_keys(self::definitions()) as $type) $legacy[$type] = self::legacyRecords($type);
-            self::validateLegacyRecords($legacy);
+            $deduped = self::dedupeLegacyAttendance($legacy);
             self::assertDestinationIsEmpty();
             foreach ($legacy as $type => $records) {
                 foreach ($records as $record) self::put($type, $record['id'], $record);
@@ -371,9 +371,9 @@ final class NormalizedStore {
                 if ($actual !== $expected) throw new RuntimeException("Validasi jumlah $type gagal: $actual dari $expected tersalin.");
                 $counts[$type] = $actual;
             }
-            self::markApplied(self::MIGRATION_NAME, ['source' => 'legacy_records', 'records' => $counts]);
+            self::markApplied(self::MIGRATION_NAME, ['source' => 'legacy_records', 'records' => $counts, 'deduped' => $deduped]);
             self::commitMigrationTransaction($manualTransaction);
-            return ['status' => 'migrated', 'migration' => self::MIGRATION_NAME, 'records' => $counts];
+            return ['status' => 'migrated', 'migration' => self::MIGRATION_NAME, 'records' => $counts, 'deduped' => $deduped];
         } catch (Throwable $e) {
             self::rollBackMigrationTransaction($manualTransaction);
             throw $e;
@@ -545,7 +545,7 @@ final class NormalizedStore {
         $record['id'] = $id;
         // Versi awal absensi belum punya sesi; samakan perilakunya dengan
         // Store.load() agar unique index dapat dipasang tanpa mengubah makna data.
-        if ($type === 'kehadiran' && empty($record['sesi'])) $record['sesi'] = 'Subuh';
+        if (($type === 'kehadiran' || $type === 'absensiUstadz') && empty($record['sesi'])) $record['sesi'] = 'Subuh';
         return $record;
     }
 
@@ -677,20 +677,41 @@ final class NormalizedStore {
         return $records;
     }
 
-    private static function validateLegacyRecords(array $legacy): void {
-        // Constraint absensi lama hanya menolak duplikat untuk satu pasangan
-        // (santri, tanggal, sesi) karena saat itu satu sesi hanya boleh punya
-        // satu catatan. Sekarang setiap ustadz punya catatannya sendiri, jadi
-        // pencacahannya ikut memasukkan ustadzId.
-        $seen = [];
-        foreach ($legacy['kehadiran'] ?? [] as $record) {
-            $key = implode('|', [
-                $record['santriId'] ?? '', $record['ustadzId'] ?? '',
-                $record['tanggal'] ?? '', $record['sesi'] ?? 'Subuh',
-            ]);
-            if (isset($seen[$key])) throw new RuntimeException('Absensi ganda ditemukan untuk ' . $key . '. Migrasi dibatalkan; tabel lama tetap utuh.');
-            $seen[$key] = true;
+    private static function dedupeByKey(array $rows, callable $keyFn, callable $scoreFn): array {
+        $best = [];
+        $dropped = 0;
+        foreach ($rows as $row) {
+            $key = $keyFn($row);
+            if (!isset($best[$key])) {
+                $best[$key] = $row;
+                continue;
+            }
+            $dropped++;
+            if ($scoreFn($row) >= $scoreFn($best[$key])) {
+                $best[$key] = $row;
+            }
         }
+        return [array_values($best), $dropped];
+    }
+
+    /**
+     * Data legacy dari versi sebelum normalisasi bisa memiliki baris absensi
+     * ganda pada kunci yang sama. Ambil catatan terbaru (selaras dengan
+     * attendanceEffectiveRecords) agar migrasi tidak terhenti dan unique index
+     * absensi_ustadz tetap terpenuhi; arsip asli tetap tersimpan di `records`.
+     */
+    private static function dedupeLegacyAttendance(array &$legacy): array {
+        [$legacy['kehadiran'], $droppedSantri] = self::dedupeByKey(
+            $legacy['kehadiran'] ?? [],
+            fn($r) => implode('|', [$r['santriId'] ?? '', $r['ustadzId'] ?? '', $r['tanggal'] ?? '', $r['sesi'] ?? 'Subuh']),
+            fn($r) => (int)($r['_created'] ?? 0)
+        );
+        [$legacy['absensiUstadz'], $droppedUstadz] = self::dedupeByKey(
+            $legacy['absensiUstadz'] ?? [],
+            fn($r) => implode('|', [$r['ustadzId'] ?? '', $r['tanggal'] ?? '', $r['sesi'] ?? 'Subuh']),
+            fn($r) => max((int)($r['_created'] ?? 0), (int)(strtotime((string)($r['waktu'] ?? '')) ?: 0))
+        );
+        return ['kehadiran' => $droppedSantri, 'absensiUstadz' => $droppedUstadz];
     }
 
     private static function assertDestinationIsEmpty(): void {
