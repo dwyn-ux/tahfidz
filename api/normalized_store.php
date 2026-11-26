@@ -562,6 +562,10 @@ final class NormalizedStore {
 
     private static function toDatabaseValue($value, string $kind) {
         if ($value === null) return null;
+        if ($kind === 'date') {
+            $s = trim((string)$value);
+            return preg_match('/^\d{4}-\d{2}-\d{2}/', $s, $m) ? $m[0] : null;
+        }
         if ($kind === 'integer') return $value === '' ? null : (int)$value;
         if ($kind === 'boolean') return $value ? 1 : 0;
         return (string)$value;
