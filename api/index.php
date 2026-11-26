@@ -159,11 +159,7 @@ switch ($action) {
             $id = $b['id'] ?? uid($type);
             $b['id'] = $id;
             if ($u['role'] === 'ustadz' && $u['refId'] && ($type === 'absensiUstadz' || $type === 'kehadiran')) {
-                $b['ustadzId'] = $u['refId'];
-                $ust = getRecord('ustadz', $u['refId']);
-                if (is_array($ust) && isset($ust['nama'])) {
-                    $b['ustadz'] = $ust['nama'];
-                }
+                $b = enforceUstadzAttendanceWrite($u, $type, $b);
             }
             putRecord($type, $id, $b);
             if ($type === 'kehadiran') syncAttendanceWaliNotifications();
@@ -179,11 +175,7 @@ switch ($action) {
                 if ($existing && ($existing['ustadzId'] ?? '') !== '' && ($existing['ustadzId'] ?? '') !== $u['refId']) {
                     err('Forbidden: Anda tidak dapat mengubah absensi milik ustadz lain.', 403);
                 }
-                $b['ustadzId'] = $u['refId'];
-                $ust = getRecord('ustadz', $u['refId']);
-                if (is_array($ust) && isset($ust['nama'])) {
-                    $b['ustadz'] = $ust['nama'];
-                }
+                $b = enforceUstadzAttendanceWrite($u, $type, $b);
             }
             putRecord($type, $id, $b);
             if ($type === 'kehadiran') syncAttendanceWaliNotifications();
@@ -300,11 +292,7 @@ switch ($action) {
                         // menimpa dan tidak ada yang "terkunci" oleh data orang
                         // (record yang tertukar akan otomatis diperbaiki).
                         if ($u['role'] === 'ustadz' && $u['refId'] && ($type === 'absensiUstadz' || $type === 'kehadiran')) {
-                            $rec['ustadzId'] = $u['refId'];
-                            $ust = getRecord('ustadz', $u['refId']);
-                            if (is_array($ust) && isset($ust['nama'])) {
-                                $rec['ustadz'] = $ust['nama'];
-                            }
+                            $rec = enforceUstadzAttendanceWrite($u, $type, $rec);
                         }
                         putRecord($type, $id, $rec);
                         if ($type === 'kehadiran') $attendanceChanged = true;
@@ -559,6 +547,27 @@ switch ($action) {
     // Log the real error (web-inaccessible api/error.log) but never leak it to clients.
     error_log('[tahfidzku] ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
     err('Terjadi kesalahan server. Cek api/error.log.', 500);
+}
+
+function enforceUstadzAttendanceWrite(array $u, string $type, array $rec): array {
+    $rec['ustadzId'] = $u['refId'];
+    $ust = getRecord('ustadz', $u['refId']);
+    if (is_array($ust) && isset($ust['nama'])) {
+        $rec['ustadz'] = $ust['nama'];
+    }
+    if ($type === 'absensiUstadz' && ($rec['status'] ?? '') !== 'Libur') {
+        $tgl = substr(trim((string)($rec['tanggal'] ?? '')), 0, 10);
+        $sesi = (string)($rec['sesi'] ?? 'Subuh');
+        foreach (getRecords('absensiUstadz') as $exAu) {
+            if (($exAu['ustadzId'] ?? '') === $u['refId']
+                && ($exAu['tanggal'] ?? '') === $tgl
+                && ($exAu['sesi'] ?? 'Subuh') === $sesi
+                && ($exAu['status'] ?? '') !== 'Libur') {
+                err('Absensi ustadz untuk sesi ini sudah tercatat dan tidak dapat diubah ulang.', 409);
+            }
+        }
+    }
+    return $rec;
 }
 
 function getUserById($id) {

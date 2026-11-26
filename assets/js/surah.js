@@ -122,8 +122,8 @@ const SURAHS = [
 
 const TOTAL_PAGES = 604;
 
-/* Halaman awal setiap juz (Mushaf Madani Standar Indonesia) */
-const JUZ_PAGES = [1,22,42,62,82,102,121,142,162,182,201,221,241,261,281,301,321,341,361,381,401,421,441,461,481,501,521,541,561,581];
+/* Halaman awal setiap juz (Mushaf Madani / Rasm Utsmani 604 halaman) */
+const JUZ_PAGES = [1,22,42,62,82,102,121,142,162,182,201,222,242,262,282,302,322,342,362,382,402,422,442,462,482,502,522,542,562,582];
 
 function getSurah(n) { return SURAHS.find(s => s.n === Number(n)); }
 

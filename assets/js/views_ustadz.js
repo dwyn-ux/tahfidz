@@ -174,7 +174,9 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
           ${rec ? `<span class="badge ${statusBadgeClass(rec.status)}">${UI.esc(rec.status)} ${UI.fmtDateTime(rec.waktu)}</span>` : '<span class="muted" style="font-size:12px">Belum absen</span>'}
         </div>`;
     }).join('')}
-      <button class="clay-btn primary mt" id="btn-dashboard-absen-ustadz" style="width:100%;justify-content:center">Absen Ustadz</button>` : '';
+      ${recSelfUstadz
+        ? `<button class="clay-btn ghost mt" type="button" disabled style="width:100%;justify-content:center;opacity:.85;cursor:not-allowed">Sudah Absen (${UI.esc(recSelfUstadz.status)}) · Sesi ${UI.esc(sesiAktif)}</button>`
+        : `<button class="clay-btn primary mt" id="btn-dashboard-absen-ustadz" style="width:100%;justify-content:center">Absen Ustadz</button>`}` : '';
     const sesiAktif = sesiSaatIni();
     const stAktif = sesiStats.find(s => s.s === sesiAktif) || { h: 0 };
     const setoranHariIniCount = santri.filter(s =>
@@ -290,6 +292,23 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
   function dialogAbsenUstadz(ustadz, sesi, tanggal, onDone) {
     if (!ustadz) return;
     const existing = Store.absensiUstadzOf(ustadz.id, tanggal, sesi);
+    const isStaffUstadz = _scope !== 'all';
+    if (existing && isStaffUstadz) {
+      UI.openModal({
+        title: 'Absensi Ustadz',
+        sub: ustadz.nama + ' - ' + UI.fmtDate(tanggal) + ' - Sesi ' + sesi,
+        bodyHTML: `<div class="clay-card pad-sm" style="background:var(--bg)">
+          <div class="row center" style="gap:8px;margin-bottom:6px">
+            <span class="badge ${statusBadgeClass(existing.status)}">${UI.esc(existing.status)}</span>
+            <b>Absensi sesi ini sudah tercatat</b>
+          </div>
+          <div class="muted" style="font-size:12.5px">Dicatat pada ${UI.fmtDateTime(existing.waktu)}${existing.catatan ? ' · ' + UI.esc(existing.catatan) : ''}.</div>
+          <div class="muted" style="font-size:12px;margin-top:6px">Ustadz tidak dapat mengulang absensi pada sesi yang sama. Hubungi Admin jika perlu koreksi.</div>
+        </div>`,
+        actions: [{ label: 'Tutup', cls: 'primary', onClick: (m, c) => { c(); if (onDone) onDone(null); } }]
+      });
+      return;
+    }
     const picked = { status: (existing && existing.status) || (tanggal === Store.todayStr() ? 'Hadir' : '') };
     const halaqah = Store.findHalaqahForUstadz(ustadz);
     const hNama = halaqah ? halaqah.nama : (ustadz.halaqah || 'Halaqah');
@@ -696,7 +715,7 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
             </div>
             <div class="row" style="gap:8px">
               <button class="clay-btn sm ghost" id="btn-banner-liburkan" style="color:#7e22ce;border:1px solid #d8b4fe">Liburkan Sesi Ini</button>
-              <button class="clay-btn ghost sm" id="btn-absen-ustadz">Ubah Absensi Ustadz</button>
+              ${_scope === 'all' ? '<button class="clay-btn ghost sm" id="btn-absen-ustadz">Ubah Absensi Ustadz</button>' : '<span class="badge green sm">Sudah Absen</span>'}
             </div>
           </div>
         </div>`)) : `
