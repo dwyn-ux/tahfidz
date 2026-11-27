@@ -208,10 +208,10 @@ const Admin = (() => {
     }
     const db = Store.get();
     const bulanIni = Store.todayStr().slice(0, 7);
-    const hadirBulanIni = Store.dedupeKehadiran(db.kehadiran.filter(k => k.tanggal.startsWith(bulanIni)));
+    const hadirBulanIni = Store.dedupeKehadiran((db.kehadiran || []).filter(k => k && String(k.tanggal || '').startsWith(bulanIni)));
     const today = Store.todayStr();
-    const activeU = db.ustadz.filter(u => u.status !== 'Nonaktif');
-    const activeS = db.santri.filter(s => s.status !== 'Nonaktif');
+    const activeU = (db.ustadz || []).filter(u => u && u.status !== 'Nonaktif');
+    const activeS = (db.santri || []).filter(s => s && s.status !== 'Nonaktif');
     const uAbsen = new Set((db.absensiUstadz || []).filter(a => a.tanggal === today && a.status === 'Hadir').map(a => a.ustadzId)).size;
     const sDiabsen = new Set((db.kehadiran || []).filter(k => k.tanggal === today).map(k => k.santriId)).size;
     const sSetoran = new Set([
@@ -372,13 +372,14 @@ const Admin = (() => {
 
     function adminHalaqahAndRecentWidget() {
       const monthRows = [];
-      if (Store.hasFeature('tahsin')) (db.tahsin || []).forEach(r => monthRows.push({ santriId: r.santriId, tanggal: r.tanggal, created: r._created || 0, program: 'Tahsin', badge: 'blue', detail: `Hal ${r.halAwal}-${r.halAkhir}`, nilai: r.nilai }));
-      if (Store.hasFeature('ziyadah')) (db.ziyadahHafalan || []).forEach(r => monthRows.push({ santriId: r.santriId, tanggal: r.tanggal, created: r._created || 0, program: 'Ziyadah', badge: 'green', detail: `${getSurah(r.sAwal).latin}:${r.aAwal} → ${getSurah(r.sAkhir).latin}:${r.aAkhir}`, nilai: r.nilai }));
-      if (Store.hasFeature('mutqin')) (db.mutqin || []).forEach(r => monthRows.push({ santriId: r.santriId, tanggal: r.tanggal, created: r._created || 0, program: 'Mutqin', badge: 'warn', detail: `${getSurah(r.sAwal).latin}:${r.aAwal} → ${getSurah(r.sAkhir).latin}:${r.aAkhir}`, nilai: r.nilai }));
-      if (Store.hasFeature('murojaah')) (db.murojaah || []).forEach(r => monthRows.push({ santriId: r.santriId, tanggal: r.tanggal, created: r._created || 0, program: 'Murojaah', badge: 'purple', detail: `${getSurah(r.sAwal).latin}:${r.aAwal} → ${getSurah(r.sAkhir).latin}:${r.aAkhir}`, nilai: r.nilai }));
+      const fmtSurahRange = r => (typeof formatSetoranLabel === 'function' ? formatSetoranLabel(r) : `${r.sAwal || ''}:${r.aAwal || ''}`);
+      if (Store.hasFeature('tahsin')) (db.tahsin || []).forEach(r => r && monthRows.push({ santriId: r.santriId, tanggal: r.tanggal, created: r._created || 0, program: 'Tahsin', badge: 'blue', detail: `Hal ${r.halAwal || 0}-${r.halAkhir || 0}`, nilai: r.nilai }));
+      if (Store.hasFeature('ziyadah')) (db.ziyadahHafalan || []).forEach(r => r && monthRows.push({ santriId: r.santriId, tanggal: r.tanggal, created: r._created || 0, program: 'Ziyadah', badge: 'green', detail: fmtSurahRange(r), nilai: r.nilai }));
+      if (Store.hasFeature('mutqin')) (db.mutqin || []).forEach(r => r && monthRows.push({ santriId: r.santriId, tanggal: r.tanggal, created: r._created || 0, program: 'Mutqin', badge: 'warn', detail: fmtSurahRange(r), nilai: r.nilai }));
+      if (Store.hasFeature('murojaah')) (db.murojaah || []).forEach(r => r && monthRows.push({ santriId: r.santriId, tanggal: r.tanggal, created: r._created || 0, program: 'Murojaah', badge: 'purple', detail: fmtSurahRange(r), nilai: r.nilai }));
 
       const recent = monthRows.slice().sort((a, b) => String(b.tanggal || '').localeCompare(String(a.tanggal || '')) || (b.created - a.created)).slice(0, 6);
-      const halaqahRows = db.halaqah.map(h => {
+      const halaqahRows = (db.halaqah || []).map(h => {
         const santris = activeS.filter(s => Store.santriHasHalaqah(s, h));
         const ids = new Set(santris.map(s => s.id));
         const bulanCount = monthRows.filter(r => String(r.tanggal || '').startsWith(bulanIni) && ids.has(r.santriId)).length;
@@ -559,7 +560,7 @@ const Admin = (() => {
           <div class="clay-card mb">
             <div class="section-title">Aktivitas Terakhir</div>
             <div style="display:flex;flex-direction:column;gap:8px">
-              ${db.logAktivitas.slice(0, 5).map(l => `<div style="border-bottom:1px solid var(--slate-100);padding-bottom:6px">
+              ${(db.logAktivitas || []).slice(0, 5).map(l => `<div style="border-bottom:1px solid var(--slate-100);padding-bottom:6px">
                 <div style="font-size:12.5px;color:var(--text)">${UI.esc(l.aksi)}</div>
                 <div class="muted" style="font-size:11px;margin-top:2px">${UI.fmtDateTime(l.tanggal)}</div>
               </div>`).join('') || '<div class="empty" style="padding:16px 0">Belum ada aktivitas.</div>'}

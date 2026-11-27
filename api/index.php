@@ -68,9 +68,9 @@ switch ($action) {
         syncGitUpdateNotifications();
         $commitMsg = '';
         $commitHash = '';
-        if (is_dir(dirname(__DIR__) . '/.git')) {
-            $commitHash = trim(@exec('git log -1 --format="%h"'));
-            $commitMsg = trim(@exec('git log -1 --format="%s"'));
+        if (is_dir(dirname(__DIR__) . '/.git') && function_exists('exec')) {
+            $commitHash = trim((string)@exec('git log -1 --format="%h"'));
+            $commitMsg = trim((string)@exec('git log -1 --format="%s"'));
         }
         if (empty($commitHash)) {
             $verFile = dirname(__DIR__) . '/version.json';

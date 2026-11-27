@@ -165,7 +165,7 @@ const App = (() => {
       try { if (typeof Shared.kirimRekapOtomatis === 'function') Shared.kirimRekapOtomatis(); } catch (e) {}
     } catch (e) {
       console.error('Render error:', e);
-      UI.toast('Terjadi kesalahan pada halaman', 'error');
+      UI.toast('Terjadi kesalahan pada halaman' + (e && e.message ? ': ' + e.message : ''), 'error');
     }
     // close mobile sidebar
     const sb = document.getElementById('sidebar'); const sc = document.getElementById('scrim');

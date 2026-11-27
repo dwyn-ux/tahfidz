@@ -1232,7 +1232,7 @@ const Store = (() => {
   }
 
   function kehadiranBulan(santriId, bulan) {
-    return dedupeKehadiran((getAttendanceBySantri().get(santriId) || []).filter(k => k.tanggal.startsWith(bulan)));
+    return dedupeKehadiran((getAttendanceBySantri().get(santriId) || []).filter(k => k && String(k.tanggal || '').startsWith(bulan)));
   }
 
   function kehadiranRentang(santriId, dari, sampai) {

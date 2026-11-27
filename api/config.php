@@ -605,7 +605,8 @@ function getSettings(): array {
     $stmt = pdo()->prepare('SELECT data FROM settings WHERE id = 1');
     $stmt->execute();
     $r = $stmt->fetch();
-    $merged = $r ? array_merge(defaultSettings(), json_decode($r['data'], true)) : defaultSettings();
+    $decoded = $r ? json_decode((string)($r['data'] ?? ''), true) : null;
+    $merged = is_array($decoded) ? array_merge(defaultSettings(), $decoded) : defaultSettings();
     $merged['features'] = normalizeFeatureFlags($merged['features'] ?? []);
     $merged['subscription'] = normalizeSubscription($merged['subscription'] ?? []);
     $merged['sesiHalaqah'] = normalizeSesiHalaqah($merged['sesiHalaqah'] ?? []);
@@ -890,7 +891,7 @@ function syncGitUpdateNotifications(): void {
 
     $commits = [];
     $repoDir = dirname(__DIR__);
-    if (is_dir($repoDir . '/.git')) {
+    if (is_dir($repoDir . '/.git') && function_exists('exec')) {
         $lines = [];
         @exec('git log -5 --format="%h||%s"', $lines);
         foreach ($lines as $line) {
