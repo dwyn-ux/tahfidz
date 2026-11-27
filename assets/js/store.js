@@ -836,6 +836,44 @@ const Store = (() => {
       || null;
   }
 
+  // Pulihkan mapel yang masih dirujuk oleh penugasan ustadz jika daftar
+  // talimMapel di settings sempat kosong/hilang setelah migrasi. Nama diambil
+  // dari jurnal terkait bila ada, atau penanda ustadz pengampu agar mudah diedit.
+  function recoverMissingTalimMapel(settings) {
+    if (!settings || !Array.isArray(db.ustadz) || !db.ustadz.length) return;
+    const existingIds = new Set(settings.talimMapel.map(item => item && item.id).filter(Boolean));
+    const journalByMapelId = new Map();
+    (db.jurnalTalim || []).forEach(journal => {
+      if (journal && journal.mapelId && !journalByMapelId.has(journal.mapelId)) {
+        journalByMapelId.set(journal.mapelId, journal);
+      }
+    });
+    const teachersByMapelId = new Map();
+    db.ustadz.forEach(ustadz => {
+      const assignments = Array.isArray(ustadz && ustadz.talimMengajar) ? ustadz.talimMengajar : [];
+      assignments.forEach(item => {
+        if (!item || !item.mapelId) return;
+        if (!teachersByMapelId.has(item.mapelId)) teachersByMapelId.set(item.mapelId, []);
+        if (ustadz.nama) teachersByMapelId.get(item.mapelId).push(ustadz.nama);
+      });
+    });
+    teachersByMapelId.forEach((teachers, mapelId) => {
+      if (existingIds.has(mapelId)) return;
+      const journal = journalByMapelId.get(mapelId);
+      const fallbackName = teachers.length
+        ? 'Mapel (' + teachers.slice(0, 2).join(', ') + (teachers.length > 2 ? ', …' : '') + ')'
+        : mapelId;
+      settings.talimMapel.push({
+        id: mapelId,
+        nama: (journal && journal.mapel) ? String(journal.mapel) : fallbackName,
+        kitabNama: (journal && journal.judulKitab) ? String(journal.judulKitab) : '',
+        kitabUrl: '',
+        kitabSize: 0
+      });
+      existingIds.add(mapelId);
+    });
+  }
+
   function normalizeSettings() {
     const settings = db.settings || (db.settings = {});
     if (!Array.isArray(settings.tingkat) || !settings.tingkat.filter(Boolean).length) {
@@ -861,6 +899,7 @@ const Store = (() => {
         kitabUrl: item.kitabUrl ? String(item.kitabUrl) : '',
         kitabSize: Number(item.kitabSize) || 0
       }));
+    recoverMissingTalimMapel(settings);
     if (!settings.talimMalam || typeof settings.talimMalam !== 'object' || Array.isArray(settings.talimMalam)) settings.talimMalam = {};
     settings.talimMalam.ustadzIds = Array.isArray(settings.talimMalam.ustadzIds) ? settings.talimMalam.ustadzIds.filter(Boolean) : [];
     settings.talimMalam.judulKitab = String(settings.talimMalam.judulKitab || '');

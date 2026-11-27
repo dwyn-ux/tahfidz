@@ -2,7 +2,7 @@
    Tahfidzku — Service Worker (PWA & Offline & Notifications)
    ============================================================ */
 
-const CACHE_NAME = 'tahfidzku-cache-v4';
+const CACHE_NAME = 'tahfidzku-cache-v5';
 const CORE_ASSETS = [
   './',
   './index.html',

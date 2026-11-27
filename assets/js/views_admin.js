@@ -3476,7 +3476,7 @@ const Admin = (() => {
           <tbody id="talim-assignment-list"></tbody>
         </table></div>
       </div>
-      <div class="clay-card">
+      <div class="clay-card mb">
         <div class="section-title">Kajian</div>
         <div class="muted" style="font-size:12px;margin-bottom:10px">Pilih ustadz pengampu dan isi materi default. Pilihan ini dipakai sebagai awal saat ustadz mengisi jurnal Kajian.</div>
         <div class="field-label">Ustadz Pengampu</div>
@@ -3486,6 +3486,24 @@ const Admin = (() => {
           <div style="flex:1">${UI.field('Bab Default', `<input class="clay-input" id="talim-malam-bab" placeholder="Contoh: Bab Keikhlasan">`)}</div>
         </div>
         <div class="row mt"><button class="clay-btn primary" id="btn-talim-malam-save" type="button">Simpan Kajian</button></div>
+      </div>
+      <div class="clay-card">
+        <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+          <div>
+            <div class="section-title" style="margin:0">Riwayat Jurnal Kajian / Ta’lim</div>
+            <div class="muted" style="font-size:12px;margin-top:2px">Seluruh catatan jurnal kajian yang sudah diinput oleh para ustadz.</div>
+          </div>
+          <span class="badge blue" id="talim-jurnal-count">0 jurnal</span>
+        </div>
+        <div class="row mb" style="gap:10px">
+          <div style="flex:1;min-width:160px">${UI.field('Filter Ustadz', `<select class="clay-select" id="talim-jurnal-ustadz"></select>`)}</div>
+          <div style="flex:1;min-width:160px">${UI.field('Filter Mapel', `<select class="clay-select" id="talim-jurnal-mapel"></select>`)}</div>
+          <div style="flex:1;min-width:180px">${UI.field('Cari Kitab / Bab / Materi', `<input class="clay-input" id="talim-jurnal-cari" type="search" placeholder="Cari pembahasan..." autocomplete="off">`)}</div>
+        </div>
+        <div class="table-wrap"><table class="clay-table table-wide">
+          <thead><tr><th>Tanggal</th><th>Ustadz</th><th>Mapel</th><th>Tingkat &amp; Kelas</th><th>Judul Kitab</th><th>Bab</th><th>Pembahasan</th><th>Halaman</th><th>Aksi</th></tr></thead>
+          <tbody id="talim-jurnal-list"></tbody>
+        </table></div>
       </div>`;
   }
   /* ---------------- Kajian ---------------- */
@@ -3593,6 +3611,7 @@ const Admin = (() => {
             UI.toast(isEdit ? 'Mapel & Kitab diperbarui' : 'Mapel & Kitab ditambahkan', 'success');
             close();
             renderTalimSettings({ mapelId: mapelItem?.id });
+            renderTalimJurnal();
           }
         }}
       ]
@@ -3762,8 +3781,97 @@ const Admin = (() => {
     renderTalimMalamSettings(ustadzIds);
     UI.toast('Pengaturan Kajian tersimpan', 'success');
   };
+  const renderTalimJurnal = () => {
+    const currentDb = Store.get();
+    const tbody = document.getElementById('talim-jurnal-list');
+    const countEl = document.getElementById('talim-jurnal-count');
+    const ustadzFilterEl = document.getElementById('talim-jurnal-ustadz');
+    const mapelFilterEl = document.getElementById('talim-jurnal-mapel');
+    const cariEl = document.getElementById('talim-jurnal-cari');
+    if (!tbody || !ustadzFilterEl || !mapelFilterEl) return;
+
+    const journals = (currentDb.jurnalTalim || []).slice()
+      .sort((a, b) => String(b.tanggal || '').localeCompare(String(a.tanggal || '')) || ((b._created || 0) - (a._created || 0)));
+
+    const prevUstadz = ustadzFilterEl.value;
+    const prevMapel = mapelFilterEl.value;
+
+    const ustadzOpts = new Map();
+    (currentDb.ustadz || []).slice().sort((a, b) => a.nama.localeCompare(b.nama, 'id')).forEach(u => {
+      if (u && u.id) ustadzOpts.set(u.id, u.nama);
+    });
+    journals.forEach(j => {
+      const key = j.ustadzId || j.ustadz;
+      if (key && !ustadzOpts.has(key)) ustadzOpts.set(key, j.ustadz || key);
+    });
+    ustadzFilterEl.innerHTML = `<option value="">Semua Ustadz</option>${UI.optionsFromList([...ustadzOpts.entries()].map(([v, l]) => ({ v, l })), 'v', 'l', prevUstadz)}`;
+
+    const mapelOpts = new Map();
+    Store.talimMapel().forEach(m => mapelOpts.set(m.id, m.nama));
+    journals.forEach(j => {
+      const key = j.mapelId || j.mapel;
+      if (key && !mapelOpts.has(key)) mapelOpts.set(key, j.mapel || key);
+    });
+    mapelFilterEl.innerHTML = `<option value="">Semua Mapel</option>${UI.optionsFromList([...mapelOpts.entries()].map(([v, l]) => ({ v, l })), 'v', 'l', prevMapel)}`;
+
+    const uFilter = ustadzFilterEl.value;
+    const mFilter = mapelFilterEl.value;
+    const term = (cariEl?.value || '').trim().toLowerCase();
+
+    const filtered = journals.filter(j => {
+      if (uFilter && j.ustadzId !== uFilter && j.ustadz !== uFilter) return false;
+      if (mFilter && j.mapelId !== mFilter && j.mapel !== mFilter) return false;
+      if (term) {
+        const hay = [j.ustadz, j.mapel, j.judulKitab, j.bab, j.pembahasan, j.halaman].map(v => String(v || '').toLowerCase()).join(' ');
+        if (!hay.includes(term)) return false;
+      }
+      return true;
+    });
+
+    if (countEl) {
+      countEl.textContent = filtered.length + ' jurnal' + (filtered.length !== journals.length ? ' (dari ' + journals.length + ')' : '');
+    }
+
+    tbody.innerHTML = filtered.length ? filtered.map(j => {
+      const uName = j.ustadz || Store.findUstadz(j.ustadzId)?.nama || '-';
+      const mName = j.mapel || Store.findTalimMapel(j.mapelId)?.nama || '-';
+      const kelasText = Array.isArray(j.kelasKeys) && j.kelasKeys.length
+        ? j.kelasKeys.map(Store.talimClassLabel).join(', ')
+        : (j.kelas ? Store.kelasLabel(j.tingkat, j.kelas) : '-');
+      return `<tr>
+        <td style="white-space:nowrap">${UI.fmtDate(j.tanggal)}</td>
+        <td>${UI.esc(uName)}</td>
+        <td>${UI.esc(mName)}</td>
+        <td>${UI.esc(kelasText)}</td>
+        <td><b>${UI.esc(j.judulKitab || '-')}</b></td>
+        <td>${UI.esc(j.bab || '-')}</td>
+        <td class="cell-wrap" style="min-width:200px">${UI.esc(j.pembahasan || '-')}</td>
+        <td>${UI.esc(j.halaman || '-')}</td>
+        <td><button class="clay-btn sm danger ghost" type="button" data-del-jurnal="${UI.esc(j.id)}">Hapus</button></td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="9"><div class="empty">Belum ada jurnal kajian yang sesuai.</div></td></tr>';
+
+    tbody.querySelectorAll('[data-del-jurnal]').forEach(btn => {
+      btn.onclick = () => {
+        const id = btn.dataset.delJurnal;
+        UI.confirmDialog('Hapus Jurnal Kajian', 'Yakin ingin menghapus catatan jurnal ini?', async () => {
+          const data = Store.get();
+          data.jurnalTalim = (data.jurnalTalim || []).filter(item => item.id !== id);
+          if (await Store.save()) {
+            UI.toast('Jurnal kajian dihapus', 'success');
+            renderTalimJurnal();
+          }
+        });
+      };
+    });
+  };
+  document.getElementById('talim-jurnal-ustadz').onchange = renderTalimJurnal;
+  document.getElementById('talim-jurnal-mapel').onchange = renderTalimJurnal;
+  Shared.bindSearchInput(document.getElementById('talim-jurnal-cari'), renderTalimJurnal);
+
   renderTalimMalamSettings();
   renderTalimSettings();
+  renderTalimJurnal();
   }
   /* ---------------- Settings ---------------- */
   function settings() {
