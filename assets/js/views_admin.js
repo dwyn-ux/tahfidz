@@ -1888,16 +1888,23 @@ const Admin = (() => {
         <div style="flex:1"><select class="clay-select" data-program-halaqah="${UI.esc(program)}">${halaqahOptions(program)}</select></div>
       </div>`).join('');
     const body = `
-      ${UI.field('Nama', `<input class="clay-input" id="f-nama" value="${s ? UI.esc(s.nama) : ''}">`)}
+      <div class="row">
+        <div style="flex:1">${UI.field('Nama', `<input class="clay-input" id="f-nama" value="${s ? UI.esc(s.nama) : ''}">`)}</div>
+        <div style="flex:1">${UI.field('Nama Arab (Opsional)', `<input class="clay-input" id="f-nama-arab" dir="rtl" value="${s ? UI.esc(s.namaArab || '') : ''}" placeholder="مثال: أحمد زيدان">`)}</div>
+      </div>
       <div class="row">
         <div style="flex:1">${UI.field('NIS', `<input class="clay-input" id="f-nis" value="${s ? UI.esc(s.nis) : ''}">`)}</div>
         <div style="flex:1">${UI.field('Jenis Kelamin', `<select class="clay-select" id="f-jk"><option ${s && s.jk === 'L' ? 'selected' : ''}>L</option><option ${s && s.jk === 'P' ? 'selected' : ''}>P</option></select>`)}</div>
       </div>
       ${UI.field('Tanggal Lahir', `<input class="clay-input" id="f-tgl" type="date" value="${s ? UI.esc(s.tglLahir) : ''}">`)}
-      ${UI.field('Alamat', `<input class="clay-input" id="f-alamat" value="${s ? UI.esc(s.alamat) : ''}">`)}
+      <div class="row">
+        <div style="flex:1">${UI.field('Alamat', `<input class="clay-input" id="f-alamat" value="${s ? UI.esc(s.alamat) : ''}">`)}</div>
+        <div style="flex:1">${UI.field('Alamat Arab (Opsional)', `<input class="clay-input" id="f-alamat-arab" dir="rtl" value="${s ? UI.esc(s.alamatArab || '') : ''}" placeholder="العنوان بالعربية">`)}</div>
+      </div>
       <div class="row">
         <div style="flex:1">${UI.field('No HP Santri', `<input class="clay-input" id="f-hp" value="${s ? UI.esc(s.noHp) : ''}">`)}</div>
         <div style="flex:1">${UI.field('Nama Wali', `<input class="clay-input" id="f-wali" value="${s ? UI.esc(s.namaWali) : ''}">`)}</div>
+        <div style="flex:1">${UI.field('Nama Wali Arab (Opsional)', `<input class="clay-input" id="f-wali-arab" dir="rtl" value="${s ? UI.esc(s.namaWaliArab || '') : ''}" placeholder="اسم ولي الأمر">`)}</div>
       </div>
       ${UI.field('No HP Wali', `<input class="clay-input" id="f-hpwali" value="${s ? UI.esc(s.noHpWali) : ''}">`)}
       <div class="row">
@@ -1925,12 +1932,15 @@ const Admin = (() => {
           const db = Store.get();
           const data = {
             nama: m.querySelector('#f-nama').value.trim(),
+            namaArab: (m.querySelector('#f-nama-arab')?.value || '').trim(),
             nis: m.querySelector('#f-nis').value.trim(),
             jk: m.querySelector('#f-jk').value,
             tglLahir: m.querySelector('#f-tgl').value,
             alamat: m.querySelector('#f-alamat').value.trim(),
+            alamatArab: (m.querySelector('#f-alamat-arab')?.value || '').trim(),
             noHp: m.querySelector('#f-hp').value.trim(),
             namaWali: m.querySelector('#f-wali').value.trim(),
+            namaWaliArab: (m.querySelector('#f-wali-arab')?.value || '').trim(),
             noHpWali: m.querySelector('#f-hpwali').value.trim(),
             status: m.querySelector('#f-status').value,
             tingkat: m.querySelector('#f-tingkat').value,
@@ -1972,11 +1982,12 @@ const Admin = (() => {
             if (waliRec) {
               if (!santri.waliId) santri.waliId = waliRec.id;
               waliRec.nama = data.namaWali || waliRec.nama;
+              if (data.namaWaliArab !== undefined) waliRec.namaArab = data.namaWaliArab;
               waliRec.noHp = data.noHpWali;
             } else if (data.namaWali || data.noHpWali) {
               const newWaliId = Store.uid('w');
               santri.waliId = newWaliId;
-              db.wali.push({ id: newWaliId, nama: data.namaWali || data.nama, noHp: data.noHpWali, santriId: santri.id });
+              db.wali.push({ id: newWaliId, nama: data.namaWali || data.nama, namaArab: data.namaWaliArab || '', noHp: data.noHpWali, santriId: santri.id });
             }
             Store.log('Edit santri: ' + data.nama);
           } else {
@@ -1985,7 +1996,7 @@ const Admin = (() => {
             Store.configureSantriPrograms(newS, programs, programHalaqah, primary);
             db.santri.push(newS);
             // akun wali otomatis
-            const wali = { id: waliId, nama: data.namaWali || data.nama, noHp: data.noHpWali, santriId: newS.id };
+            const wali = { id: waliId, nama: data.namaWali || data.nama, namaArab: data.namaWaliArab || '', noHp: data.noHpWali, santriId: newS.id };
             db.wali.push(wali);
             const uname = m.querySelector('#f-uname').value.trim() || genWaliUsername(data.nama);
             const pass = m.querySelector('#f-pass').value.trim() || WALI_PASS;
@@ -2205,7 +2216,10 @@ const Admin = (() => {
     const db = Store.get();
     const u = id ? Store.findUstadz(id) : null;
     const body = `
-      ${UI.field('Nama', `<input class="clay-input" id="f-nama" value="${u ? UI.esc(u.nama) : ''}">`)}
+      <div class="row">
+        <div style="flex:1">${UI.field('Nama', `<input class="clay-input" id="f-nama" value="${u ? UI.esc(u.nama) : ''}">`)}</div>
+        <div style="flex:1">${UI.field('Nama Arab (Opsional)', `<input class="clay-input" id="f-nama-arab" dir="rtl" value="${u ? UI.esc(u.namaArab || '') : ''}" placeholder="مثال: الأستاذ علي">`)}</div>
+      </div>
       <div class="row">
         <div style="flex:1">${UI.field('No HP', `<input class="clay-input" id="f-hp" value="${u ? UI.esc(u.noHp) : ''}">`)}</div>
         <div style="flex:1">${UI.field('Email', `<input class="clay-input" id="f-email" value="${u ? UI.esc(u.email) : ''}">`)}</div>
@@ -2237,7 +2251,7 @@ const Admin = (() => {
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
         { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
           const db = Store.get();
-          const data = { nama: m.querySelector('#f-nama').value.trim(), noHp: m.querySelector('#f-hp').value.trim(), email: m.querySelector('#f-email').value.trim(), status: m.querySelector('#f-status').value, halaqah: m.querySelector('#f-halaqah').value, ttd: _ustTtd };
+          const data = { nama: m.querySelector('#f-nama').value.trim(), namaArab: (m.querySelector('#f-nama-arab')?.value || '').trim(), noHp: m.querySelector('#f-hp').value.trim(), email: m.querySelector('#f-email').value.trim(), status: m.querySelector('#f-status').value, halaqah: m.querySelector('#f-halaqah').value, ttd: _ustTtd };
           if (!data.nama) { UI.toast('Nama wajib', 'error'); return; }
           
           let uname = m.querySelector('#f-uname').value.trim();
@@ -2449,7 +2463,10 @@ const Admin = (() => {
     const allLevels = [...new Set([...levelChoices, ...(h && h.level ? [h.level] : [])])];
     const hasZiyadah = Store.hasFeature('ziyadah');
     const body = `
-      ${UI.field('Nama Halaqah', `<input class="clay-input" id="f-nama" value="${h ? UI.esc(h.nama) : ''}">`)}
+      <div class="row">
+        <div style="flex:1">${UI.field('Nama Halaqah', `<input class="clay-input" id="f-nama" value="${h ? UI.esc(h.nama) : ''}">`)}</div>
+        <div style="flex:1">${UI.field('Nama Halaqah Arab (Opsional)', `<input class="clay-input" id="f-nama-arab" dir="rtl" value="${h ? UI.esc(h.namaArab || '') : ''}" placeholder="مثال: حلقة عمر">`)}</div>
+      </div>
       ${UI.field('Ustadz Pengampu', `<div class="clay-card pad-sm" style="max-height:190px;overflow:auto">${ustadzChecks || '<div class="muted">Belum ada ustadz.</div>'}</div><div class="muted" style="font-size:12px;margin-top:4px">Boleh pilih lebih dari satu ustadz. Ustadz yang dipilih akan dipindahkan dari halaqah sebelumnya.</div>`)}
       <div class="row">
         <div style="flex:1">${UI.field('Level', `<select class="clay-select" id="f-level">${UI.optionsFromList(allLevels.map(l => ({ v: l, l })), 'v', 'l', curLevel)}</select>`)}</div>
@@ -2468,7 +2485,7 @@ const Admin = (() => {
         { label: 'Batal', cls: 'ghost', onClick: (m, c) => c() },
         { label: 'Simpan', cls: 'primary', onClick: async (m, c) => {
           const db = Store.get();
-          const data = { nama: m.querySelector('#f-nama').value.trim(), level: m.querySelector('#f-level').value, hari: m.querySelector('#f-hari').value.trim(), jam: m.querySelector('#f-jam').value.trim(), ruangan: m.querySelector('#f-ruang').value.trim(), setoranBacaan: m.querySelector('#f-setoran-bacaan').checked };
+          const data = { nama: m.querySelector('#f-nama').value.trim(), namaArab: (m.querySelector('#f-nama-arab')?.value || '').trim(), level: m.querySelector('#f-level').value, hari: m.querySelector('#f-hari').value.trim(), jam: m.querySelector('#f-jam').value.trim(), ruangan: m.querySelector('#f-ruang').value.trim(), setoranBacaan: m.querySelector('#f-setoran-bacaan').checked };
           const ustadzIds = [...m.querySelectorAll('[data-halaqah-ustadz]:checked')].map(input => input.value);
           if (!data.nama) { UI.toast('Nama wajib', 'error'); return; }
           if (db.halaqah.some(x => x.id !== id && x.nama.toLowerCase() === data.nama.toLowerCase())) { UI.toast('Nama halaqah sudah digunakan', 'error'); return; }
@@ -3823,7 +3840,28 @@ const Admin = (() => {
           <div style="flex:1">${UI.field('Kota / Tempat TTD Raport', `<input class="clay-input" id="s-kota" value="${UI.esc(s.kota || '')}" placeholder="Contoh: Yogyakarta">`)}</div>
           <div style="flex:1">${UI.field('Jabatan Pimpinan (TTD)', `<input class="clay-input" id="s-jabatan-pimpinan" value="${UI.esc(s.jabatanPimpinan || 'Mudir / Kepala Lembaga')}">`)}</div>
         </div>
-        ${UI.field('Nama Pimpinan / Mudir (TTD Raport)', `<input class="clay-input" id="s-nama-pimpinan" value="${UI.esc(s.namaPimpinan || '')}" placeholder="Nama pimpinan untuk tanda tangan raport & laporan PDF">`) }
+        <div class="row">
+          <div style="flex:1">${UI.field('Nama Pimpinan / Mudir (TTD Raport)', `<input class="clay-input" id="s-nama-pimpinan" value="${UI.esc(s.namaPimpinan || '')}" placeholder="Nama pimpinan untuk tanda tangan raport & laporan PDF">`)}</div>
+          <div style="flex:1">${UI.field('Model Raport Default', `<select class="clay-select" id="s-raport-model">
+            <option value="model1" ${(s.raportModel || 'model1') === 'model1' ? 'selected' : ''}>Model 1 — Bahasa Indonesia</option>
+            <option value="model2" ${s.raportModel === 'model2' ? 'selected' : ''}>Model 2 — Bahasa Indonesia &amp; Arab</option>
+            <option value="model3" ${s.raportModel === 'model3' ? 'selected' : ''}>Model 3 — Full Bahasa Arab</option>
+          </select>`)}</div>
+        </div>
+        <details style="margin:10px 0 6px;border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:var(--bg)">
+          <summary style="cursor:pointer;font-weight:600;font-size:13px">Data Lembaga Versi Arab (Opsional — untuk Raport Model 2 &amp; 3)</summary>
+          <div style="margin-top:10px">
+            <div class="row">
+              <div style="flex:1">${UI.field('Nama Lembaga (Arab)', `<input class="clay-input" id="s-nama-arab" dir="rtl" value="${UI.esc(s.namaLembagaArab || '')}" placeholder="مثال: معهد الحكمة لتحفيظ القرآن الكريم">`)}</div>
+              <div style="flex:1">${UI.field('Alamat Lembaga (Arab)', `<input class="clay-input" id="s-alamat-arab" dir="rtl" value="${UI.esc(s.alamatArab || '')}" placeholder="العنوان باللغة العربية">`)}</div>
+            </div>
+            <div class="row">
+              <div style="flex:1">${UI.field('Kota TTD Raport (Arab)', `<input class="clay-input" id="s-kota-arab" dir="rtl" value="${UI.esc(s.kotaArab || '')}" placeholder="مثال: يوغياكارتا">`)}</div>
+              <div style="flex:1">${UI.field('Jabatan Pimpinan (Arab)', `<input class="clay-input" id="s-jabatan-pimpinan-arab" dir="rtl" value="${UI.esc(s.jabatanPimpinanArab || '')}" placeholder="مثال: مدير المؤسسة">`)}</div>
+              <div style="flex:1">${UI.field('Nama Pimpinan / Mudir (Arab)', `<input class="clay-input" id="s-nama-pimpinan-arab" dir="rtl" value="${UI.esc(s.namaPimpinanArab || '')}" placeholder="اسم مدير المؤسسة">`)}</div>
+            </div>
+          </div>
+        </details>
         <div class="row" style="gap:14px;flex-wrap:wrap;margin:8px 0 4px">
           <div style="flex:1;min-width:220px">
             <label class="field-label">TTD Kepala / Mudir (Raport)</label>
@@ -4523,10 +4561,17 @@ const Admin = (() => {
       const db = Store.get();
       db.settings.sesiHalaqah = cleanedSesi;
       db.settings.namaLembaga = document.getElementById('s-nama').value.trim();
+      db.settings.namaLembagaArab = (document.getElementById('s-nama-arab')?.value || '').trim();
       db.settings.alamat = document.getElementById('s-alamat').value.trim();
+      db.settings.alamatArab = (document.getElementById('s-alamat-arab')?.value || '').trim();
       db.settings.kota = (document.getElementById('s-kota')?.value || '').trim();
+      db.settings.kotaArab = (document.getElementById('s-kota-arab')?.value || '').trim();
       db.settings.jabatanPimpinan = (document.getElementById('s-jabatan-pimpinan')?.value || '').trim() || 'Mudir / Kepala Lembaga';
+      db.settings.jabatanPimpinanArab = (document.getElementById('s-jabatan-pimpinan-arab')?.value || '').trim();
       db.settings.namaPimpinan = (document.getElementById('s-nama-pimpinan')?.value || '').trim();
+      db.settings.namaPimpinanArab = (document.getElementById('s-nama-pimpinan-arab')?.value || '').trim();
+      const rpModelEl = document.getElementById('s-raport-model');
+      if (rpModelEl) db.settings.raportModel = ['model1', 'model2', 'model3'].includes(rpModelEl.value) ? rpModelEl.value : 'model1';
       db.settings.tahunAjaran = document.getElementById('s-thn').value.trim();
       db.settings.semester = document.getElementById('s-sem').value;
       db.settings.standarPenilaian = document.getElementById('s-standar').value.trim();

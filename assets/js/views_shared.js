@@ -1461,12 +1461,137 @@ function exportLaporanExcel(filters) {
   }
 
   /* ---------- Raport Santri (Admin, Ustadz, & Portal Wali) ---------- */
-  function raportPredikat(nilai) {
+  const RAPORT_MODEL_OPTIONS = [
+    { v: 'model1', l: 'Model 1 — Bahasa Indonesia' },
+    { v: 'model2', l: 'Model 2 — Indonesia & Arab' },
+    { v: 'model3', l: 'Model 3 — Full Bahasa Arab' }
+  ];
+  const ARABIC_MONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+
+  function normalizeRaportModel(model) {
+    return ['model1', 'model2', 'model3'].includes(model) ? model : 'model1';
+  }
+
+  function toArabicDigits(value) {
+    const map = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    return String(value == null ? '' : value)
+      .replace(/\d/g, d => map[Number(d)])
+      .replace(/%/g, '٪');
+  }
+
+  function fmtDateArab(iso) {
+    if (!iso) return '-';
+    const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+      const y = parseInt(m[1], 10);
+      const mo = parseInt(m[2], 10) - 1;
+      const day = parseInt(m[3], 10);
+      if (mo >= 0 && mo < 12) return `${toArabicDigits(day)} ${ARABIC_MONTHS[mo]} ${toArabicDigits(y)}`;
+    }
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso);
+    return `${toArabicDigits(d.getDate())} ${ARABIC_MONTHS[d.getMonth()]} ${toArabicDigits(d.getFullYear())}`;
+  }
+
+  function formatSetoranLabelArab(rec) {
+    if (!rec) return '-';
+    const sAwal = getSurah(rec.sAwal);
+    const sAkhir = getSurah(rec.sAkhir);
+    if (!sAwal || !sAkhir) return '-';
+    const a1 = toArabicDigits(rec.aAwal);
+    const a2 = toArabicDigits(rec.aAkhir);
+    if (rec.sAwal === rec.sAkhir) {
+      return `${sAwal.arab} ${a1}${rec.aAwal !== rec.aAkhir ? '-' + a2 : ''}`;
+    }
+    return `من ${sAwal.arab}: ${a1} إلى ${sAkhir.arab}: ${a2}`;
+  }
+
+  function juzHafalanArab(label) {
+    if (!label) return '';
+    const isPlural = /[–,-]|\bdan\b/i.test(label);
+    return toArabicDigits(
+      String(label)
+        .replace(/\bJuz\s+/gi, isPlural ? 'الأجزاء ' : 'الجزء ')
+        .replace(/\bdan\b/gi, 'و')
+    );
+  }
+
+  function raportPredikat(nilai, model = 'model1') {
+    const m = normalizeRaportModel(model);
     if (!nilai || nilai <= 0) return '-';
-    if (nilai >= 90) return 'A (Mumtaz)';
-    if (nilai >= 80) return 'B (Jayyid Jiddan)';
-    if (nilai >= 70) return 'C (Jayyid)';
-    return 'D (Maqbul)';
+    if (nilai >= 90) return m === 'model3' ? 'ممتاز (أ)' : (m === 'model2' ? 'A (Mumtaz / ممتاز)' : 'A (Mumtaz)');
+    if (nilai >= 80) return m === 'model3' ? 'جيد جدًا (ب)' : (m === 'model2' ? 'B (Jayyid Jiddan / جيد جدًا)' : 'B (Jayyid Jiddan)');
+    if (nilai >= 70) return m === 'model3' ? 'جيد (ج)' : (m === 'model2' ? 'C (Jayyid / جيد)' : 'C (Jayyid)');
+    return m === 'model3' ? 'مقبول (د)' : (m === 'model2' ? 'D (Maqbul / مقبول)' : 'D (Maqbul)');
+  }
+
+  function raportSikapLabel(sikap, model = 'model1') {
+    const m = normalizeRaportModel(model);
+    const raw = sikap || '-';
+    const arMap = {
+      'Sangat Baik': 'ممتاز',
+      'Baik': 'جيد',
+      'Cukup': 'مقبول',
+      'Perlu Bimbingan': 'يحتاج إلى توجيه'
+    };
+    const ar = arMap[raw];
+    if (!ar || m === 'model1') return raw;
+    return m === 'model3' ? ar : `${raw} (${ar})`;
+  }
+
+  function raportSemesterLabel(sem, model = 'model1') {
+    const m = normalizeRaportModel(model);
+    const arMap = { Ganjil: 'الفصل الأول', Genap: 'الفصل الثاني' };
+    const ar = arMap[sem];
+    if (!ar || m === 'model1') return sem || '-';
+    return m === 'model3' ? ar : `${sem} (${ar})`;
+  }
+
+  function raportProgramArab(program) {
+    const p = String(program || '').trim().toLowerCase();
+    if (p === 'tahsin') return 'تحسين التلاوة';
+    if (p === 'ziyadah') return 'الزيادة (حفظ القرآن)';
+    if (p === 'mutqin') return 'برنامج الإتقان';
+    if (p === 'murojaah') return 'المراجعة';
+    return program || '-';
+  }
+
+  function raportTingkatArab(tingkat) {
+    const t = String(tingkat || '').trim().toUpperCase();
+    if (t === 'TPQ' || t === 'TKQ' || t === "TK AL-QUR'AN" || t === 'TK ALQURAN') return 'مرحلة التمهيدي (TPQ)';
+    if (t === 'SD') return 'المرحلة الابتدائية (SD)';
+    if (t === 'SMP') return 'المرحلة المتوسطة (SMP)';
+    if (t === 'SMA') return 'المرحلة الثانوية (SMA)';
+    return tingkat || '-';
+  }
+
+  function raportHalaqahSummaryArab(s) {
+    if (!s) return '-';
+    const programs = Store.activeProgramsForSantri ? Store.activeProgramsForSantri(s) : [];
+    const parts = [];
+    programs.forEach(p => {
+      const h = Store.halaqahForSantriProgram ? Store.halaqahForSantriProgram(s, p) : null;
+      const hName = h ? ((h.namaArab || '').trim() || h.nama) : '';
+      if (hName) parts.push(`${hName} (${raportProgramArab(p)})`);
+    });
+    if (parts.length) return [...new Set(parts)].join('، ');
+    const hList = Store.halaqahForSantri ? Store.halaqahForSantri(s) : [];
+    if (hList.length) return hList.map(h => (h.namaArab || '').trim() || h.nama).filter(Boolean).join('، ');
+    return Store.halaqahSummaryForSantri(s) || '-';
+  }
+
+  function raportEducationLabel(s, model = 'model1') {
+    if (normalizeRaportModel(model) !== 'model3') return Store.educationLabel(s);
+    const tk = raportTingkatArab(Store.tingkatForSantri(s));
+    const kl = Store.kelasForSantri(s);
+    return kl ? `${tk} · فصل ${toArabicDigits(kl)}` : `${tk} · لم يُحدد الفصل`;
+  }
+
+  function raportFileSuffix(model) {
+    const m = normalizeRaportModel(model);
+    if (m === 'model2') return '_IndoArab';
+    if (m === 'model3') return '_Arab';
+    return '';
   }
 
   function defaultRaportRange(tahunAjaran, semester) {
@@ -1548,22 +1673,31 @@ function exportLaporanExcel(filters) {
         : (babAkhir || babAwal);
       const halAwal = first.halaman || '';
       const halAkhir = last.halaman || '';
-      const halPart = (halAwal || halAkhir)
-        ? `Hal ${halAwal && halAkhir && halAwal !== halAkhir ? `${String(halAwal).split(/[–-]/)[0].trim()}–${String(halAkhir).split(/[–-]/).pop().trim()}` : (halAkhir || halAwal)}`
-        : '';
+      const halSpan = halAwal && halAkhir && halAwal !== halAkhir
+        ? `${String(halAwal).split(/[–-]/)[0].trim()}–${String(halAkhir).split(/[–-]/).pop().trim()}`
+        : (halAkhir || halAwal);
+      const halPart = (halAwal || halAkhir) ? `Hal ${halSpan}` : '';
       const defaultCapaian = [
         babSpan,
         list.length ? `${list.length}x kajian${halPart ? ' · ' + halPart : ''}` : ''
       ].filter(Boolean).join(' · ') || 'Belum ada jurnal materi';
+      const defaultCapaianAr = [
+        babSpan,
+        list.length ? `${toArabicDigits(list.length)} دروس${halSpan ? ' · ص ' + toArabicDigits(halSpan) : ''}` : ''
+      ].filter(Boolean).join(' · ') || 'لم تُسجل دروس بعد';
+      const hasCustomCapaian = !!(savedEntry && typeof savedEntry === 'object' && savedEntry.capaian && savedEntry.capaian !== defaultCapaian);
       const capaian = (savedEntry && typeof savedEntry === 'object' && savedEntry.capaian)
         ? savedEntry.capaian
         : defaultCapaian;
+      const capaianArab = (savedEntry && typeof savedEntry === 'object' && savedEntry.capaianArab)
+        ? String(savedEntry.capaianArab).trim()
+        : '';
       const rawNilai = (savedEntry && typeof savedEntry === 'object') ? savedEntry.nilai : savedEntry;
       const numNilai = Number(rawNilai);
       const nilai = (rawNilai !== '' && rawNilai !== null && rawNilai !== undefined && Number.isFinite(numNilai) && numNilai > 0)
         ? Math.round(numNilai)
         : 0;
-      return { key, mapel: mapelName, kitab: kitabName, count: list.length, defaultCapaian, capaian, nilai };
+      return { key, mapel: mapelName, kitab: kitabName, count: list.length, defaultCapaian, defaultCapaianAr, hasCustomCapaian, capaian, capaianArab, nilai };
     });
 
     const scoredPrograms = [];
@@ -1578,6 +1712,12 @@ function exportLaporanExcel(filters) {
 
     const fallbackCat = (db.catatan || []).filter(c => c.santriId === s.id && inPeriod(c.tanggal)).slice().sort(sortByTime).pop();
     const ustadzList = [...new Set(Store.halaqahForSantri(s).flatMap(h => Store.ustadzNamesForHalaqah(h)))];
+    const ustadzListArab = [...new Set(Store.halaqahForSantri(s).flatMap(h =>
+      Store.ustadzIdsForHalaqah(h).map(id => {
+        const u = Store.findUstadz(id);
+        return u ? ((u.namaArab || '').trim() || u.nama) : '';
+      }).filter(Boolean)
+    ))];
     const primaryUstadz = (saved && saved.ustadzId ? Store.findUstadz(saved.ustadzId) : null)
       || Store.halaqahForSantri(s).flatMap(h => Store.ustadzIdsForHalaqah(h).map(id => Store.findUstadz(id))).find(Boolean)
       || null;
@@ -1601,173 +1741,552 @@ function exportLaporanExcel(filters) {
       saved,
       sikap: saved ? (saved.sikap || '-') : '-',
       catatan: saved ? (saved.catatan || '') : (fallbackCat ? fallbackCat.isi : ''),
+      catatanArab: saved ? (saved.catatanArab || '') : '',
       rekomendasi: saved ? (saved.rekomendasi || '') : '',
+      rekomendasiArab: saved ? (saved.rekomendasiArab || '') : '',
       ustadzLabel: ustadzList.join(', ') || '-',
+      ustadzLabelArab: ustadzListArab.join('، ') || (ustadzList.join(', ') || '-'),
       ustadzTtd,
       pimpinanTtd,
       capLembaga
     };
   }
 
-  function buildRaportSheetHtml(info, state) {
+  function buildRaportModelData(info, state) {
     const db = Store.get();
     const cfg = db.settings || {};
     const s = info.s;
-    const logoUrl = UI.safeUrl(cfg.logo);
-    const rows = [];
+    const model = normalizeRaportModel(state.model || cfg.raportModel);
+    const isRtl = model === 'model3';
+    const isBi = model === 'model2';
+    const isFemale = s.jk === 'P';
+    const studentAr = isFemale ? 'اسم الطالبة' : 'اسم الطالب';
+    const genderAr = s.jk === 'L' ? 'ذكر' : (s.jk === 'P' ? 'أنثى' : '-');
 
+    const kotaTtd = (cfg.kota || '').trim();
+    const kotaTtdAr = (cfg.kotaArab || cfg.kota || '').trim();
+    const tglTtdId = (kotaTtd ? kotaTtd + ', ' : '') + UI.fmtDate(Store.todayStr());
+    const tglTtdAr = (kotaTtdAr ? kotaTtdAr + '، ' : '') + fmtDateArab(Store.todayStr());
+    const jabPimpinan = cfg.jabatanPimpinan || 'Mudir / Kepala Lembaga';
+    const jabAr = (cfg.jabatanPimpinanArab || '').trim() || (jabPimpinan === 'Mudir / Kepala Lembaga'
+      ? 'مدير المؤسسة'
+      : (/[\u0600-\u06FF]/.test(jabPimpinan) ? jabPimpinan : 'مدير المؤسسة'));
+    const namaPimpinan = (cfg.namaPimpinan || '').trim() || '( ________________________ )';
+    const namaPimpinanAr = (cfg.namaPimpinanArab || '').trim() || namaPimpinan;
+    const santriNameAr = (s.namaArab || '').trim() || s.nama;
+    const waliNameAr = (s.namaWaliArab || '').trim() || (s.namaWali || '( .............................. )');
+    const halaqahIdStr = Store.halaqahSummaryForSantri(s) || '-';
+    const halaqahArStr = raportHalaqahSummaryArab(s);
+    const ustadzArStr = info.ustadzLabelArab || info.ustadzLabel;
+
+    const progRows = [];
     if (Store.hasFeature('tahsin') && (Store.santriHasProgram(s, 'Tahsin') || info.tahsinList.length)) {
-      const first = info.tahsinList[0];
-      const last = info.tahsinList[info.tahsinList.length - 1];
-      const capaian = info.tahsinList.length
-        ? `${info.tahsinList.length}x setoran · Hal ${first.halAwal} → ${last.halAkhir}`
-        : 'Belum ada setoran pada periode ini';
-      rows.push(`<tr><td><b>Tahsin / Bacaan</b></td><td>${UI.esc(capaian)}</td><td class="center">${info.tahsinAvg || '-'}</td><td class="center">${UI.esc(raportPredikat(info.tahsinAvg))}</td></tr>`);
+      const first = info.tahsinList[0], last = info.tahsinList[info.tahsinList.length - 1];
+      progRows.push({
+        idName: 'Tahsin / Bacaan',
+        arName: 'تحسين التلاوة',
+        idCap: info.tahsinList.length
+          ? `${info.tahsinList.length}x setoran · Hal ${first.halAwal} → ${last.halAkhir}`
+          : 'Belum ada setoran pada periode ini',
+        arCap: info.tahsinList.length
+          ? `${toArabicDigits(info.tahsinList.length)} مرات تسميع · صفحة ${toArabicDigits(first.halAwal)} إلى ${toArabicDigits(last.halAkhir)}`
+          : 'لم يتم التسميع خلال هذه الفترة',
+        idSub: '',
+        arSub: '',
+        nilai: info.tahsinAvg,
+        nilaiAr: info.tahsinAvg ? toArabicDigits(info.tahsinAvg) : '',
+        pred: raportPredikat(info.tahsinAvg, model),
+        predId: raportPredikat(info.tahsinAvg, 'model1'),
+        predAr: info.tahsinAvg ? raportPredikat(info.tahsinAvg, 'model3') : ''
+      });
     }
     if (Store.hasFeature('ziyadah') && (Store.santriHasProgram(s, 'Ziyadah') || info.ziyadahList.length)) {
-      const first = info.ziyadahList[0];
-      const last = info.ziyadahList[info.ziyadahList.length - 1];
-      const periodRange = info.ziyadahList.length
-        ? `${info.ziyadahList.length}x setoran (${formatSetoranLabel(first)} → ${formatSetoranLabel(last)})`
-        : 'Belum ada setoran pada periode ini';
-      const kumulatif = info.totalH ? `Total Hafalan: <b>${info.totalH.pages} halaman penuh</b>${info.juzLabel ? ' (' + UI.esc(info.juzLabel) + ')' : ''}` : 'Total Hafalan: -';
-      rows.push(`<tr><td><b>Ziyadah (Tahfidz)</b></td><td>${UI.esc(periodRange)}<div class="rp-sub">${kumulatif}</div></td><td class="center">${info.ziyadahAvg || '-'}</td><td class="center">${UI.esc(raportPredikat(info.ziyadahAvg))}</td></tr>`);
+      const first = info.ziyadahList[0], last = info.ziyadahList[info.ziyadahList.length - 1];
+      progRows.push({
+        idName: 'Ziyadah (Tahfidz)',
+        arName: 'الزيادة (حفظ القرآن)',
+        idCap: info.ziyadahList.length
+          ? `${info.ziyadahList.length}x setoran (${formatSetoranLabel(first)} → ${formatSetoranLabel(last)})`
+          : 'Belum ada setoran pada periode ini',
+        arCap: info.ziyadahList.length
+          ? `${toArabicDigits(info.ziyadahList.length)} مرات تسميع (${formatSetoranLabelArab(first)} ← ${formatSetoranLabelArab(last)})`
+          : 'لم يتم التسميع خلال هذه الفترة',
+        idSub: info.totalH
+          ? `Total Hafalan: ${info.totalH.pages} halaman penuh${info.juzLabel ? ' (' + info.juzLabel + ')' : ''}`
+          : 'Total Hafalan: -',
+        arSub: info.totalH
+          ? `إجمالي الحفظ: ${toArabicDigits(info.totalH.pages)} صفحة كاملة${info.juzLabel ? ' (' + juzHafalanArab(info.juzLabel) + ')' : ''}`
+          : 'إجمالي الحفظ: -',
+        nilai: info.ziyadahAvg,
+        nilaiAr: info.ziyadahAvg ? toArabicDigits(info.ziyadahAvg) : '',
+        pred: raportPredikat(info.ziyadahAvg, model),
+        predId: raportPredikat(info.ziyadahAvg, 'model1'),
+        predAr: info.ziyadahAvg ? raportPredikat(info.ziyadahAvg, 'model3') : ''
+      });
     }
     if (Store.hasFeature('mutqin') && (Store.santriHasProgram(s, 'Mutqin') || info.mutqinList.length)) {
       const last = info.mutqinList[info.mutqinList.length - 1];
-      const capaian = info.mutqinList.length
-        ? `${info.mutqinList.length}x ujian · ${info.mutqinPages ? info.mutqinPages + ' hlm · ' : ''}${formatSetoranLabel(last)}`
-        : 'Belum ada setoran pada periode ini';
-      rows.push(`<tr><td><b>Program Mutqin</b></td><td>${UI.esc(capaian)}</td><td class="center">${info.mutqinAvg || '-'}</td><td class="center">${UI.esc(raportPredikat(info.mutqinAvg))}</td></tr>`);
+      progRows.push({
+        idName: 'Program Mutqin',
+        arName: 'برنامج الإتقان',
+        idCap: info.mutqinList.length
+          ? `${info.mutqinList.length}x ujian · ${info.mutqinPages ? info.mutqinPages + ' hlm · ' : ''}${formatSetoranLabel(last)}`
+          : 'Belum ada setoran pada periode ini',
+        arCap: info.mutqinList.length
+          ? `${toArabicDigits(info.mutqinList.length)} مرات اختبار · ${info.mutqinPages ? toArabicDigits(info.mutqinPages) + ' صفحة · ' : ''}${formatSetoranLabelArab(last)}`
+          : 'لم يتم الاختبار خلال هذه الفترة',
+        idSub: '',
+        arSub: '',
+        nilai: info.mutqinAvg,
+        nilaiAr: info.mutqinAvg ? toArabicDigits(info.mutqinAvg) : '',
+        pred: raportPredikat(info.mutqinAvg, model),
+        predId: raportPredikat(info.mutqinAvg, 'model1'),
+        predAr: info.mutqinAvg ? raportPredikat(info.mutqinAvg, 'model3') : ''
+      });
     }
     if (Store.hasFeature('murojaah') && info.murojaahStats) {
       const ms = info.murojaahStats;
-      const capaian = ms.setoran
-        ? `${ms.setoran}x pengulangan · ${ms.pages} halaman penuh (${ms.ayahs} ayat)`
-        : 'Belum ada catatan murojaah pada periode ini';
       const mAvg = ms.nilaiRata || 0;
-      rows.push(`<tr><td><b>Murojaah</b></td><td>${UI.esc(capaian)}</td><td class="center">${mAvg || '-'}</td><td class="center">${UI.esc(raportPredikat(mAvg))}</td></tr>`);
+      progRows.push({
+        idName: 'Murojaah',
+        arName: 'المراجعة',
+        idCap: ms.setoran
+          ? `${ms.setoran}x pengulangan · ${ms.pages} halaman penuh (${ms.ayahs} ayat)`
+          : 'Belum ada catatan murojaah pada periode ini',
+        arCap: ms.setoran
+          ? `${toArabicDigits(ms.setoran)} مرات مراجعة · ${toArabicDigits(ms.pages)} صفحة كاملة (${toArabicDigits(ms.ayahs)} آية)`
+          : 'لم تُسجل مراجعة خلال هذه الفترة',
+        idSub: '',
+        arSub: '',
+        nilai: mAvg,
+        nilaiAr: mAvg ? toArabicDigits(mAvg) : '',
+        pred: raportPredikat(mAvg, model),
+        predId: raportPredikat(mAvg, 'model1'),
+        predAr: mAvg ? raportPredikat(mAvg, 'model3') : ''
+      });
     }
     if (Store.hasFeature('talim')) {
       if (info.kajianItems.length) {
         info.kajianItems.forEach(k => {
-          const kitabHtml = k.kitab ? `<div class="rp-sub">Kitab: <i>${UI.esc(k.kitab)}</i></div>` : '';
           const kajianTitle = /^kajian\b/i.test(k.mapel) ? k.mapel : `Kajian ${k.mapel}`;
-          rows.push(`<tr><td><b>${UI.esc(kajianTitle)}</b></td><td>${UI.esc(k.capaian)}${kitabHtml}</td><td class="center">${k.nilai || '-'}</td><td class="center">${UI.esc(raportPredikat(k.nilai))}</td></tr>`);
+          progRows.push({
+            idName: kajianTitle,
+            arName: `مادة ${k.mapel}`,
+            idCap: k.capaian,
+            arCap: k.capaianArab || (k.hasCustomCapaian ? k.capaian : k.defaultCapaianAr),
+            idSub: k.kitab ? `Kitab: ${k.kitab}` : '',
+            arSub: k.kitab ? `الكتاب: ${k.kitab}` : '',
+            nilai: k.nilai,
+            nilaiAr: k.nilai ? toArabicDigits(k.nilai) : '',
+            pred: raportPredikat(k.nilai, model),
+            predId: raportPredikat(k.nilai, 'model1'),
+            predAr: k.nilai ? raportPredikat(k.nilai, 'model3') : ''
+          });
         });
       } else {
-        rows.push(`<tr><td><b>Kajian</b></td><td>Belum ada jurnal kajian pada periode ini</td><td class="center">-</td><td class="center">-</td></tr>`);
+        progRows.push({
+          idName: 'Kajian',
+          arName: 'المواد الدراسية',
+          idCap: 'Belum ada jurnal kajian pada periode ini',
+          arCap: 'لم تُسجل دروس علمية خلال هذه الفترة',
+          idSub: '',
+          arSub: '',
+          nilai: 0,
+          nilaiAr: '',
+          pred: '-',
+          predId: '-',
+          predAr: ''
+        });
       }
     }
 
-    const kotaTtd = (cfg.kota || '').trim();
-    const tglTtd = (kotaTtd ? kotaTtd + ', ' : '') + UI.fmtDate(Store.todayStr());
-    const jabPimpinan = cfg.jabatanPimpinan || 'Mudir / Kepala Lembaga';
-    const namaPimpinan = (cfg.namaPimpinan || '').trim() || '( ________________________ )';
+    const santriArInput = (s.namaArab || '').trim();
+    const metaPairs = [
+      {
+        lId: 'Nama Santri', lAr: studentAr,
+        lValId: s.nama,
+        lValAr: santriArInput,
+        lVal: isRtl ? santriNameAr : s.nama,
+        rId: 'Tahun Ajaran', rAr: 'العام الدراسي',
+        rValId: state.tahunAjaran,
+        rValAr: toArabicDigits(state.tahunAjaran),
+        rVal: isRtl ? toArabicDigits(state.tahunAjaran) : state.tahunAjaran
+      },
+      {
+        lId: 'NIS / JK', lAr: 'رقم القيد / الجنس',
+        lValId: `${s.nis || '-'} / ${s.jk || '-'}`,
+        lValAr: `${s.nis ? toArabicDigits(s.nis) : '-'} / ${genderAr}`,
+        lVal: isRtl ? `${s.nis ? toArabicDigits(s.nis) : '-'} / ${genderAr}` : `${s.nis || '-'} / ${s.jk || '-'}`,
+        rId: 'Semester', rAr: 'الفصل الدراسي',
+        rValId: state.semester || '-',
+        rValAr: raportSemesterLabel(state.semester, 'model3'),
+        rVal: isRtl ? raportSemesterLabel(state.semester, 'model3') : (state.semester || '-')
+      },
+      {
+        lId: 'Tingkat & Kelas', lAr: 'المرحلة والفصل',
+        lValId: Store.educationLabel(s),
+        lValAr: raportEducationLabel(s, 'model3'),
+        lVal: isRtl ? raportEducationLabel(s, 'model3') : Store.educationLabel(s),
+        rId: 'Periode Penilaian', rAr: 'فترة التقييم',
+        rValId: `${UI.fmtDate(state.dari)} – ${UI.fmtDate(state.sampai)}`,
+        rValAr: `${fmtDateArab(state.dari)} – ${fmtDateArab(state.sampai)}`,
+        rVal: isRtl ? `${fmtDateArab(state.dari)} – ${fmtDateArab(state.sampai)}` : `${UI.fmtDate(state.dari)} – ${UI.fmtDate(state.sampai)}`
+      },
+      {
+        lId: 'Halaqah / Program', lAr: 'الحلقة / البرنامج',
+        lValId: halaqahIdStr,
+        lValAr: halaqahArStr !== '-' ? halaqahArStr : '',
+        lVal: isRtl ? halaqahArStr : halaqahIdStr,
+        rId: 'Pembimbing', rAr: 'المشرف',
+        rValId: info.ustadzLabel,
+        rValAr: ustadzArStr !== info.ustadzLabel ? ustadzArStr : '',
+        rVal: isRtl ? ustadzArStr : info.ustadzLabel
+      }
+    ];
+
+    const hasKajianAtt = !!(info.talimAbsen && info.talimAbsen.slot > 0);
+    const attRows = info.kehadiran ? [
+      { idName: 'Halaqah (Al-Qur’an)', arName: 'حلقة القرآن الكريم', att: info.kehadiran },
+      ...(hasKajianAtt ? [{ idName: 'Kajian', arName: 'الدرس العلمي', att: info.talimAbsen }] : [])
+    ] : [];
+
+    const sikapArOnly = info.sikap && info.sikap !== '-' ? raportSikapLabel(info.sikap, 'model3') : '';
+    const closingRows = [
+      {
+        idLabel: 'Akhlaq & Kedisiplinan', arLabel: 'الأخلاق والانضباط',
+        valId: info.sikap || '-', valAr: sikapArOnly !== info.sikap ? sikapArOnly : '',
+        val: isRtl ? (sikapArOnly || '-') : (info.sikap || '-'), multiline: false
+      },
+      {
+        idLabel: 'Catatan Ustadz', arLabel: 'ملاحظات المشرف',
+        valId: info.catatan || '-', valAr: info.catatanArab || '',
+        val: isRtl ? (info.catatanArab || info.catatan || '-') : (info.catatan || '-'), multiline: true
+      },
+      {
+        idLabel: 'Rekomendasi', arLabel: 'التوصيات',
+        valId: info.rekomendasi || '-', valAr: info.rekomendasiArab || '',
+        val: isRtl ? (info.rekomendasiArab || info.rekomendasi || '-') : (info.rekomendasi || '-'), multiline: false
+      }
+    ];
+
+    const waliIdName = s.namaWali || '( .............................. )';
+    const ustIdName = info.ustadzLabel !== '-' ? info.ustadzLabel : '( .............................. )';
+    const signs = [
+      {
+        idTop: 'Mengetahui,', arTop: 'يعتمد،',
+        idRole: 'Orang Tua / Wali Santri', arRole: isFemale ? 'ولي أمر الطالبة' : 'ولي أمر الطالب',
+        name: isRtl ? waliNameAr : waliIdName,
+        nameAr: (s.namaWaliArab || '').trim(),
+        ttdUrl: '', capUrl: ''
+      },
+      {
+        idTop: '', arTop: '',
+        idRole: 'Ustadz Pembimbing', arRole: 'الأستاذ المشرف',
+        name: isRtl ? (ustadzArStr !== '-' ? ustadzArStr : '( .............................. )') : ustIdName,
+        nameAr: ustadzArStr !== info.ustadzLabel && ustadzArStr !== '-' ? ustadzArStr : '',
+        ttdUrl: info.ustadzTtd, capUrl: ''
+      },
+      {
+        idTop: tglTtdId, arTop: tglTtdAr,
+        idRole: jabPimpinan, arRole: jabAr,
+        name: isRtl ? namaPimpinanAr : namaPimpinan,
+        nameAr: (cfg.namaPimpinanArab || '').trim(),
+        ttdUrl: info.pimpinanTtd, capUrl: info.capLembaga
+      }
+    ];
+
+    const instId = cfg.namaLembaga || 'Lembaga Tahfidz';
+    const instAr = (cfg.namaLembagaArab || '').trim();
+    const addrId = cfg.alamat || '';
+    const addrAr = (cfg.alamatArab || '').trim();
+
+    return {
+      model, isRtl, isBi,
+      logoUrl: UI.safeUrl(cfg.logo),
+      instName: isRtl ? (instAr || instId) : instId,
+      instNameAr: instAr,
+      instAddr: isRtl ? (addrAr || addrId) : addrId,
+      instAddrAr: addrAr,
+      titleId: 'RAPORT HASIL BELAJAR TAHFIDZ AL-QUR’AN',
+      titleAr: 'كشف نتائج دراسة وتحفيظ القرآن الكريم',
+      metaPairs,
+      progRows,
+      avgScoreStr: info.avgNilai ? (isRtl ? toArabicDigits(info.avgNilai) : String(info.avgNilai)) : '-',
+      avgScoreAr: info.avgNilai ? toArabicDigits(info.avgNilai) : '',
+      avgPred: raportPredikat(info.avgNilai, model),
+      avgPredId: raportPredikat(info.avgNilai, 'model1'),
+      avgPredAr: info.avgNilai ? raportPredikat(info.avgNilai, 'model3') : '',
+      hasKajianAtt,
+      attRows,
+      closingRows,
+      signs
+    };
+  }
+
+  function buildRaportSheetHtml(info, state) {
+    const d = buildRaportModelData(info, state);
+    const fmtNum = v => (v ? (d.isRtl ? toArabicDigits(v) : String(v)) : '-');
+
+    if (d.model === 'model1') {
+      const rows = d.progRows.map(r => {
+        const subHtml = r.idSub
+          ? `<div class="rp-sub">${r.idName.startsWith('Ziyadah') ? UI.esc(r.idSub).replace('Total Hafalan: ', 'Total Hafalan: <b>').replace(/(\s*\(|$)/, '</b>$1') : `<i>${UI.esc(r.idSub)}</i>`}</div>`
+          : '';
+        return `<tr><td><b>${UI.esc(r.idName)}</b></td><td>${UI.esc(r.idCap)}${subHtml}</td><td class="center">${fmtNum(r.nilai)}</td><td class="center">${UI.esc(r.pred)}</td></tr>`;
+      }).join('');
+
+      return `
+        <section class="raport-sheet">
+          <div class="rp-header">
+            ${d.logoUrl ? `<img class="rp-logo" src="${UI.esc(d.logoUrl)}" alt="Logo">` : ''}
+            <div>
+              <div class="rp-inst">${UI.esc(d.instName)}</div>
+              <div class="rp-addr">${UI.esc(d.instAddr)}</div>
+              <div class="rp-title">${UI.esc(d.titleId)}</div>
+            </div>
+          </div>
+          <table class="rp-meta">
+            ${d.metaPairs.map(mp => `<tr>
+              <td><b>${UI.esc(mp.lId)}</b></td><td>: ${UI.esc(mp.lVal)}</td>
+              <td><b>${UI.esc(mp.rId)}</b></td><td>: ${UI.esc(mp.rVal)}</td>
+            </tr>`).join('')}
+          </table>
+
+          <div class="rp-sec">A. Capaian Pembelajaran &amp; Hafalan</div>
+          <table class="rp-table">
+            <thead><tr><th>Program / Bidang</th><th>Capaian Periode Ini</th><th class="center" style="width:72px">Nilai</th><th class="center" style="width:130px">Predikat</th></tr></thead>
+            <tbody>
+              ${rows || '<tr><td colspan="4" class="center">Belum ada modul program pembelajaran yang aktif.</td></tr>'}
+              <tr class="rp-summary">
+                <td colspan="2"><b>Rata-rata Nilai Akhir Periode</b></td>
+                <td class="center"><b>${UI.esc(d.avgScoreStr)}</b></td>
+                <td class="center"><b>${UI.esc(d.avgPred)}</b></td>
+              </tr>
+            </tbody>
+          </table>
+
+          ${d.attRows.length ? `
+          <div class="rp-sec">B. Rekapitulasi Kehadiran</div>
+          <table class="rp-table rp-att">
+            <thead><tr>${d.hasKajianAtt ? '<th>Kegiatan</th>' : ''}<th class="center">Hadir</th><th class="center">Izin</th><th class="center">Sakit</th><th class="center">Libur</th><th class="center">Alfa</th><th class="center">Persentase</th></tr></thead>
+            <tbody>
+              ${d.attRows.map(ar => `<tr>
+                ${d.hasKajianAtt ? `<td><b>${UI.esc(ar.idName)}</b></td>` : ''}
+                <td class="center">${ar.att.Hadir}</td>
+                <td class="center">${ar.att.Izin}</td>
+                <td class="center">${ar.att.Sakit}</td>
+                <td class="center">${ar.att.Libur}</td>
+                <td class="center">${ar.att.Alfa}</td>
+                <td class="center"><b>${ar.att.persen}%</b></td>
+              </tr>`).join('')}
+            </tbody>
+          </table>` : ''}
+
+          <div class="rp-closing">
+            <div class="rp-sec">${d.attRows.length ? 'C' : 'B'}. Akhlaq, Catatan Pembimbing &amp; Rekomendasi</div>
+            <table class="rp-table">
+              <tbody>
+                ${d.closingRows.map(cr => `<tr><td style="width:170px"><b>${UI.esc(cr.idLabel)}</b></td><td${cr.multiline ? ' style="white-space:pre-line"' : ''}>${UI.esc(cr.val)}</td></tr>`).join('')}
+              </tbody>
+            </table>
+
+            <div class="rp-signs">
+              ${d.signs.map(sc => `
+                <div class="rp-sign">
+                  <div>${sc.idTop ? UI.esc(sc.idTop) : '&nbsp;'}</div>
+                  <div>${UI.esc(sc.idRole)}</div>
+                  <div class="rp-sign-space">
+                    ${sc.capUrl ? `<img class="rp-cap-img" src="${UI.esc(sc.capUrl)}" alt="Cap Lembaga">` : ''}
+                    ${sc.ttdUrl ? `<img class="rp-sign-img" src="${UI.esc(sc.ttdUrl)}" alt="TTD">` : ''}
+                  </div>
+                  <div class="rp-sign-name">${UI.esc(sc.name)}</div>
+                </div>`).join('')}
+            </div>
+          </div>
+        </section>`;
+    }
+
+    if (d.model === 'model2') {
+      const rows = d.progRows.map(r => {
+        const showArCap = r.arCap && r.arCap !== r.idCap;
+        return `<tr>
+          <td><b>${UI.esc(r.idName)}</b><div class="rp-ar-sub" dir="rtl">${UI.esc(r.arName)}</div></td>
+          <td>
+            <div>${UI.esc(r.idCap)}${r.idSub ? `<div class="rp-sub">${UI.esc(r.idSub)}</div>` : ''}</div>
+            ${showArCap ? `<div class="rp-ar-cap" dir="rtl">${UI.esc(r.arCap)}${r.arSub ? `<div class="rp-ar-sub">${UI.esc(r.arSub)}</div>` : ''}</div>` : (r.arSub ? `<div class="rp-ar-cap" dir="rtl">${UI.esc(r.arSub)}</div>` : '')}
+          </td>
+          <td class="center"><div>${fmtNum(r.nilai)}</div>${r.nilaiAr ? `<div class="rp-ar-sub" dir="rtl">${UI.esc(r.nilaiAr)}</div>` : ''}</td>
+          <td class="center"><div>${UI.esc(r.predId)}</div>${r.predAr ? `<div class="rp-ar-sub" dir="rtl">${UI.esc(r.predAr)}</div>` : ''}</td>
+        </tr>`;
+      }).join('');
+
+      const attHeaders = [
+        ...(d.hasKajianAtt ? [{ id: 'Kegiatan', ar: 'النشاط', cls: '' }] : []),
+        { id: 'Hadir', ar: 'الحضور', cls: 'center' },
+        { id: 'Izin', ar: 'الاستئذان', cls: 'center' },
+        { id: 'Sakit', ar: 'المرض', cls: 'center' },
+        { id: 'Libur', ar: 'العطلة', cls: 'center' },
+        { id: 'Alfa', ar: 'الغياب', cls: 'center' },
+        { id: 'Persentase', ar: 'النسبة', cls: 'center' }
+      ];
+
+      return `
+        <section class="raport-sheet rp-bilingual">
+          <div class="rp-header">
+            ${d.logoUrl ? `<img class="rp-logo" src="${UI.esc(d.logoUrl)}" alt="Logo">` : ''}
+            <div style="flex:1">
+              <div class="rp-inst">${UI.esc(d.instName)}</div>
+              ${d.instNameAr ? `<div class="rp-ar-sub" dir="rtl" style="font-weight:700;text-align:left">${UI.esc(d.instNameAr)}</div>` : ''}
+              <div class="rp-addr">${UI.esc(d.instAddr)}</div>
+              ${d.instAddrAr ? `<div class="rp-ar-sub" dir="rtl" style="text-align:left;font-size:11.5px">${UI.esc(d.instAddrAr)}</div>` : ''}
+              <div class="rp-title">${UI.esc(d.titleId)}</div>
+              <div class="rp-title-ar" dir="rtl">${UI.esc(d.titleAr)}</div>
+            </div>
+          </div>
+          <table class="rp-meta">
+            ${d.metaPairs.map(mp => `<tr>
+              <td><b>${UI.esc(mp.lId)}</b><div class="rp-ar-lbl" dir="rtl">${UI.esc(mp.lAr)}</div></td>
+              <td>: ${UI.esc(mp.lValId)}${mp.lValAr ? `<div class="rp-ar-lbl" dir="rtl">${UI.esc(mp.lValAr)}</div>` : ''}</td>
+              <td><b>${UI.esc(mp.rId)}</b><div class="rp-ar-lbl" dir="rtl">${UI.esc(mp.rAr)}</div></td>
+              <td>: ${UI.esc(mp.rValId)}${mp.rValAr ? `<div class="rp-ar-lbl" dir="rtl">${UI.esc(mp.rValAr)}</div>` : ''}</td>
+            </tr>`).join('')}
+          </table>
+
+          <div class="rp-sec rp-sec-bi"><span>A. Capaian Pembelajaran &amp; Hafalan</span><span class="rp-ar-sec" dir="rtl">نتائج التعلم والحفظ</span></div>
+          <table class="rp-table">
+            <thead><tr>
+              <th>Program / Bidang<div class="rp-ar-th" dir="rtl">البرنامج / المادة</div></th>
+              <th>Capaian Periode Ini<div class="rp-ar-th" dir="rtl">الإنجاز خلال الفترة</div></th>
+              <th class="center" style="width:74px">Nilai<div class="rp-ar-th" dir="rtl">الدرجة</div></th>
+              <th class="center" style="width:155px">Predikat<div class="rp-ar-th" dir="rtl">التقدير</div></th>
+            </tr></thead>
+            <tbody>
+              ${rows || '<tr><td colspan="4" class="center">Belum ada modul program pembelajaran yang aktif.</td></tr>'}
+              <tr class="rp-summary">
+                <td colspan="2"><b>Rata-rata Nilai Akhir Periode</b><div class="rp-ar-sub" dir="rtl">المعدل العام للفترة</div></td>
+                <td class="center"><b>${UI.esc(d.avgScoreStr)}</b>${d.avgScoreAr ? `<div class="rp-ar-sub" dir="rtl">${UI.esc(d.avgScoreAr)}</div>` : ''}</td>
+                <td class="center"><b>${UI.esc(d.avgPredId)}</b>${d.avgPredAr ? `<div class="rp-ar-sub" dir="rtl">${UI.esc(d.avgPredAr)}</div>` : ''}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          ${d.attRows.length ? `
+          <div class="rp-sec rp-sec-bi"><span>B. Rekapitulasi Kehadiran</span><span class="rp-ar-sec" dir="rtl">خلاصة الحضور والغياب</span></div>
+          <table class="rp-table rp-att">
+            <thead><tr>${attHeaders.map(h => `<th${h.cls ? ` class="${h.cls}"` : ''}>${UI.esc(h.id)}<div class="rp-ar-th" dir="rtl">${UI.esc(h.ar)}</div></th>`).join('')}</tr></thead>
+            <tbody>
+              ${d.attRows.map(ar => `<tr>
+                ${d.hasKajianAtt ? `<td><b>${UI.esc(ar.idName)}</b><div class="rp-ar-sub" dir="rtl">${UI.esc(ar.arName)}</div></td>` : ''}
+                <td class="center"><div>${ar.att.Hadir}</div><div class="rp-ar-sub" dir="rtl">${toArabicDigits(ar.att.Hadir)}</div></td>
+                <td class="center"><div>${ar.att.Izin}</div><div class="rp-ar-sub" dir="rtl">${toArabicDigits(ar.att.Izin)}</div></td>
+                <td class="center"><div>${ar.att.Sakit}</div><div class="rp-ar-sub" dir="rtl">${toArabicDigits(ar.att.Sakit)}</div></td>
+                <td class="center"><div>${ar.att.Libur}</div><div class="rp-ar-sub" dir="rtl">${toArabicDigits(ar.att.Libur)}</div></td>
+                <td class="center"><div>${ar.att.Alfa}</div><div class="rp-ar-sub" dir="rtl">${toArabicDigits(ar.att.Alfa)}</div></td>
+                <td class="center"><div><b>${ar.att.persen}%</b></div><div class="rp-ar-sub" dir="rtl">${toArabicDigits(ar.att.persen + '%')}</div></td>
+              </tr>`).join('')}
+            </tbody>
+          </table>` : ''}
+
+          <div class="rp-closing">
+            <div class="rp-sec rp-sec-bi"><span>${d.attRows.length ? 'C' : 'B'}. Akhlaq, Catatan Pembimbing &amp; Rekomendasi</span><span class="rp-ar-sec" dir="rtl">السلوك وملاحظات المشرف والتوصيات</span></div>
+            <table class="rp-table">
+              <tbody>
+                ${d.closingRows.map(cr => `<tr><td style="width:190px"><b>${UI.esc(cr.idLabel)}</b><div class="rp-ar-sub" dir="rtl">${UI.esc(cr.arLabel)}</div></td><td${cr.multiline ? ' style="white-space:pre-line"' : ''}><div>${UI.esc(cr.valId)}</div>${cr.valAr ? `<div class="rp-ar-cap" dir="rtl">${UI.esc(cr.valAr)}</div>` : ''}</td></tr>`).join('')}
+              </tbody>
+            </table>
+
+            <div class="rp-signs">
+              ${d.signs.map(sc => `
+                <div class="rp-sign">
+                  <div>${sc.idTop ? UI.esc(sc.idTop) : '&nbsp;'}</div>
+                  ${sc.arTop ? `<div class="rp-ar-sub" dir="rtl">${UI.esc(sc.arTop)}</div>` : ''}
+                  <div>${UI.esc(sc.idRole)}</div>
+                  <div class="rp-ar-sub" dir="rtl">${UI.esc(sc.arRole)}</div>
+                  <div class="rp-sign-space">
+                    ${sc.capUrl ? `<img class="rp-cap-img" src="${UI.esc(sc.capUrl)}" alt="Cap Lembaga">` : ''}
+                    ${sc.ttdUrl ? `<img class="rp-sign-img" src="${UI.esc(sc.ttdUrl)}" alt="TTD">` : ''}
+                  </div>
+                  <div class="rp-sign-name">${UI.esc(sc.name)}</div>
+                  ${sc.nameAr ? `<div class="rp-ar-sub" dir="rtl" style="font-weight:700">${UI.esc(sc.nameAr)}</div>` : ''}
+                </div>`).join('')}
+            </div>
+          </div>
+        </section>`;
+    }
+
+    // Model 3 — Full Bahasa Arab (RTL)
+    const rowsAr = d.progRows.map(r => {
+      const subHtml = r.arSub ? `<div class="rp-sub">${UI.esc(r.arSub)}</div>` : '';
+      return `<tr><td><b>${UI.esc(r.arName)}</b></td><td>${UI.esc(r.arCap)}${subHtml}</td><td class="center">${fmtNum(r.nilai)}</td><td class="center">${UI.esc(r.pred)}</td></tr>`;
+    }).join('');
+    const secBPrefix = d.attRows.length ? 'ثالثًا' : 'ثانيًا';
 
     return `
-      <section class="raport-sheet">
+      <section class="raport-sheet rp-rtl" dir="rtl" lang="ar">
         <div class="rp-header">
-          ${logoUrl ? `<img class="rp-logo" src="${UI.esc(logoUrl)}" alt="Logo">` : ''}
-          <div>
-            <div class="rp-inst">${UI.esc(cfg.namaLembaga || 'Lembaga Tahfidz')}</div>
-            <div class="rp-addr">${UI.esc(cfg.alamat || '')}</div>
-            <div class="rp-title">RAPORT HASIL BELAJAR TAHFIDZ AL-QUR’AN</div>
+          ${d.logoUrl ? `<img class="rp-logo" src="${UI.esc(d.logoUrl)}" alt="Logo">` : ''}
+          <div style="flex:1">
+            <div class="rp-inst">${UI.esc(d.instName)}</div>
+            <div class="rp-addr">${UI.esc(d.instAddr)}</div>
+            <div class="rp-title">${UI.esc(d.titleAr)}</div>
           </div>
         </div>
         <table class="rp-meta">
-          <tr>
-            <td><b>Nama Santri</b></td><td>: ${UI.esc(s.nama)}</td>
-            <td><b>Tahun Ajaran</b></td><td>: ${UI.esc(state.tahunAjaran)}</td>
-          </tr>
-          <tr>
-            <td><b>NIS / JK</b></td><td>: ${UI.esc(s.nis || '-')} / ${UI.esc(s.jk || '-')}</td>
-            <td><b>Semester</b></td><td>: ${UI.esc(state.semester)}</td>
-          </tr>
-          <tr>
-            <td><b>Tingkat &amp; Kelas</b></td><td>: ${UI.esc(Store.educationLabel(s))}</td>
-            <td><b>Periode Penilaian</b></td><td>: ${UI.esc(UI.fmtDate(state.dari))} – ${UI.esc(UI.fmtDate(state.sampai))}</td>
-          </tr>
-          <tr>
-            <td><b>Halaqah / Program</b></td><td>: ${UI.esc(Store.halaqahSummaryForSantri(s) || '-')}</td>
-            <td><b>Pembimbing</b></td><td>: ${UI.esc(info.ustadzLabel)}</td>
-          </tr>
+          ${d.metaPairs.map(mp => `<tr>
+            <td><b>${UI.esc(mp.lAr)}</b></td><td>: ${UI.esc(mp.lVal)}</td>
+            <td><b>${UI.esc(mp.rAr)}</b></td><td>: ${UI.esc(mp.rVal)}</td>
+          </tr>`).join('')}
         </table>
 
-        <div class="rp-sec">A. Capaian Pembelajaran &amp; Hafalan</div>
+        <div class="rp-sec">أولًا: نتائج التعلم وحفظ القرآن الكريم</div>
         <table class="rp-table">
-          <thead><tr><th>Program / Bidang</th><th>Capaian Periode Ini</th><th class="center" style="width:72px">Nilai</th><th class="center" style="width:130px">Predikat</th></tr></thead>
+          <thead><tr><th>البرنامج / المادة</th><th>الإنجاز خلال الفترة</th><th class="center" style="width:72px">الدرجة</th><th class="center" style="width:125px">التقدير</th></tr></thead>
           <tbody>
-            ${rows.join('') || '<tr><td colspan="4" class="center">Belum ada modul program pembelajaran yang aktif.</td></tr>'}
+            ${rowsAr || '<tr><td colspan="4" class="center">لا توجد برامج دراسية مفعلة حاليًا.</td></tr>'}
             <tr class="rp-summary">
-              <td colspan="2"><b>Rata-rata Nilai Akhir Periode</b></td>
-              <td class="center"><b>${info.avgNilai || '-'}</b></td>
-              <td class="center"><b>${UI.esc(info.predikat)}</b></td>
+              <td colspan="2"><b>المعدل العام للفترة</b></td>
+              <td class="center"><b>${UI.esc(d.avgScoreStr)}</b></td>
+              <td class="center"><b>${UI.esc(d.avgPred)}</b></td>
             </tr>
           </tbody>
         </table>
 
-        ${info.kehadiran ? (() => {
-          const ka = info.talimAbsen && info.talimAbsen.slot > 0 ? info.talimAbsen : null;
-          return `
-        <div class="rp-sec">B. Rekapitulasi Kehadiran</div>
+        ${d.attRows.length ? `
+        <div class="rp-sec">ثانيًا: خلاصة الحضور والغياب</div>
         <table class="rp-table rp-att">
-          <thead><tr>${ka ? '<th>Kegiatan</th>' : ''}<th class="center">Hadir</th><th class="center">Izin</th><th class="center">Sakit</th><th class="center">Libur</th><th class="center">Alfa</th><th class="center">Persentase</th></tr></thead>
+          <thead><tr>${d.hasKajianAtt ? '<th>النشاط</th>' : ''}<th class="center">الحضور</th><th class="center">الاستئذان</th><th class="center">المرض</th><th class="center">العطلة</th><th class="center">الغياب</th><th class="center">النسبة</th></tr></thead>
           <tbody>
-            <tr>
-              ${ka ? '<td><b>Halaqah (Al-Qur’an)</b></td>' : ''}
-              <td class="center">${info.kehadiran.Hadir}</td>
-              <td class="center">${info.kehadiran.Izin}</td>
-              <td class="center">${info.kehadiran.Sakit}</td>
-              <td class="center">${info.kehadiran.Libur}</td>
-              <td class="center">${info.kehadiran.Alfa}</td>
-              <td class="center"><b>${info.kehadiran.persen}%</b></td>
-            </tr>
-            ${ka ? `<tr>
-              <td><b>Kajian</b></td>
-              <td class="center">${ka.Hadir}</td>
-              <td class="center">${ka.Izin}</td>
-              <td class="center">${ka.Sakit}</td>
-              <td class="center">${ka.Libur}</td>
-              <td class="center">${ka.Alfa}</td>
-              <td class="center"><b>${ka.persen}%</b></td>
-            </tr>` : ''}
+            ${d.attRows.map(ar => `<tr>
+              ${d.hasKajianAtt ? `<td><b>${UI.esc(ar.arName)}</b></td>` : ''}
+              <td class="center">${toArabicDigits(ar.att.Hadir)}</td>
+              <td class="center">${toArabicDigits(ar.att.Izin)}</td>
+              <td class="center">${toArabicDigits(ar.att.Sakit)}</td>
+              <td class="center">${toArabicDigits(ar.att.Libur)}</td>
+              <td class="center">${toArabicDigits(ar.att.Alfa)}</td>
+              <td class="center"><b>${toArabicDigits(ar.att.persen + '%')}</b></td>
+            </tr>`).join('')}
           </tbody>
-        </table>`;
-        })() : ''}
+        </table>` : ''}
 
         <div class="rp-closing">
-          <div class="rp-sec">${info.kehadiran ? 'C' : 'B'}. Akhlaq, Catatan Pembimbing &amp; Rekomendasi</div>
+          <div class="rp-sec">${secBPrefix}: السلوك وملاحظات المشرف والتوصيات</div>
           <table class="rp-table">
             <tbody>
-              <tr><td style="width:170px"><b>Akhlaq &amp; Kedisiplinan</b></td><td>${UI.esc(info.sikap)}</td></tr>
-              <tr><td><b>Catatan Ustadz</b></td><td style="white-space:pre-line">${UI.esc(info.catatan || '-')}</td></tr>
-              <tr><td><b>Rekomendasi</b></td><td>${UI.esc(info.rekomendasi || '-')}</td></tr>
+              ${d.closingRows.map(cr => `<tr><td style="width:170px"><b>${UI.esc(cr.arLabel)}</b></td><td${cr.multiline ? ' style="white-space:pre-line"' : ''}>${UI.esc(cr.val)}</td></tr>`).join('')}
             </tbody>
           </table>
 
           <div class="rp-signs">
-            <div class="rp-sign">
-              <div>Mengetahui,</div>
-              <div>Orang Tua / Wali Santri</div>
-              <div class="rp-sign-space"></div>
-              <div class="rp-sign-name">${UI.esc(s.namaWali || '( .............................. )')}</div>
-            </div>
-            <div class="rp-sign">
-              <div>&nbsp;</div>
-              <div>Ustadz Pembimbing</div>
-              <div class="rp-sign-space">${info.ustadzTtd ? `<img class="rp-sign-img" src="${UI.esc(info.ustadzTtd)}" alt="TTD Ustadz">` : ''}</div>
-              <div class="rp-sign-name">${UI.esc(info.ustadzLabel !== '-' ? info.ustadzLabel : '( .............................. )')}</div>
-            </div>
-            <div class="rp-sign">
-              <div>${UI.esc(tglTtd)}</div>
-              <div>${UI.esc(jabPimpinan)}</div>
-              <div class="rp-sign-space">
-                ${info.capLembaga ? `<img class="rp-cap-img" src="${UI.esc(info.capLembaga)}" alt="Cap Lembaga">` : ''}
-                ${info.pimpinanTtd ? `<img class="rp-sign-img" src="${UI.esc(info.pimpinanTtd)}" alt="TTD Pimpinan">` : ''}
-              </div>
-              <div class="rp-sign-name">${UI.esc(namaPimpinan)}</div>
-            </div>
+            ${d.signs.map(sc => `
+              <div class="rp-sign">
+                <div>${sc.arTop ? UI.esc(sc.arTop) : '&nbsp;'}</div>
+                <div>${UI.esc(sc.arRole)}</div>
+                <div class="rp-sign-space">
+                  ${sc.capUrl ? `<img class="rp-cap-img" src="${UI.esc(sc.capUrl)}" alt="Cap Lembaga">` : ''}
+                  ${sc.ttdUrl ? `<img class="rp-sign-img" src="${UI.esc(sc.ttdUrl)}" alt="TTD">` : ''}
+                </div>
+                <div class="rp-sign-name">${UI.esc(sc.name)}</div>
+              </div>`).join('')}
           </div>
         </div>
       </section>`;
@@ -1790,33 +2309,53 @@ function exportLaporanExcel(filters) {
       <head>
         <meta charset="utf-8">
         <title>${UI.esc(docTitle || 'Raport_Santri')}</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet" />
         <style>
           @page { size: A4 portrait; margin: 10mm; }
           * { box-sizing: border-box; }
           body { margin: 0; background: #fff; color: #000; font: 9.5pt Arial, sans-serif; line-height: 1.32; }
           .raport-sheet { page-break-after: always; break-after: page; color: #000; }
           .raport-sheet:last-child { page-break-after: auto; break-after: auto; }
+          .raport-sheet.rp-rtl { direction: rtl; text-align: right; font-family: 'Amiri', 'Traditional Arabic', Arial, sans-serif; font-size: 10.5pt; line-height: 1.45; }
           .rp-header { display: flex; align-items: center; gap: 10px; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 9px; }
           .rp-logo { width: 46px; height: 46px; object-fit: contain; }
           .rp-inst { font-size: 12.5pt; font-weight: 700; text-transform: uppercase; color: #000; }
           .rp-addr { font-size: 8pt; color: #000; }
           .rp-title { font-size: 10.5pt; font-weight: 700; margin-top: 2px; letter-spacing: 0.3px; color: #000; }
+          .rp-rtl .rp-title { font-size: 13pt; letter-spacing: 0; }
+          .rp-title-ar { font-family: 'Amiri', 'Traditional Arabic', serif; font-size: 11.5pt; font-weight: 700; margin-top: 2px; color: #000; text-align: left; }
           .rp-meta { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-size: 9pt; color: #000; }
+          .rp-rtl .rp-meta { font-size: 10pt; }
           .rp-meta td { padding: 2px 4px; vertical-align: top; color: #000; }
+          .rp-ar-lbl { font-family: 'Amiri', 'Traditional Arabic', serif; font-size: 9pt; font-weight: 400; color: #222; line-height: 1.25; }
           .rp-sec { font-size: 9.5pt; font-weight: 700; margin: 8px 0 4px; color: #000; page-break-after: avoid; break-after: avoid; }
+          .rp-rtl .rp-sec { font-size: 11pt; }
+          .rp-sec-bi { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+          .rp-ar-sec { font-family: 'Amiri', 'Traditional Arabic', serif; font-size: 10.5pt; font-weight: 700; }
           .rp-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; color: #000; }
           .rp-table tr { page-break-inside: avoid; break-inside: avoid; }
           .rp-table th, .rp-table td { border: 1px solid #000; padding: 4px 6px; font-size: 8.8pt; vertical-align: top; color: #000; background: #fff; }
+          .rp-rtl .rp-table th, .rp-rtl .rp-table td { font-size: 9.8pt; padding: 4px 7px; }
           .rp-table th { background: #fff; font-weight: 700; text-align: left; }
+          .rp-rtl .rp-table th { text-align: right; }
           .rp-table th.center, .rp-table td.center { text-align: center; }
+          .rp-ar-th { font-family: 'Amiri', 'Traditional Arabic', serif; font-size: 9pt; font-weight: 700; line-height: 1.25; }
+          .rp-ar-sub { font-family: 'Amiri', 'Traditional Arabic', serif; font-size: 9pt; font-weight: 400; color: #111; line-height: 1.3; margin-top: 1px; }
+          .rp-ar-cap { font-family: 'Amiri', 'Traditional Arabic', serif; font-size: 9.2pt; color: #111; line-height: 1.35; margin-top: 2px; }
+          .rp-ar-inline { font-family: 'Amiri', 'Traditional Arabic', serif; font-size: 9.5pt; font-weight: 700; }
           .rp-sub { font-size: 8pt; color: #000; margin-top: 1.5px; }
+          .rp-rtl .rp-sub { font-size: 9pt; }
           .rp-summary td { background: #fff; font-weight: 700; }
           .rp-closing { page-break-inside: avoid; break-inside: avoid; }
           .rp-signs { display: flex; justify-content: space-between; gap: 14px; margin-top: 14px; page-break-inside: avoid; break-inside: avoid; color: #000; }
           .rp-sign { flex: 1; text-align: center; font-size: 8.8pt; color: #000; }
+          .rp-rtl .rp-sign { font-size: 9.8pt; }
           .rp-sign-space { position: relative; height: 52px; display: flex; align-items: center; justify-content: center; margin: 2px 0; }
           .rp-sign-img { max-height: 48px; max-width: 135px; object-fit: contain; position: relative; z-index: 2; }
           .rp-cap-img { position: absolute; left: 50%; top: 50%; transform: translate(-72%, -52%) rotate(-6deg); max-height: 62px; max-width: 90px; object-fit: contain; opacity: 0.85; z-index: 1; pointer-events: none; }
+          .rp-rtl .rp-cap-img { transform: translate(-28%, -52%) rotate(6deg); }
           .rp-sign-name { font-weight: 700; text-decoration: underline; color: #000; }
           @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
         </style>
@@ -1829,6 +2368,7 @@ function exportLaporanExcel(filters) {
       img.onload = res;
       img.onerror = res;
     })));
+    const fontsReady = (w.document.fonts && w.document.fonts.ready) ? w.document.fonts.ready.catch(() => {}) : Promise.resolve();
     let printed = false;
     const triggerPrint = () => {
       if (printed || w.closed) return;
@@ -1837,7 +2377,7 @@ function exportLaporanExcel(filters) {
       w.print();
       UI.toast('Pilih "Simpan sebagai PDF" pada dialog cetak untuk mengunduh PDF', 'info');
     };
-    Promise.race([imgsReady, new Promise(res => setTimeout(res, 1500))]).then(() => setTimeout(triggerPrint, 80));
+    Promise.race([Promise.all([imgsReady, fontsReady]), new Promise(res => setTimeout(res, 1800))]).then(() => setTimeout(triggerPrint, 80));
   }
 
   function renderRaportPage(container, options) {
@@ -1858,6 +2398,7 @@ function exportLaporanExcel(filters) {
       semester: initSem,
       dari: initRange.dari,
       sampai: initRange.sampai,
+      model: normalizeRaportModel(cfg.raportModel),
       ustadzId: opt.isUstadzScope ? '' : (opt.ustadzId || ''),
       halaqahId: opt.halaqahId || '',
       cari: ''
@@ -1866,24 +2407,41 @@ function exportLaporanExcel(filters) {
     const previewStyle = `
       <style>
         .rp-preview-card .raport-sheet { background:#fff; color:#000; padding:4px; }
+        .rp-preview-card .raport-sheet.rp-rtl { direction:rtl; text-align:right; font-family:'Amiri','Traditional Arabic',Arial,sans-serif; font-size:14.5px; line-height:1.5; }
         .rp-preview-card .rp-header { display:flex; align-items:center; gap:12px; border-bottom:2px solid #000; padding-bottom:10px; margin-bottom:12px; color:#000; }
         .rp-preview-card .rp-logo { width:48px; height:48px; object-fit:contain; border-radius:6px; }
         .rp-preview-card .rp-inst { font-size:15px; font-weight:700; text-transform:uppercase; color:#000; }
         .rp-preview-card .rp-addr { font-size:12px; color:#000; }
         .rp-preview-card .rp-title { font-size:13.5px; font-weight:700; margin-top:2px; color:#000; }
+        .rp-preview-card .rp-rtl .rp-title { font-size:17px; }
+        .rp-preview-card .rp-title-ar { font-family:'Amiri','Traditional Arabic',serif; font-size:15.5px; font-weight:700; margin-top:2px; color:#000; text-align:left; }
         .rp-preview-card .rp-meta { width:100%; border-collapse:collapse; font-size:13px; margin-bottom:12px; color:#000; }
+        .rp-preview-card .rp-rtl .rp-meta { font-size:14.5px; }
         .rp-preview-card .rp-meta td { padding:3px 6px; vertical-align:top; color:#000; }
+        .rp-preview-card .rp-ar-lbl { font-family:'Amiri','Traditional Arabic',serif; font-size:12.5px; font-weight:400; color:#222; line-height:1.3; }
         .rp-preview-card .rp-sec { font-size:13.5px; font-weight:700; margin:12px 0 6px; color:#000; }
+        .rp-preview-card .rp-rtl .rp-sec { font-size:15.5px; }
+        .rp-preview-card .rp-sec-bi { display:flex; justify-content:space-between; align-items:baseline; gap:8px; flex-wrap:wrap; }
+        .rp-preview-card .rp-ar-sec { font-family:'Amiri','Traditional Arabic',serif; font-size:14.5px; font-weight:700; }
         .rp-preview-card .rp-table { width:100%; border-collapse:collapse; margin-bottom:8px; font-size:13px; color:#000; }
+        .rp-preview-card .rp-rtl .rp-table { font-size:14.5px; }
         .rp-preview-card .rp-table th, .rp-preview-card .rp-table td { border:1px solid #000; padding:6px 8px; vertical-align:top; color:#000; background:#fff; }
         .rp-preview-card .rp-table th { background:#fff; font-weight:700; text-align:left; }
+        .rp-preview-card .rp-rtl .rp-table th { text-align:right; }
         .rp-preview-card .rp-table th.center, .rp-preview-card .rp-table td.center { text-align:center; }
+        .rp-preview-card .rp-ar-th { font-family:'Amiri','Traditional Arabic',serif; font-size:12.5px; font-weight:700; line-height:1.3; }
+        .rp-preview-card .rp-ar-sub { font-family:'Amiri','Traditional Arabic',serif; font-size:13px; font-weight:400; color:#111; line-height:1.35; margin-top:2px; }
+        .rp-preview-card .rp-ar-cap { font-family:'Amiri','Traditional Arabic',serif; font-size:13.5px; color:#111; line-height:1.4; margin-top:3px; }
+        .rp-preview-card .rp-ar-inline { font-family:'Amiri','Traditional Arabic',serif; font-size:13.5px; font-weight:700; }
         .rp-preview-card .rp-sub { font-size:12px; color:#000; margin-top:2px; }
+        .rp-preview-card .rp-rtl .rp-sub { font-size:13px; }
         .rp-preview-card .rp-summary td { background:#fff; font-weight:700; }
         .rp-preview-card .rp-signs { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:16px; margin-top:20px; text-align:center; font-size:12.5px; color:#000; }
+        .rp-preview-card .rp-rtl .rp-signs { font-size:14px; }
         .rp-preview-card .rp-sign-space { position:relative; height:58px; display:flex; align-items:center; justify-content:center; margin:2px 0; }
         .rp-preview-card .rp-sign-img { max-height:54px; max-width:140px; object-fit:contain; position:relative; z-index:2; }
         .rp-preview-card .rp-cap-img { position:absolute; left:50%; top:50%; transform:translate(-72%, -52%) rotate(-6deg); max-height:66px; max-width:94px; object-fit:contain; opacity:0.85; z-index:1; pointer-events:none; }
+        .rp-preview-card .rp-rtl .rp-cap-img { transform:translate(-28%, -52%) rotate(6deg); }
         .rp-preview-card .rp-sign-name { font-weight:700; text-decoration:underline; color:#000; }
       </style>`;
 
@@ -1912,6 +2470,7 @@ function exportLaporanExcel(filters) {
           <div style="flex:1;min-width:120px">${UI.field('Semester', `<select class="clay-select" id="rp-sem">${UI.optionsFromList(semOpts.map(v => ({ v, l: v })), 'v', 'l', state.semester)}</select>`)}</div>
           <div style="flex:1;min-width:140px">${UI.field('Dari Tanggal', `<input type="date" class="clay-input" id="rp-dari" value="${state.dari}">`)}</div>
           <div style="flex:1;min-width:140px">${UI.field('Sampai Tanggal', `<input type="date" class="clay-input" id="rp-sampai" value="${state.sampai}">`)}</div>
+          <div style="flex:1;min-width:190px">${UI.field('Model Raport', `<select class="clay-select" id="rp-model">${UI.optionsFromList(RAPORT_MODEL_OPTIONS, 'v', 'l', state.model)}</select>`)}</div>
           ${(!isWali && !opt.isUstadzScope) ? `<div style="flex:1;min-width:150px">${UI.field('Ustadz Pengampu', `<select class="clay-select" id="rp-ust"><option value="">Semua Ustadz</option>${UI.optionsFromList(ustadzOpts, 'id', 'nama', state.ustadzId)}</select>`)}</div>` : ''}
           ${!isWali ? `<div style="flex:1;min-width:150px">${UI.field('Halaqah', `<select class="clay-select" id="rp-hal"><option value="">${opt.isUstadzScope ? 'Semua Halaqah Saya' : 'Semua Halaqah'}</option>${UI.optionsFromList(visibleHalaqahOpts(), 'id', 'nama', state.halaqahId)}</select>`)}</div>` : ''}
         </div>
@@ -1929,6 +2488,7 @@ function exportLaporanExcel(filters) {
     const semEl = container.querySelector('#rp-sem');
     const dariEl = container.querySelector('#rp-dari');
     const sampaiEl = container.querySelector('#rp-sampai');
+    const modelEl = container.querySelector('#rp-model');
     const ustEl = container.querySelector('#rp-ust');
     const halEl = container.querySelector('#rp-hal');
     const cariEl = container.querySelector('#rp-cari');
@@ -1962,6 +2522,10 @@ function exportLaporanExcel(filters) {
                   <label class="field-label" style="font-size:11.5px">Bab / Materi Dicapai</label>
                   <input class="clay-input" data-kajian-capaian="${idx}" value="${UI.esc(k.capaian)}" placeholder="Contoh: Bab 1 s.d. Bab 6">
                 </div>
+                <div style="flex:3;min-width:180px">
+                  <label class="field-label" style="font-size:11.5px">Bab / Materi (Arab — Opsional)</label>
+                  <input class="clay-input" dir="rtl" data-kajian-capaian-arab="${idx}" value="${UI.esc(k.capaianArab || '')}" placeholder="الموضوع بالعربية (اختياري)">
+                </div>
                 <div style="flex:1;min-width:90px">
                   <label class="field-label" style="font-size:11.5px">Nilai (0–100)</label>
                   <input class="clay-input" type="number" min="0" max="100" data-kajian-nilai="${idx}" value="${k.nilai || ''}" placeholder="85">
@@ -1976,8 +2540,14 @@ function exportLaporanExcel(filters) {
         bodyHTML: `
           ${UI.field('Akhlaq & Kedisiplinan', `<select class="clay-select" id="rp-f-sikap">${UI.optionsFromList(sikapOpts.map(v => ({ v, l: v })), 'v', 'l', cur ? cur.sikap : 'Baik')}</select>`)}
           ${kajianEditorHtml}
-          ${UI.field('Catatan Ustadz / Pembimbing', `<textarea class="clay-textarea" id="rp-f-cat" rows="4" placeholder="Contoh: Hafalan lancar, pertahankan murojaah rutin di rumah.">${UI.esc(cur ? cur.catatan : info.catatan)}</textarea>`)}
-          ${UI.field('Rekomendasi / Keterangan', `<input class="clay-input" id="rp-f-rek" value="${UI.esc(cur ? cur.rekomendasi : '')}" placeholder="Contoh: Lanjutkan ke juz berikutnya">`)}
+          <div class="row">
+            <div style="flex:1;min-width:220px">${UI.field('Catatan Ustadz / Pembimbing', `<textarea class="clay-textarea" id="rp-f-cat" rows="4" placeholder="Contoh: Hafalan lancar, pertahankan murojaah rutin di rumah.">${UI.esc(cur ? cur.catatan : info.catatan)}</textarea>`)}</div>
+            <div style="flex:1;min-width:220px">${UI.field('Catatan Ustadz (Arab — Opsional)', `<textarea class="clay-textarea" id="rp-f-cat-arab" dir="rtl" rows="4" placeholder="ملاحظات المشرف باللغة العربية (اختياري)">${UI.esc(cur ? (cur.catatanArab || '') : '')}</textarea>`)}</div>
+          </div>
+          <div class="row">
+            <div style="flex:1;min-width:220px">${UI.field('Rekomendasi / Keterangan', `<input class="clay-input" id="rp-f-rek" value="${UI.esc(cur ? cur.rekomendasi : '')}" placeholder="Contoh: Lanjutkan ke juz berikutnya">`)}</div>
+            <div style="flex:1;min-width:220px">${UI.field('Rekomendasi (Arab — Opsional)', `<input class="clay-input" id="rp-f-rek-arab" dir="rtl" value="${UI.esc(cur ? (cur.rekomendasiArab || '') : '')}" placeholder="التوصيات باللغة العربية (اختياري)">`)}</div>
+          </div>
           <div style="margin-top:8px">
             <label class="field-label">TTD Ustadz Pembimbing (opsional, menimpa TTD bawaan)</label>
             <div class="row center" style="gap:8px;flex-wrap:wrap">
@@ -2000,15 +2570,18 @@ function exportLaporanExcel(filters) {
             const nilaiKajian = Object.assign({}, (existing && existing.nilaiKajian) || {});
             info.kajianItems.forEach((k, idx) => {
               const capInp = m.querySelector(`[data-kajian-capaian="${idx}"]`);
+              const capArInp = m.querySelector(`[data-kajian-capaian-arab="${idx}"]`);
               const valInp = m.querySelector(`[data-kajian-nilai="${idx}"]`);
               if (!capInp && !valInp) return;
               const rawVal = valInp ? valInp.value.trim() : '';
               const numVal = rawVal === '' ? 0 : Math.max(0, Math.min(100, Math.round(Number(rawVal) || 0)));
               const capTxt = capInp ? capInp.value.trim() : k.capaian;
+              const capArTxt = capArInp ? capArInp.value.trim() : (k.capaianArab || '');
               nilaiKajian[k.key] = {
                 mapel: k.mapel,
                 kitab: k.kitab || '',
                 capaian: capTxt || k.defaultCapaian,
+                capaianArab: capArTxt,
                 nilai: numVal > 0 ? numVal : null
               };
             });
@@ -2019,7 +2592,9 @@ function exportLaporanExcel(filters) {
               semester: state.semester,
               sikap: m.querySelector('#rp-f-sikap').value,
               catatan: m.querySelector('#rp-f-cat').value.trim(),
+              catatanArab: (m.querySelector('#rp-f-cat-arab')?.value || '').trim(),
               rekomendasi: m.querySelector('#rp-f-rek').value.trim(),
+              rekomendasiArab: (m.querySelector('#rp-f-rek-arab')?.value || '').trim(),
               nilaiKajian,
               ttdUstadz: _rpTtdUstadz,
               _created: Date.now()
@@ -2051,11 +2626,80 @@ function exportLaporanExcel(filters) {
     }
 
     function buildRaportWaText(info) {
+      const d = buildRaportModelData(info, state);
       const s = info.s;
-      const cfg = (Store.get().settings) || {};
+      if (d.model === 'model3') {
+        const lines = [
+          `*${d.titleAr}*`,
+          `*${d.instName}*`,
+          `العام الدراسي: ${d.metaPairs[0].rVal} (${d.metaPairs[1].rVal})`,
+          `فترة التقييم: ${d.metaPairs[2].rVal}`,
+          '',
+          `الاسم: *${d.metaPairs[0].lVal}* (${s.nis ? toArabicDigits(s.nis) : '-'})`,
+          `المرحلة والفصل: ${d.metaPairs[2].lVal}`,
+          `الحلقة / البرنامج: ${d.metaPairs[3].lVal}`,
+          `المشرف: ${d.metaPairs[3].rVal}`,
+          '',
+          `*أولًا: نتائج التعلم وحفظ القرآن الكريم*`
+        ];
+        d.progRows.forEach(r => {
+          const valStr = r.nilai ? toArabicDigits(r.nilai) : '-';
+          const subStr = r.arSub ? ` (${r.arSub})` : '';
+          lines.push(`• ${r.arName}: ${r.arCap}${subStr} | الدرجة: ${valStr} (${r.pred})`);
+        });
+        lines.push(`*المعدل العام للفترة: ${d.avgScoreStr} (${d.avgPred})*`);
+        if (d.attRows.length) {
+          lines.push('', `*ثانيًا: خلاصة الحضور والغياب*`);
+          d.attRows.forEach(ar => {
+            lines.push(`• ${ar.arName}: الحضور ${toArabicDigits(ar.att.Hadir)}، الاستئذان ${toArabicDigits(ar.att.Izin)}، المرض ${toArabicDigits(ar.att.Sakit)}، الغياب ${toArabicDigits(ar.att.Alfa)} (*${toArabicDigits(ar.att.persen + '%')}*)`);
+          });
+        }
+        lines.push('', `*الأخلاق والانضباط:* ${d.closingRows[0].val}`);
+        if (d.closingRows[1].val && d.closingRows[1].val !== '-') lines.push(`*ملاحظات المشرف:* ${d.closingRows[1].val}`);
+        if (d.closingRows[2].val && d.closingRows[2].val !== '-') lines.push(`*التوصيات:* ${d.closingRows[2].val}`);
+        lines.push('', `جزاكم الله خيرًا.`);
+        return lines.join('\n');
+      }
+
+      if (d.model === 'model2') {
+        const biVal = (idV, arV, sep = ' / ') => (arV && arV !== idV) ? `${idV}${sep}${arV}` : idV;
+        const lines = [
+          `*${d.titleId}*`,
+          `*${d.titleAr}*`,
+          `*${biVal(d.instName, d.instNameAr)}*`,
+          `Tahun Ajaran / العام الدراسي: ${biVal(d.metaPairs[0].rValId, d.metaPairs[0].rValAr)} (${biVal(d.metaPairs[1].rValId, d.metaPairs[1].rValAr)})`,
+          `Periode / الفترة: ${biVal(d.metaPairs[2].rValId, d.metaPairs[2].rValAr)}`,
+          '',
+          `Nama / الاسم: *${biVal(d.metaPairs[0].lValId, d.metaPairs[0].lValAr)}*`,
+          `NIS / JK (رقم القيد / الجنس): ${biVal(d.metaPairs[1].lValId, d.metaPairs[1].lValAr)}`,
+          `Kelas / الفصل: ${biVal(d.metaPairs[2].lValId, d.metaPairs[2].lValAr)}`,
+          `Halaqah / الحلقة: ${biVal(d.metaPairs[3].lValId, d.metaPairs[3].lValAr)}`,
+          `Pembimbing / المشرف: ${biVal(d.metaPairs[3].rValId, d.metaPairs[3].rValAr)}`,
+          '',
+          `*A. Capaian Pembelajaran & Hafalan (نتائج التعلم والحفظ)*`
+        ];
+        d.progRows.forEach(r => {
+          const capText = (r.arCap && r.arCap !== r.idCap) ? `${r.idCap} / ${r.arCap}` : r.idCap;
+          const subText = r.idSub ? ` (${r.idSub})` : '';
+          lines.push(`• ${r.idName} (${r.arName}): ${capText}${subText} | Nilai: ${r.nilai || '-'} (${r.pred})`);
+        });
+        lines.push(`*Rata-rata Nilai Akhir / المعدل العام: ${d.avgScoreStr} (${d.avgPred})*`);
+        if (d.attRows.length) {
+          lines.push('', `*B. Kehadiran (الحضور والغياب)*`);
+          d.attRows.forEach(ar => {
+            lines.push(`• ${ar.idName} (${ar.arName}): Hadir ${ar.att.Hadir}, Izin ${ar.att.Izin}, Sakit ${ar.att.Sakit}, Alfa ${ar.att.Alfa} (*${ar.att.persen}%*)`);
+          });
+        }
+        lines.push('', `*Akhlaq & Kedisiplinan (الأخلاق والانضباط):* ${biVal(d.closingRows[0].valId, d.closingRows[0].valAr)}`);
+        if (d.closingRows[1].valId !== '-' || d.closingRows[1].valAr) lines.push(`*Catatan Ustadz (ملاحظات المشرف):* ${biVal(d.closingRows[1].valId, d.closingRows[1].valAr, '\n')}`);
+        if (d.closingRows[2].valId !== '-' || d.closingRows[2].valAr) lines.push(`*Rekomendasi (التوصيات):* ${biVal(d.closingRows[2].valId, d.closingRows[2].valAr)}`);
+        lines.push('', `Jazakumullahu khairan / جزاكم الله خيرًا.`);
+        return lines.join('\n');
+      }
+
       const lines = [
         `*RAPORT HASIL BELAJAR TAHFIDZ AL-QUR'AN*`,
-        `*${cfg.namaLembaga || 'Lembaga Tahfidz'}*`,
+        `*${d.instName}*`,
         `Tahun Ajaran: ${state.tahunAjaran} (${state.semester})`,
         `Periode: ${UI.fmtDate(state.dari)} s.d. ${UI.fmtDate(state.sampai)}`,
         '',
@@ -2141,86 +2785,700 @@ function exportLaporanExcel(filters) {
       const db = Store.get();
       const cfg = db.settings || {};
       const s = info.s;
+      const d = buildRaportModelData(info, state);
+      const fontsWait = (d.model !== 'model1' && document.fonts && document.fonts.ready)
+        ? Promise.race([document.fonts.ready.catch(() => {}), new Promise(res => setTimeout(res, 1000))])
+        : Promise.resolve();
       const [logoImg, ustTtdImg, pimTtdImg, capImg] = await Promise.all([
         loadCanvasImage(cfg.logo),
         loadCanvasImage(info.ustadzTtd),
         loadCanvasImage(info.pimpinanTtd),
-        loadCanvasImage(info.capLembaga)
+        loadCanvasImage(info.capLembaga),
+        fontsWait
       ]);
       const W = 1240, pad = 74, innerW = W - pad * 2;
       const tmp = document.createElement('canvas');
       const ctx0 = tmp.getContext('2d');
+      const fontSans = 'Arial, sans-serif';
+      const fontAr = '"Amiri", "Traditional Arabic", Arial, sans-serif';
+      const fileSuffix = raportFileSuffix(d.model);
+      const linkName = `Raport_${safeFilename(s.nama)}_${safeFilename(state.semester)}${fileSuffix}.jpg`;
 
-      const progRows = [];
-      if (Store.hasFeature('tahsin') && (Store.santriHasProgram(s, 'Tahsin') || info.tahsinList.length)) {
-        const first = info.tahsinList[0], last = info.tahsinList[info.tahsinList.length - 1];
-        progRows.push(['Tahsin / Bacaan', info.tahsinList.length ? `${info.tahsinList.length}x setoran · Hal ${first.halAwal} → ${last.halAkhir}` : 'Belum ada setoran pada periode ini', String(info.tahsinAvg || '-'), raportPredikat(info.tahsinAvg)]);
-      }
-      if (Store.hasFeature('ziyadah') && (Store.santriHasProgram(s, 'Ziyadah') || info.ziyadahList.length)) {
-        const first = info.ziyadahList[0], last = info.ziyadahList[info.ziyadahList.length - 1];
-        const range = info.ziyadahList.length ? `${info.ziyadahList.length}x setoran (${formatSetoranLabel(first)} → ${formatSetoranLabel(last)})` : 'Belum ada setoran pada periode ini';
-        const kum = info.totalH ? `Total: ${info.totalH.pages} hlm${info.juzLabel ? ' (' + info.juzLabel + ')' : ''}` : '';
-        progRows.push(['Ziyadah (Tahfidz)', kum ? `${range}\n${kum}` : range, String(info.ziyadahAvg || '-'), raportPredikat(info.ziyadahAvg)]);
-      }
-      if (Store.hasFeature('mutqin') && (Store.santriHasProgram(s, 'Mutqin') || info.mutqinList.length)) {
-        const last = info.mutqinList[info.mutqinList.length - 1];
-        const cap = info.mutqinList.length ? `${info.mutqinList.length}x ujian · ${info.mutqinPages ? info.mutqinPages + ' hlm · ' : ''}${formatSetoranLabel(last)}` : 'Belum ada setoran pada periode ini';
-        progRows.push(['Program Mutqin', cap, String(info.mutqinAvg || '-'), raportPredikat(info.mutqinAvg)]);
-      }
-      if (Store.hasFeature('murojaah') && info.murojaahStats) {
-        const ms = info.murojaahStats;
-        const mAvg = ms.nilaiRata || 0;
-        progRows.push(['Murojaah', ms.setoran ? `${ms.setoran}x pengulangan · ${ms.pages} hlm (${ms.ayahs} ayat)` : 'Belum ada catatan murojaah', String(mAvg || '-'), raportPredikat(mAvg)]);
-      }
-      if (Store.hasFeature('talim')) {
-        if (info.kajianItems.length) {
-          info.kajianItems.forEach(k => {
-            const title = /^kajian\b/i.test(k.mapel) ? k.mapel : `Kajian ${k.mapel}`;
-            progRows.push([title, k.kitab ? `${k.capaian}\nKitab: ${k.kitab}` : k.capaian, String(k.nilai || '-'), raportPredikat(k.nilai)]);
+      const drawSignBlock = (ctx, signItems, yStart, colW, isRtl) => {
+        signItems.forEach((sc, idx) => {
+          const cx = isRtl
+            ? (W - pad - colW * idx - colW / 2)
+            : (pad + colW * idx + colW / 2);
+          ctx.direction = isRtl ? 'rtl' : 'ltr';
+          ctx.textAlign = 'center';
+          ctx.font = `400 18px ${isRtl ? fontAr : fontSans}`;
+          if (sc.top) canvasText(ctx, sc.top, cx, yStart, colW - 16);
+          let roleY = yStart + 24;
+          if (sc.arTop) {
+            ctx.direction = 'rtl';
+            ctx.font = `400 16px ${fontAr}`;
+            canvasText(ctx, sc.arTop, cx, yStart + 22, colW - 16);
+            ctx.direction = 'ltr';
+            ctx.font = `400 18px ${fontSans}`;
+            roleY = yStart + 44;
+          }
+          canvasText(ctx, sc.role, cx, roleY, colW - 16);
+          let nameYOffset = sc.arTop ? 154 : 132;
+          if (sc.arRole) {
+            ctx.direction = 'rtl';
+            ctx.font = `400 17px ${fontAr}`;
+            canvasText(ctx, sc.arRole, cx, roleY + 22, colW - 16);
+            ctx.direction = 'ltr';
+            nameYOffset = sc.arTop ? 168 : 148;
+          }
+          const imgCenterY = yStart + nameYOffset - 56;
+          if (sc.cap) {
+            ctx.save();
+            ctx.globalAlpha = 0.85;
+            ctx.translate(cx + (isRtl ? 46 : -46), imgCenterY);
+            ctx.rotate(isRtl ? 0.1 : -0.1);
+            const cr = Math.min(120 / Math.max(1, sc.cap.naturalWidth || 120), 100 / Math.max(1, sc.cap.naturalHeight || 100), 1);
+            const cw = (sc.cap.naturalWidth || 100) * cr, ch = (sc.cap.naturalHeight || 100) * cr;
+            ctx.drawImage(sc.cap, -cw / 2, -ch / 2, cw, ch);
+            ctx.restore();
+          }
+          if (sc.ttd) {
+            const tr = Math.min(200 / Math.max(1, sc.ttd.naturalWidth || 200), 76 / Math.max(1, sc.ttd.naturalHeight || 76), 1);
+            const tw = (sc.ttd.naturalWidth || 160) * tr, th = (sc.ttd.naturalHeight || 70) * tr;
+            ctx.drawImage(sc.ttd, cx - tw / 2, imgCenterY - th / 2, tw, th);
+          }
+          ctx.direction = isRtl ? 'rtl' : 'ltr';
+          ctx.font = `700 18px ${isRtl ? fontAr : fontSans}`;
+          const nameLines = wrapCanvasLines(ctx, sc.name, colW - 24);
+          nameLines.forEach((ln, li) => {
+            const ly = yStart + nameYOffset + li * 22;
+            ctx.fillText(ln, cx, ly);
+            const lw = Math.min(colW - 24, ctx.measureText(ln).width);
+            ctx.beginPath(); ctx.moveTo(cx - lw / 2, ly + 4); ctx.lineTo(cx + lw / 2, ly + 4); ctx.stroke();
           });
-        } else {
-          progRows.push(['Kajian', 'Belum ada jurnal kajian pada periode ini', '-', '-']);
+          if (sc.arName) {
+            ctx.direction = 'rtl';
+            ctx.font = `700 17px ${fontAr}`;
+            canvasText(ctx, sc.arName, cx, yStart + nameYOffset + nameLines.length * 22 + 2, colW - 24);
+            ctx.direction = 'ltr';
+          }
+        });
+        ctx.direction = 'ltr';
+        ctx.textAlign = 'left';
+      };
+
+      if (d.model === 'model1') {
+        const progRows = [];
+        if (Store.hasFeature('tahsin') && (Store.santriHasProgram(s, 'Tahsin') || info.tahsinList.length)) {
+          const first = info.tahsinList[0], last = info.tahsinList[info.tahsinList.length - 1];
+          progRows.push(['Tahsin / Bacaan', info.tahsinList.length ? `${info.tahsinList.length}x setoran · Hal ${first.halAwal} → ${last.halAkhir}` : 'Belum ada setoran pada periode ini', String(info.tahsinAvg || '-'), raportPredikat(info.tahsinAvg)]);
         }
+        if (Store.hasFeature('ziyadah') && (Store.santriHasProgram(s, 'Ziyadah') || info.ziyadahList.length)) {
+          const first = info.ziyadahList[0], last = info.ziyadahList[info.ziyadahList.length - 1];
+          const range = info.ziyadahList.length ? `${info.ziyadahList.length}x setoran (${formatSetoranLabel(first)} → ${formatSetoranLabel(last)})` : 'Belum ada setoran pada periode ini';
+          const kum = info.totalH ? `Total: ${info.totalH.pages} hlm${info.juzLabel ? ' (' + info.juzLabel + ')' : ''}` : '';
+          progRows.push(['Ziyadah (Tahfidz)', kum ? `${range}\n${kum}` : range, String(info.ziyadahAvg || '-'), raportPredikat(info.ziyadahAvg)]);
+        }
+        if (Store.hasFeature('mutqin') && (Store.santriHasProgram(s, 'Mutqin') || info.mutqinList.length)) {
+          const last = info.mutqinList[info.mutqinList.length - 1];
+          const cap = info.mutqinList.length ? `${info.mutqinList.length}x ujian · ${info.mutqinPages ? info.mutqinPages + ' hlm · ' : ''}${formatSetoranLabel(last)}` : 'Belum ada setoran pada periode ini';
+          progRows.push(['Program Mutqin', cap, String(info.mutqinAvg || '-'), raportPredikat(info.mutqinAvg)]);
+        }
+        if (Store.hasFeature('murojaah') && info.murojaahStats) {
+          const ms = info.murojaahStats;
+          const mAvg = ms.nilaiRata || 0;
+          progRows.push(['Murojaah', ms.setoran ? `${ms.setoran}x pengulangan · ${ms.pages} hlm (${ms.ayahs} ayat)` : 'Belum ada catatan murojaah', String(mAvg || '-'), raportPredikat(mAvg)]);
+        }
+        if (Store.hasFeature('talim')) {
+          if (info.kajianItems.length) {
+            info.kajianItems.forEach(k => {
+              const title = /^kajian\b/i.test(k.mapel) ? k.mapel : `Kajian ${k.mapel}`;
+              progRows.push([title, k.kitab ? `${k.capaian}\nKitab: ${k.kitab}` : k.capaian, String(k.nilai || '-'), raportPredikat(k.nilai)]);
+            });
+          } else {
+            progRows.push(['Kajian', 'Belum ada jurnal kajian pada periode ini', '-', '-']);
+          }
+        }
+
+        ctx0.font = `400 18px ${fontSans}`;
+        const metaRowsRaw = d.metaPairs.map(mp => [mp.lId, mp.lVal, mp.rId, mp.rVal]);
+        const leftValW = 365, rightValW = innerW - 735;
+        const calcMeta = metaRowsRaw.map(mr => {
+          const lLines = wrapCanvasLines(ctx0, ': ' + mr[1], leftValW);
+          const rLines = wrapCanvasLines(ctx0, ': ' + mr[3], rightValW);
+          const rowH = Math.max(lLines.length, rLines.length) * 24 + 6;
+          return { lLabel: mr[0], lLines, rLabel: mr[2], rLines, rowH };
+        });
+        const totalMetaH = calcMeta.reduce((sum, mr) => sum + mr.rowH, 0);
+
+        const capColW = 520;
+        const calcProg = progRows.map(r => {
+          const pLines = wrapCanvasLines(ctx0, r[0], 220);
+          const cLines = wrapCanvasLines(ctx0, r[1], capColW);
+          const h = Math.max(44, Math.max(pLines.length, cLines.length) * 24 + 18);
+          return { pLines, cLines, n: r[2], pred: r[3], h };
+        });
+        const catLines = wrapCanvasLines(ctx0, info.catatan || '-', innerW - 265);
+        const rekLines = wrapCanvasLines(ctx0, info.rekomendasi || '-', innerW - 265);
+        const totalProgH = calcProg.reduce((a, r) => a + r.h, 0);
+        const attRowsCount = d.attRows.length;
+        const hCatEst = Math.max(46, catLines.length * 24 + 18);
+        const hRekEst = Math.max(46, rekLines.length * 24 + 18);
+        const colW = innerW / 3;
+        const namaPimpinanEst = (cfg.namaPimpinan || '').trim() || '( ________________________ )';
+        ctx0.font = `700 18px ${fontSans}`;
+        const maxSignNameLines = Math.max(
+          wrapCanvasLines(ctx0, s.namaWali || '( .............................. )', colW - 24).length,
+          wrapCanvasLines(ctx0, info.ustadzLabel !== '-' ? info.ustadzLabel : '( .............................. )', colW - 24).length,
+          wrapCanvasLines(ctx0, namaPimpinanEst, colW - 24).length
+        );
+        const contentH = 196 + totalMetaH + (totalProgH + 116) + (attRowsCount ? 82 + attRowsCount * 38 : 0) + (84 + hCatEst + hRekEst) + (180 + maxSignNameLines * 22 + 48);
+        const H = Math.max(1754, contentH);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = W;
+        canvas.height = H;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#000000';
+        ctx.strokeStyle = '#000000';
+
+        let y = 64;
+        let textX = pad;
+        if (logoImg) {
+          ctx.drawImage(logoImg, pad, y, 86, 86);
+          textX = pad + 106;
+        }
+        ctx.font = `700 26px ${fontSans}`;
+        canvasText(ctx, String(d.instName).toUpperCase(), textX, y + 26, W - pad - textX);
+        ctx.font = `400 17px ${fontSans}`;
+        canvasText(ctx, d.instAddr, textX, y + 52, W - pad - textX);
+        ctx.font = `700 21px ${fontSans}`;
+        canvasText(ctx, d.titleId, textX, y + 82, W - pad - textX);
+        y += 104;
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(W - pad, y); ctx.stroke();
+        ctx.lineWidth = 1;
+        y += 28;
+
+        calcMeta.forEach(mr => {
+          ctx.font = `700 18px ${fontSans}`;
+          ctx.fillText(mr.lLabel, pad, y);
+          ctx.fillText(mr.rLabel, pad + 560, y);
+          ctx.font = `400 18px ${fontSans}`;
+          mr.lLines.forEach((ln, li) => ctx.fillText(ln, pad + 165, y + li * 24));
+          mr.rLines.forEach((ln, li) => ctx.fillText(ln, pad + 725, y + li * 24));
+          y += mr.rowH;
+        });
+
+        const drawCell = (x, cy, cw, ch, bold = false) => {
+          ctx.strokeStyle = '#000000';
+          ctx.strokeRect(x, cy, cw, ch);
+          ctx.fillStyle = '#000000';
+          ctx.font = bold ? `700 18px ${fontSans}` : `400 18px ${fontSans}`;
+        };
+
+        y += 18;
+        ctx.font = `700 20px ${fontSans}`;
+        ctx.fillText('A. Capaian Pembelajaran & Hafalan', pad, y);
+        y += 14;
+        const wA = [245, 550, 95, innerW - 890];
+        drawCell(pad, y, wA[0], 42, true); ctx.fillText('Program / Bidang', pad + 10, y + 27);
+        drawCell(pad + wA[0], y, wA[1], 42, true); ctx.fillText('Capaian Periode Ini', pad + wA[0] + 10, y + 27);
+        drawCell(pad + wA[0] + wA[1], y, wA[2], 42, true); ctx.textAlign = 'center'; ctx.fillText('Nilai', pad + wA[0] + wA[1] + wA[2] / 2, y + 27); ctx.textAlign = 'left';
+        drawCell(pad + wA[0] + wA[1] + wA[2], y, wA[3], 42, true); ctx.textAlign = 'center'; ctx.fillText('Predikat', pad + wA[0] + wA[1] + wA[2] + wA[3] / 2, y + 27); ctx.textAlign = 'left';
+        y += 42;
+
+        calcProg.forEach(r => {
+          drawCell(pad, y, wA[0], r.h, true);
+          r.pLines.forEach((ln, i) => canvasText(ctx, ln, pad + 10, y + 25 + i * 24, wA[0] - 20));
+          drawCell(pad + wA[0], y, wA[1], r.h, false);
+          r.cLines.forEach((ln, i) => canvasText(ctx, ln, pad + wA[0] + 10, y + 25 + i * 24, wA[1] - 20));
+          drawCell(pad + wA[0] + wA[1], y, wA[2], r.h, false);
+          ctx.textAlign = 'center'; ctx.fillText(r.n, pad + wA[0] + wA[1] + wA[2] / 2, y + 26);
+          drawCell(pad + wA[0] + wA[1] + wA[2], y, wA[3], r.h, false);
+          ctx.textAlign = 'center'; canvasText(ctx, r.pred, pad + wA[0] + wA[1] + wA[2] + wA[3] / 2, y + 26, wA[3] - 12);
+          ctx.textAlign = 'left';
+          y += r.h;
+        });
+        drawCell(pad, y, wA[0] + wA[1], 42, true); ctx.fillText('Rata-rata Nilai Akhir Periode', pad + 10, y + 27);
+        drawCell(pad + wA[0] + wA[1], y, wA[2], 42, true); ctx.textAlign = 'center'; ctx.fillText(d.avgScoreStr, pad + wA[0] + wA[1] + wA[2] / 2, y + 27);
+        drawCell(pad + wA[0] + wA[1] + wA[2], y, wA[3], 42, true); canvasText(ctx, d.avgPred, pad + wA[0] + wA[1] + wA[2] + wA[3] / 2, y + 27, wA[3] - 12);
+        ctx.textAlign = 'left';
+        y += 42;
+
+        if (d.attRows.length) {
+          y += 30;
+          ctx.font = `700 20px ${fontSans}`;
+          ctx.fillText('B. Rekapitulasi Kehadiran', pad, y);
+          y += 14;
+          const wK = d.hasKajianAtt ? 250 : 0;
+          const wCell = (innerW - wK) / 6;
+          if (d.hasKajianAtt) { drawCell(pad, y, wK, 38, true); ctx.fillText('Kegiatan', pad + 10, y + 25); }
+          ['Hadir', 'Izin', 'Sakit', 'Libur', 'Alfa', 'Persentase'].forEach((hLabel, idx) => {
+            const cx = pad + wK + idx * wCell;
+            drawCell(cx, y, wCell, 38, true);
+            ctx.textAlign = 'center'; ctx.fillText(hLabel, cx + wCell / 2, y + 25); ctx.textAlign = 'left';
+          });
+          y += 38;
+          d.attRows.forEach(ar => {
+            if (d.hasKajianAtt) { drawCell(pad, y, wK, 38, true); ctx.fillText(ar.idName, pad + 10, y + 25); }
+            [ar.att.Hadir, ar.att.Izin, ar.att.Sakit, ar.att.Libur, ar.att.Alfa, ar.att.persen + '%'].forEach((val, idx) => {
+              const cx = pad + wK + idx * wCell;
+              drawCell(cx, y, wCell, 38, idx === 5);
+              ctx.textAlign = 'center'; ctx.fillText(String(val), cx + wCell / 2, y + 25); ctx.textAlign = 'left';
+            });
+            y += 38;
+          });
+        }
+
+        y += 30;
+        ctx.font = `700 20px ${fontSans}`;
+        ctx.fillText(`${d.attRows.length ? 'C' : 'B'}. Akhlaq, Catatan Pembimbing & Rekomendasi`, pad, y);
+        y += 14;
+        const wLabel = 245, wVal = innerW - wLabel;
+        drawCell(pad, y, wLabel, 40, true); ctx.fillText('Akhlaq & Kedisiplinan', pad + 10, y + 26);
+        drawCell(pad + wLabel, y, wVal, 40, false); ctx.fillText(info.sikap || '-', pad + wLabel + 10, y + 26);
+        y += 40;
+        const hCat = Math.max(46, catLines.length * 24 + 18);
+        drawCell(pad, y, wLabel, hCat, true); ctx.fillText('Catatan Ustadz', pad + 10, y + 26);
+        drawCell(pad + wLabel, y, wVal, hCat, false);
+        catLines.forEach((ln, i) => canvasText(ctx, ln, pad + wLabel + 10, y + 25 + i * 24, wVal - 20));
+        y += hCat;
+        const hRek = Math.max(46, rekLines.length * 24 + 18);
+        drawCell(pad, y, wLabel, hRek, true); ctx.fillText('Rekomendasi', pad + 10, y + 26);
+        drawCell(pad + wLabel, y, wVal, hRek, false);
+        rekLines.forEach((ln, i) => canvasText(ctx, ln, pad + wLabel + 10, y + 25 + i * 24, wVal - 20));
+        y += hRek;
+
+        y += 48;
+        drawSignBlock(ctx, d.signs.map((sc, i) => ({
+          top: sc.idTop, role: sc.idRole, name: sc.name,
+          ttd: i === 1 ? ustTtdImg : (i === 2 ? pimTtdImg : null),
+          cap: i === 2 ? capImg : null
+        })), y, colW, false);
+
+        return { canvas, linkName };
       }
 
-      ctx0.font = '400 18px Arial, sans-serif';
-      const metaRowsRaw = [
-        ['Nama Santri', s.nama, 'Tahun Ajaran', state.tahunAjaran],
-        ['NIS / JK', `${s.nis || '-'} / ${s.jk || '-'}`, 'Semester', state.semester],
-        ['Tingkat & Kelas', Store.educationLabel(s), 'Periode Penilaian', `${UI.fmtDate(state.dari)} – ${UI.fmtDate(state.sampai)}`],
-        ['Halaqah / Program', Store.halaqahSummaryForSantri(s) || '-', 'Pembimbing', info.ustadzLabel]
-      ];
+      if (d.model === 'model2') {
+        const wA = [250, 500, 88, innerW - 838];
+        ctx0.font = `400 17px ${fontSans}`;
+        const leftValW = 355, rightValW = innerW - 745;
+        const calcMeta = d.metaPairs.map(mp => {
+          ctx0.font = `400 17px ${fontSans}`;
+          const lLines = wrapCanvasLines(ctx0, ': ' + mp.lValId, leftValW);
+          const rLines = wrapCanvasLines(ctx0, ': ' + mp.rValId, rightValW);
+          ctx0.font = `400 16px ${fontAr}`;
+          const lArLines = mp.lValAr ? wrapCanvasLines(ctx0, mp.lValAr, leftValW) : [];
+          const rArLines = mp.rValAr ? wrapCanvasLines(ctx0, mp.rValAr, rightValW) : [];
+          const leftH = lLines.length * 22 + lArLines.length * 21;
+          const rightH = rLines.length * 22 + rArLines.length * 21;
+          const rowH = Math.max(48, leftH + 12, rightH + 12);
+          return { mp, lLines, lArLines, rLines, rArLines, rowH };
+        });
+        const totalMetaH = calcMeta.reduce((sum, mr) => sum + mr.rowH, 0);
+
+        const calcProg = d.progRows.map(r => {
+          ctx0.font = `700 17px ${fontSans}`;
+          const pIdLines = wrapCanvasLines(ctx0, r.idName, wA[0] - 20);
+          ctx0.font = `400 17px ${fontAr}`;
+          const pArLines = wrapCanvasLines(ctx0, r.arName, wA[0] - 20);
+
+          ctx0.font = `400 17px ${fontSans}`;
+          const idCapText = r.idSub ? `${r.idCap}\n${r.idSub}` : r.idCap;
+          const cIdLines = wrapCanvasLines(ctx0, idCapText, wA[1] - 20);
+          const showArCap = r.arCap && r.arCap !== r.idCap;
+          const arCapText = showArCap ? (r.arSub ? `${r.arCap}\n${r.arSub}` : r.arCap) : (r.arSub || '');
+          ctx0.font = `400 17px ${fontAr}`;
+          const cArLines = arCapText ? wrapCanvasLines(ctx0, arCapText, wA[1] - 20) : [];
+
+          ctx0.font = `400 16px ${fontSans}`;
+          const predIdLines = wrapCanvasLines(ctx0, r.predId, wA[3] - 14);
+          ctx0.font = `400 16px ${fontAr}`;
+          const predArLines = r.predAr ? wrapCanvasLines(ctx0, r.predAr, wA[3] - 14) : [];
+
+          const leftH = (pIdLines.length + pArLines.length) * 22 + 20;
+          const midH = (cIdLines.length + cArLines.length) * 22 + 22;
+          const rightH = (predIdLines.length + predArLines.length) * 22 + 20;
+          const h = Math.max(58, leftH, midH, rightH);
+          return { r, pIdLines, pArLines, cIdLines, cArLines, predIdLines, predArLines, h };
+        });
+        ctx0.font = `700 16px ${fontSans}`;
+        const avgPredIdLines = wrapCanvasLines(ctx0, d.avgPredId, wA[3] - 14);
+        ctx0.font = `400 16px ${fontAr}`;
+        const avgPredArLines = d.avgPredAr ? wrapCanvasLines(ctx0, d.avgPredAr, wA[3] - 14) : [];
+        const hAvg = Math.max(56, (avgPredIdLines.length + avgPredArLines.length) * 22 + 18);
+
+        const wLabel = 265, wVal = innerW - wLabel;
+        const calcClosing = d.closingRows.map(cr => {
+          ctx0.font = `400 17px ${fontSans}`;
+          const valIdLines = wrapCanvasLines(ctx0, cr.valId, wVal - 22);
+          ctx0.font = `400 17px ${fontAr}`;
+          const valArLines = cr.valAr ? wrapCanvasLines(ctx0, cr.valAr, wVal - 22) : [];
+          const h = Math.max(56, (valIdLines.length + valArLines.length) * 24 + 20);
+          return { cr, valIdLines, valArLines, h };
+        });
+
+        const totalProgH = calcProg.reduce((a, r) => a + r.h, 0) + hAvg;
+        const attRowsCount = d.attRows.length;
+        const totalClosingH = calcClosing.reduce((a, r) => a + r.h, 0);
+        const colW = innerW / 3;
+        const namaPimpinanEst = (cfg.namaPimpinan || '').trim() || '( ________________________ )';
+        ctx0.font = `700 18px ${fontSans}`;
+        const maxSignNameLines = Math.max(
+          wrapCanvasLines(ctx0, s.namaWali || '( .............................. )', colW - 24).length,
+          wrapCanvasLines(ctx0, info.ustadzLabel !== '-' ? info.ustadzLabel : '( .............................. )', colW - 24).length,
+          wrapCanvasLines(ctx0, namaPimpinanEst, colW - 24).length
+        );
+        const kopExtraH = (d.instNameAr ? 24 : 0) + (d.instAddrAr ? 20 : 0);
+        const contentH = 225 + kopExtraH + totalMetaH + (totalProgH + 106) + (attRowsCount ? 104 + attRowsCount * 60 : 0) + (82 + totalClosingH) + (245 + maxSignNameLines * 22 + 48);
+        const H = Math.max(1754, contentH);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = W;
+        canvas.height = H;
+        const ctx = canvas.getContext('2d');
+        ctx.direction = 'ltr';
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#000000';
+        ctx.strokeStyle = '#000000';
+
+        // Kop (Bilingual)
+        let y = 56;
+        let textX = pad;
+        if (logoImg) {
+          ctx.drawImage(logoImg, pad, y + 6, 90, 90);
+          textX = pad + 110;
+        }
+        let ky = y + 24;
+        ctx.font = `700 25px ${fontSans}`;
+        canvasText(ctx, String(d.instName).toUpperCase(), textX, ky, W - pad - textX);
+        ky += 24;
+        if (d.instNameAr) {
+          ctx.direction = 'rtl'; ctx.textAlign = 'left';
+          ctx.font = `700 21px ${fontAr}`;
+          canvasText(ctx, d.instNameAr, textX, ky, W - pad - textX);
+          ctx.direction = 'ltr';
+          ky += 24;
+        }
+        ctx.font = `400 16px ${fontSans}`;
+        canvasText(ctx, d.instAddr, textX, ky, W - pad - textX);
+        ky += 22;
+        if (d.instAddrAr) {
+          ctx.direction = 'rtl'; ctx.textAlign = 'left';
+          ctx.font = `400 16px ${fontAr}`;
+          canvasText(ctx, d.instAddrAr, textX, ky, W - pad - textX);
+          ctx.direction = 'ltr';
+          ky += 22;
+        }
+        ctx.font = `700 20px ${fontSans}`;
+        canvasText(ctx, d.titleId, textX, ky + 4, W - pad - textX);
+        ky += 30;
+        ctx.direction = 'rtl';
+        ctx.textAlign = 'left';
+        ctx.font = `700 21px ${fontAr}`;
+        canvasText(ctx, d.titleAr, textX, ky + 2, W - pad - textX);
+        ctx.direction = 'ltr';
+        y = Math.max(y + 114, ky + 20);
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(W - pad, y); ctx.stroke();
+        ctx.lineWidth = 1;
+        y += 28;
+
+        calcMeta.forEach(mr => {
+          ctx.textAlign = 'left';
+          ctx.font = `700 17px ${fontSans}`;
+          ctx.fillText(mr.mp.lId, pad, y);
+          ctx.fillText(mr.mp.rId, pad + 560, y);
+          ctx.direction = 'rtl';
+          ctx.textAlign = 'left';
+          ctx.font = `400 15px ${fontAr}`;
+          ctx.fillText(mr.mp.lAr, pad, y + 20);
+          ctx.fillText(mr.mp.rAr, pad + 560, y + 20);
+          ctx.direction = 'ltr';
+
+          let ly = y;
+          ctx.font = `400 17px ${fontSans}`;
+          mr.lLines.forEach(ln => { canvasText(ctx, ln, pad + 175, ly, leftValW); ly += 22; });
+          if (mr.lArLines.length) {
+            ctx.direction = 'rtl'; ctx.textAlign = 'left';
+            ctx.font = `400 16px ${fontAr}`;
+            mr.lArLines.forEach(ln => { canvasText(ctx, ln, pad + 175, ly, leftValW); ly += 21; });
+            ctx.direction = 'ltr';
+          }
+
+          let ry = y;
+          ctx.font = `400 17px ${fontSans}`;
+          mr.rLines.forEach(ln => { canvasText(ctx, ln, pad + 735, ry, rightValW); ry += 22; });
+          if (mr.rArLines.length) {
+            ctx.direction = 'rtl'; ctx.textAlign = 'left';
+            ctx.font = `400 16px ${fontAr}`;
+            mr.rArLines.forEach(ln => { canvasText(ctx, ln, pad + 735, ry, rightValW); ry += 21; });
+            ctx.direction = 'ltr';
+          }
+          y += mr.rowH;
+        });
+
+        const drawCell = (x, cy, cw, ch) => {
+          ctx.strokeStyle = '#000000';
+          ctx.strokeRect(x, cy, cw, ch);
+          ctx.fillStyle = '#000000';
+        };
+
+        // Section A
+        y += 18;
+        ctx.font = `700 19px ${fontSans}`;
+        ctx.fillText('A. Capaian Pembelajaran & Hafalan', pad, y);
+        ctx.direction = 'rtl';
+        ctx.textAlign = 'right';
+        ctx.font = `700 19px ${fontAr}`;
+        ctx.fillText('نتائج التعلم والحفظ', W - pad, y);
+        ctx.direction = 'ltr';
+        ctx.textAlign = 'left';
+        y += 14;
+
+        const hHeadA = 56;
+        const headsA = [
+          { x: pad, w: wA[0], id: 'Program / Bidang', ar: 'البرنامج / المادة', center: false },
+          { x: pad + wA[0], w: wA[1], id: 'Capaian Periode Ini', ar: 'الإنجاز خلال الفترة', center: false },
+          { x: pad + wA[0] + wA[1], w: wA[2], id: 'Nilai', ar: 'الدرجة', center: true },
+          { x: pad + wA[0] + wA[1] + wA[2], w: wA[3], id: 'Predikat', ar: 'التقدير', center: true }
+        ];
+        headsA.forEach(hd => {
+          drawCell(hd.x, y, hd.w, hHeadA);
+          ctx.font = `700 17px ${fontSans}`;
+          if (hd.center) {
+            ctx.textAlign = 'center';
+            ctx.fillText(hd.id, hd.x + hd.w / 2, y + 23);
+            ctx.direction = 'rtl';
+            ctx.font = `700 17px ${fontAr}`;
+            ctx.fillText(hd.ar, hd.x + hd.w / 2, y + 46);
+            ctx.direction = 'ltr';
+            ctx.textAlign = 'left';
+          } else {
+            ctx.fillText(hd.id, hd.x + 10, y + 23);
+            ctx.direction = 'rtl';
+            ctx.font = `700 17px ${fontAr}`;
+            ctx.fillText(hd.ar, hd.x + 10, y + 46);
+            ctx.direction = 'ltr';
+          }
+        });
+        y += hHeadA;
+
+        calcProg.forEach(item => {
+          drawCell(pad, y, wA[0], item.h);
+          let py = y + 23;
+          ctx.font = `700 17px ${fontSans}`;
+          item.pIdLines.forEach(ln => { canvasText(ctx, ln, pad + 10, py, wA[0] - 20); py += 22; });
+          ctx.direction = 'rtl'; ctx.textAlign = 'left';
+          ctx.font = `400 17px ${fontAr}`;
+          item.pArLines.forEach(ln => { canvasText(ctx, ln, pad + 10, py, wA[0] - 20); py += 22; });
+          ctx.direction = 'ltr';
+
+          drawCell(pad + wA[0], y, wA[1], item.h);
+          let cy = y + 23;
+          ctx.font = `400 17px ${fontSans}`;
+          item.cIdLines.forEach(ln => { canvasText(ctx, ln, pad + wA[0] + 10, cy, wA[1] - 20); cy += 22; });
+          if (item.cArLines.length) {
+            ctx.direction = 'rtl'; ctx.textAlign = 'left';
+            ctx.font = `400 17px ${fontAr}`;
+            item.cArLines.forEach(ln => { canvasText(ctx, ln, pad + wA[0] + 10, cy, wA[1] - 20); cy += 22; });
+            ctx.direction = 'ltr';
+          }
+
+          drawCell(pad + wA[0] + wA[1], y, wA[2], item.h);
+          ctx.textAlign = 'center';
+          ctx.font = `400 18px ${fontSans}`;
+          ctx.fillText(String(item.r.nilai || '-'), pad + wA[0] + wA[1] + wA[2] / 2, y + 26);
+          if (item.r.nilaiAr) {
+            ctx.direction = 'rtl';
+            ctx.font = `400 17px ${fontAr}`;
+            ctx.fillText(item.r.nilaiAr, pad + wA[0] + wA[1] + wA[2] / 2, y + 48);
+            ctx.direction = 'ltr';
+          }
+
+          drawCell(pad + wA[0] + wA[1] + wA[2], y, wA[3], item.h);
+          let pry = y + 24;
+          ctx.font = `400 16px ${fontSans}`;
+          item.predIdLines.forEach(ln => { canvasText(ctx, ln, pad + wA[0] + wA[1] + wA[2] + wA[3] / 2, pry, wA[3] - 12); pry += 22; });
+          if (item.predArLines.length) {
+            ctx.direction = 'rtl';
+            ctx.font = `400 16px ${fontAr}`;
+            item.predArLines.forEach(ln => { canvasText(ctx, ln, pad + wA[0] + wA[1] + wA[2] + wA[3] / 2, pry, wA[3] - 12); pry += 22; });
+            ctx.direction = 'ltr';
+          }
+          ctx.textAlign = 'left';
+          y += item.h;
+        });
+
+        drawCell(pad, y, wA[0] + wA[1], hAvg);
+        ctx.font = `700 17px ${fontSans}`;
+        ctx.fillText('Rata-rata Nilai Akhir Periode', pad + 10, y + 24);
+        ctx.direction = 'rtl'; ctx.textAlign = 'left';
+        ctx.font = `700 17px ${fontAr}`;
+        ctx.fillText('المعدل العام للفترة', pad + 10, y + 46);
+        ctx.direction = 'ltr';
+
+        drawCell(pad + wA[0] + wA[1], y, wA[2], hAvg);
+        ctx.textAlign = 'center';
+        ctx.font = `700 18px ${fontSans}`;
+        ctx.fillText(d.avgScoreStr, pad + wA[0] + wA[1] + wA[2] / 2, y + 25);
+        if (d.avgScoreAr) {
+          ctx.direction = 'rtl';
+          ctx.font = `700 17px ${fontAr}`;
+          ctx.fillText(d.avgScoreAr, pad + wA[0] + wA[1] + wA[2] / 2, y + 47);
+          ctx.direction = 'ltr';
+        }
+
+        drawCell(pad + wA[0] + wA[1] + wA[2], y, wA[3], hAvg);
+        let apy = y + 24;
+        ctx.font = `700 16px ${fontSans}`;
+        avgPredIdLines.forEach(ln => { canvasText(ctx, ln, pad + wA[0] + wA[1] + wA[2] + wA[3] / 2, apy, wA[3] - 12); apy += 22; });
+        if (avgPredArLines.length) {
+          ctx.direction = 'rtl';
+          ctx.font = `700 16px ${fontAr}`;
+          avgPredArLines.forEach(ln => { canvasText(ctx, ln, pad + wA[0] + wA[1] + wA[2] + wA[3] / 2, apy, wA[3] - 12); apy += 22; });
+          ctx.direction = 'ltr';
+        }
+        ctx.textAlign = 'left';
+        y += hAvg;
+
+        // Section B
+        if (d.attRows.length) {
+          y += 28;
+          ctx.font = `700 19px ${fontSans}`;
+          ctx.fillText('B. Rekapitulasi Kehadiran', pad, y);
+          ctx.direction = 'rtl';
+          ctx.textAlign = 'right';
+          ctx.font = `700 19px ${fontAr}`;
+          ctx.fillText('خلاصة الحضور والغياب', W - pad, y);
+          ctx.direction = 'ltr';
+          ctx.textAlign = 'left';
+          y += 14;
+
+          const wK = d.hasKajianAtt ? 250 : 0;
+          const wCell = (innerW - wK) / 6;
+          if (d.hasKajianAtt) {
+            drawCell(pad, y, wK, 54);
+            ctx.font = `700 16px ${fontSans}`; ctx.fillText('Kegiatan', pad + 10, y + 22);
+            ctx.direction = 'rtl'; ctx.textAlign = 'left'; ctx.font = `700 16px ${fontAr}`; ctx.fillText('النشاط', pad + 10, y + 44); ctx.direction = 'ltr';
+          }
+          [
+            ['Hadir', 'الحضور'], ['Izin', 'الاستئذان'], ['Sakit', 'المرض'],
+            ['Libur', 'العطلة'], ['Alfa', 'الغياب'], ['Persentase', 'النسبة']
+          ].forEach((pair, idx) => {
+            const cx = pad + wK + idx * wCell;
+            drawCell(cx, y, wCell, 54);
+            ctx.textAlign = 'center';
+            ctx.font = `700 16px ${fontSans}`; ctx.fillText(pair[0], cx + wCell / 2, y + 22);
+            ctx.direction = 'rtl'; ctx.font = `700 16px ${fontAr}`; ctx.fillText(pair[1], cx + wCell / 2, y + 44); ctx.direction = 'ltr';
+            ctx.textAlign = 'left';
+          });
+          y += 54;
+
+          d.attRows.forEach(ar => {
+            const rowH = 54;
+            if (d.hasKajianAtt) {
+              drawCell(pad, y, wK, rowH);
+              ctx.font = `700 16px ${fontSans}`; ctx.fillText(ar.idName, pad + 10, y + 22);
+              ctx.direction = 'rtl'; ctx.textAlign = 'left'; ctx.font = `400 16px ${fontAr}`; ctx.fillText(ar.arName, pad + 10, y + 44); ctx.direction = 'ltr';
+            }
+            [ar.att.Hadir, ar.att.Izin, ar.att.Sakit, ar.att.Libur, ar.att.Alfa, ar.att.persen + '%'].forEach((val, idx) => {
+              const cx = pad + wK + idx * wCell;
+              drawCell(cx, y, wCell, rowH);
+              ctx.textAlign = 'center';
+              ctx.font = idx === 5 ? `700 17px ${fontSans}` : `400 17px ${fontSans}`;
+              ctx.fillText(String(val), cx + wCell / 2, y + 23);
+              ctx.direction = 'rtl';
+              ctx.font = `400 16px ${fontAr}`;
+              ctx.fillText(toArabicDigits(val), cx + wCell / 2, y + 45);
+              ctx.direction = 'ltr';
+              ctx.textAlign = 'left';
+            });
+            y += rowH;
+          });
+        }
+
+        // Section C
+        y += 28;
+        ctx.font = `700 19px ${fontSans}`;
+        ctx.fillText(`${d.attRows.length ? 'C' : 'B'}. Akhlaq, Catatan Pembimbing & Rekomendasi`, pad, y);
+        ctx.direction = 'rtl';
+        ctx.textAlign = 'right';
+        ctx.font = `700 19px ${fontAr}`;
+        ctx.fillText('السلوك وملاحظات المشرف والتوصيات', W - pad, y);
+        ctx.direction = 'ltr';
+        ctx.textAlign = 'left';
+        y += 14;
+
+        calcClosing.forEach(item => {
+          drawCell(pad, y, wLabel, item.h);
+          ctx.font = `700 17px ${fontSans}`; ctx.fillText(item.cr.idLabel, pad + 10, y + 24);
+          ctx.direction = 'rtl'; ctx.textAlign = 'left'; ctx.font = `400 17px ${fontAr}`; ctx.fillText(item.cr.arLabel, pad + 10, y + 46); ctx.direction = 'ltr';
+          drawCell(pad + wLabel, y, wVal, item.h);
+          let vy = y + 25;
+          ctx.font = `400 17px ${fontSans}`;
+          item.valIdLines.forEach(ln => { canvasText(ctx, ln, pad + wLabel + 10, vy, wVal - 20); vy += 23; });
+          if (item.valArLines.length) {
+            ctx.direction = 'rtl'; ctx.textAlign = 'left';
+            ctx.font = `400 17px ${fontAr}`;
+            item.valArLines.forEach(ln => { canvasText(ctx, ln, pad + wLabel + 10, vy, wVal - 20); vy += 23; });
+            ctx.direction = 'ltr';
+          }
+          y += item.h;
+        });
+
+        y += 44;
+        drawSignBlock(ctx, d.signs.map((sc, i) => ({
+          top: sc.idTop, arTop: sc.arTop, role: sc.idRole, arRole: sc.arRole, name: sc.name, arName: sc.nameAr,
+          ttd: i === 1 ? ustTtdImg : (i === 2 ? pimTtdImg : null),
+          cap: i === 2 ? capImg : null
+        })), y, colW, false);
+
+        return { canvas, linkName };
+      }
+
+      // Model 3 — Full Bahasa Arab (RTL)
+      const wA = [245, 550, 95, innerW - 890];
+      ctx0.font = `400 19px ${fontAr}`;
       const leftValW = 365, rightValW = innerW - 735;
-      const calcMeta = metaRowsRaw.map(mr => {
-        const lLines = wrapCanvasLines(ctx0, ': ' + mr[1], leftValW);
-        const rLines = wrapCanvasLines(ctx0, ': ' + mr[3], rightValW);
-        const rowH = Math.max(lLines.length, rLines.length) * 24 + 6;
-        return { lLabel: mr[0], lLines, rLabel: mr[2], rLines, rowH };
+      const calcMeta = d.metaPairs.map(mp => {
+        const lLines = wrapCanvasLines(ctx0, ': ' + mp.lVal, leftValW);
+        const rLines = wrapCanvasLines(ctx0, ': ' + mp.rVal, rightValW);
+        const rowH = Math.max(lLines.length, rLines.length) * 26 + 8;
+        return { mp, lLines, rLines, rowH };
       });
       const totalMetaH = calcMeta.reduce((sum, mr) => sum + mr.rowH, 0);
 
-      const capColW = 520;
-      const calcProg = progRows.map(r => {
-        const pLines = wrapCanvasLines(ctx0, r[0], 220);
-        const cLines = wrapCanvasLines(ctx0, r[1], capColW);
-        const h = Math.max(44, Math.max(pLines.length, cLines.length) * 24 + 18);
-        return { pLines, cLines, n: r[2], pred: r[3], h };
+      const calcProg = d.progRows.map(r => {
+        const pLines = wrapCanvasLines(ctx0, r.arName, wA[0] - 24);
+        const capStr = r.arSub ? `${r.arCap}\n${r.arSub}` : r.arCap;
+        const cLines = wrapCanvasLines(ctx0, capStr, wA[1] - 24);
+        const h = Math.max(48, Math.max(pLines.length, cLines.length) * 26 + 20);
+        return { r, pLines, cLines, h };
       });
-      const catLines = wrapCanvasLines(ctx0, info.catatan || '-', innerW - 265);
-      const rekLines = wrapCanvasLines(ctx0, info.rekomendasi || '-', innerW - 265);
-      const totalProgH = calcProg.reduce((a, r) => a + r.h, 0);
-      const attRowsCount = info.kehadiran ? (info.talimAbsen && info.talimAbsen.slot > 0 ? 2 : 1) : 0;
-      const hCatEst = Math.max(46, catLines.length * 24 + 18);
-      const hRekEst = Math.max(46, rekLines.length * 24 + 18);
+      const wLabel = 245, wVal = innerW - wLabel;
+      const calcClosing = d.closingRows.map(cr => {
+        const valLines = wrapCanvasLines(ctx0, cr.val, wVal - 24);
+        const h = Math.max(50, valLines.length * 26 + 20);
+        return { cr, valLines, h };
+      });
+      const totalProgH = calcProg.reduce((a, r) => a + r.h, 0) + 46;
+      const attRowsCount = d.attRows.length;
+      const totalClosingH = calcClosing.reduce((a, r) => a + r.h, 0);
       const colW = innerW / 3;
       const namaPimpinanEst = (cfg.namaPimpinan || '').trim() || '( ________________________ )';
-      ctx0.font = '700 18px Arial, sans-serif';
+      ctx0.font = `700 19px ${fontAr}`;
       const maxSignNameLines = Math.max(
         wrapCanvasLines(ctx0, s.namaWali || '( .............................. )', colW - 24).length,
         wrapCanvasLines(ctx0, info.ustadzLabel !== '-' ? info.ustadzLabel : '( .............................. )', colW - 24).length,
         wrapCanvasLines(ctx0, namaPimpinanEst, colW - 24).length
       );
-      const contentH = 196 + totalMetaH + (totalProgH + 116) + (attRowsCount ? 82 + attRowsCount * 38 : 0) + (84 + hCatEst + hRekEst) + (180 + maxSignNameLines * 22 + 48);
+      const contentH = 210 + totalMetaH + (totalProgH + 110) + (attRowsCount ? 86 + attRowsCount * 42 : 0) + (86 + totalClosingH) + (190 + maxSignNameLines * 24 + 48);
       const H = Math.max(1754, contentH);
 
       const canvas = document.createElement('canvas');
@@ -2232,166 +3490,141 @@ function exportLaporanExcel(filters) {
       ctx.fillStyle = '#000000';
       ctx.strokeStyle = '#000000';
 
-      // Kop
+      // Kop RTL (logo on top-right)
       let y = 64;
-      let textX = pad;
+      let textRight = W - pad;
       if (logoImg) {
-        ctx.drawImage(logoImg, pad, y, 86, 86);
-        textX = pad + 106;
+        ctx.drawImage(logoImg, W - pad - 86, y, 86, 86);
+        textRight = W - pad - 106;
       }
-      ctx.font = '700 26px Arial, sans-serif';
-      canvasText(ctx, String(cfg.namaLembaga || 'Lembaga Tahfidz').toUpperCase(), textX, y + 26, W - pad - textX);
-      ctx.font = '400 17px Arial, sans-serif';
-      canvasText(ctx, cfg.alamat || '', textX, y + 52, W - pad - textX);
-      ctx.font = '700 21px Arial, sans-serif';
-      canvasText(ctx, 'RAPORT HASIL BELAJAR TAHFIDZ AL-QUR’AN', textX, y + 82, W - pad - textX);
-      y += 104;
+      ctx.direction = 'rtl';
+      ctx.textAlign = 'right';
+      ctx.font = `700 27px ${fontAr}`;
+      canvasText(ctx, d.instName, textRight, y + 26, textRight - pad);
+      ctx.font = `400 18px ${fontAr}`;
+      canvasText(ctx, d.instAddr, textRight, y + 54, textRight - pad);
+      ctx.font = `700 24px ${fontAr}`;
+      canvasText(ctx, d.titleAr, textRight, y + 86, textRight - pad);
+      y += 108;
       ctx.lineWidth = 3;
       ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(W - pad, y); ctx.stroke();
       ctx.lineWidth = 1;
-      y += 28;
+      y += 30;
 
-      // Meta 2 columns (auto-wrapped so Halaqah / Program & Pembimbing never truncate)
+      // Meta 2 columns RTL
       calcMeta.forEach(mr => {
-        ctx.font = '700 18px Arial, sans-serif';
-        ctx.fillText(mr.lLabel, pad, y);
-        ctx.fillText(mr.rLabel, pad + 560, y);
-        ctx.font = '400 18px Arial, sans-serif';
-        mr.lLines.forEach((ln, li) => ctx.fillText(ln, pad + 165, y + li * 24));
-        mr.rLines.forEach((ln, li) => ctx.fillText(ln, pad + 725, y + li * 24));
+        ctx.direction = 'rtl';
+        ctx.textAlign = 'right';
+        ctx.font = `700 19px ${fontAr}`;
+        ctx.fillText(mr.mp.lAr, W - pad, y);
+        ctx.fillText(mr.mp.rAr, W - pad - 560, y);
+        ctx.font = `400 19px ${fontAr}`;
+        mr.lLines.forEach((ln, li) => ctx.fillText(ln, W - pad - 180, y + li * 26));
+        mr.rLines.forEach((ln, li) => ctx.fillText(ln, W - pad - 730, y + li * 26));
         y += mr.rowH;
       });
 
-      const drawCell = (x, cy, cw, ch, bold = false) => {
+      const drawCellRtl = (x, cy, cw, ch, bold = false) => {
         ctx.strokeStyle = '#000000';
         ctx.strokeRect(x, cy, cw, ch);
         ctx.fillStyle = '#000000';
-        ctx.font = bold ? '700 18px Arial, sans-serif' : '400 18px Arial, sans-serif';
+        ctx.font = bold ? `700 19px ${fontAr}` : `400 19px ${fontAr}`;
       };
 
-      // Bagian A
+      // Section A RTL
       y += 18;
-      ctx.font = '700 20px Arial, sans-serif';
-      ctx.fillText('A. Capaian Pembelajaran & Hafalan', pad, y);
+      ctx.direction = 'rtl';
+      ctx.textAlign = 'right';
+      ctx.font = `700 22px ${fontAr}`;
+      ctx.fillText('أولًا: نتائج التعلم وحفظ القرآن الكريم', W - pad, y);
       y += 14;
-      const wA = [245, 550, 95, innerW - 890];
-      drawCell(pad, y, wA[0], 42, true); ctx.fillText('Program / Bidang', pad + 10, y + 27);
-      drawCell(pad + wA[0], y, wA[1], 42, true); ctx.fillText('Capaian Periode Ini', pad + wA[0] + 10, y + 27);
-      drawCell(pad + wA[0] + wA[1], y, wA[2], 42, true); ctx.textAlign = 'center'; ctx.fillText('Nilai', pad + wA[0] + wA[1] + wA[2] / 2, y + 27); ctx.textAlign = 'left';
-      drawCell(pad + wA[0] + wA[1] + wA[2], y, wA[3], 42, true); ctx.textAlign = 'center'; ctx.fillText('Predikat', pad + wA[0] + wA[1] + wA[2] + wA[3] / 2, y + 27); ctx.textAlign = 'left';
-      y += 42;
+      const xCol0 = W - pad - wA[0];
+      const xCol1 = xCol0 - wA[1];
+      const xCol2 = xCol1 - wA[2];
+      const xCol3 = pad;
+      drawCellRtl(xCol0, y, wA[0], 46, true); ctx.textAlign = 'right'; ctx.fillText('البرنامج / المادة', W - pad - 12, y + 30);
+      drawCellRtl(xCol1, y, wA[1], 46, true); ctx.textAlign = 'right'; ctx.fillText('الإنجاز خلال الفترة', xCol0 - 12, y + 30);
+      drawCellRtl(xCol2, y, wA[2], 46, true); ctx.textAlign = 'center'; ctx.fillText('الدرجة', xCol2 + wA[2] / 2, y + 30);
+      drawCellRtl(xCol3, y, wA[3], 46, true); ctx.textAlign = 'center'; ctx.fillText('التقدير', xCol3 + wA[3] / 2, y + 30);
+      y += 46;
 
-      calcProg.forEach(r => {
-        drawCell(pad, y, wA[0], r.h, true);
-        r.pLines.forEach((ln, i) => canvasText(ctx, ln, pad + 10, y + 25 + i * 24, wA[0] - 20));
-        drawCell(pad + wA[0], y, wA[1], r.h, false);
-        r.cLines.forEach((ln, i) => canvasText(ctx, ln, pad + wA[0] + 10, y + 25 + i * 24, wA[1] - 20));
-        drawCell(pad + wA[0] + wA[1], y, wA[2], r.h, false);
-        ctx.textAlign = 'center'; ctx.fillText(r.n, pad + wA[0] + wA[1] + wA[2] / 2, y + 26);
-        drawCell(pad + wA[0] + wA[1] + wA[2], y, wA[3], r.h, false);
-        ctx.textAlign = 'center'; canvasText(ctx, r.pred, pad + wA[0] + wA[1] + wA[2] + wA[3] / 2, y + 26, wA[3] - 12);
-        ctx.textAlign = 'left';
-        y += r.h;
+      calcProg.forEach(item => {
+        drawCellRtl(xCol0, y, wA[0], item.h, true);
+        ctx.textAlign = 'right';
+        item.pLines.forEach((ln, i) => canvasText(ctx, ln, W - pad - 12, y + 28 + i * 26, wA[0] - 24));
+        drawCellRtl(xCol1, y, wA[1], item.h, false);
+        ctx.textAlign = 'right';
+        item.cLines.forEach((ln, i) => canvasText(ctx, ln, xCol0 - 12, y + 28 + i * 26, wA[1] - 24));
+        drawCellRtl(xCol2, y, wA[2], item.h, false);
+        ctx.textAlign = 'center';
+        ctx.fillText(item.r.nilai ? toArabicDigits(item.r.nilai) : '-', xCol2 + wA[2] / 2, y + 30);
+        drawCellRtl(xCol3, y, wA[3], item.h, false);
+        ctx.textAlign = 'center';
+        canvasText(ctx, item.r.pred, xCol3 + wA[3] / 2, y + 30, wA[3] - 14);
+        y += item.h;
       });
-      drawCell(pad, y, wA[0] + wA[1], 42, true); ctx.fillText('Rata-rata Nilai Akhir Periode', pad + 10, y + 27);
-      drawCell(pad + wA[0] + wA[1], y, wA[2], 42, true); ctx.textAlign = 'center'; ctx.fillText(String(info.avgNilai || '-'), pad + wA[0] + wA[1] + wA[2] / 2, y + 27);
-      drawCell(pad + wA[0] + wA[1] + wA[2], y, wA[3], 42, true); canvasText(ctx, info.predikat, pad + wA[0] + wA[1] + wA[2] + wA[3] / 2, y + 27, wA[3] - 12);
-      ctx.textAlign = 'left';
-      y += 42;
+      drawCellRtl(xCol1, y, wA[0] + wA[1], 46, true); ctx.textAlign = 'right'; ctx.fillText('المعدل العام للفترة', W - pad - 12, y + 30);
+      drawCellRtl(xCol2, y, wA[2], 46, true); ctx.textAlign = 'center'; ctx.fillText(d.avgScoreStr, xCol2 + wA[2] / 2, y + 30);
+      drawCellRtl(xCol3, y, wA[3], 46, true); ctx.textAlign = 'center'; canvasText(ctx, d.avgPred, xCol3 + wA[3] / 2, y + 30, wA[3] - 14);
+      y += 46;
 
-      // Bagian B
-      if (info.kehadiran) {
-        const hasKajianAtt = info.talimAbsen && info.talimAbsen.slot > 0;
+      // Section B RTL
+      if (d.attRows.length) {
         y += 30;
-        ctx.font = '700 20px Arial, sans-serif';
-        ctx.fillText('B. Rekapitulasi Kehadiran', pad, y);
+        ctx.textAlign = 'right';
+        ctx.font = `700 22px ${fontAr}`;
+        ctx.fillText('ثانيًا: خلاصة الحضور والغياب', W - pad, y);
         y += 14;
-        const wK = hasKajianAtt ? 250 : 0;
+        const wK = d.hasKajianAtt ? 250 : 0;
         const wCell = (innerW - wK) / 6;
-        if (hasKajianAtt) { drawCell(pad, y, wK, 38, true); ctx.fillText('Kegiatan', pad + 10, y + 25); }
-        ['Hadir', 'Izin', 'Sakit', 'Libur', 'Alfa', 'Persentase'].forEach((hLabel, idx) => {
-          const cx = pad + wK + idx * wCell;
-          drawCell(cx, y, wCell, 38, true);
-          ctx.textAlign = 'center'; ctx.fillText(hLabel, cx + wCell / 2, y + 25); ctx.textAlign = 'left';
+        if (d.hasKajianAtt) {
+          drawCellRtl(W - pad - wK, y, wK, 42, true);
+          ctx.textAlign = 'right'; ctx.fillText('النشاط', W - pad - 12, y + 28);
+        }
+        ['الحضور', 'الاستئذان', 'المرض', 'العطلة', 'الغياب', 'النسبة'].forEach((hLabel, idx) => {
+          const cx = W - pad - wK - (idx + 1) * wCell;
+          drawCellRtl(cx, y, wCell, 42, true);
+          ctx.textAlign = 'center'; ctx.fillText(hLabel, cx + wCell / 2, y + 28);
         });
-        y += 38;
-        const drawAttRow = (label, att) => {
-          if (hasKajianAtt) { drawCell(pad, y, wK, 38, true); ctx.fillText(label, pad + 10, y + 25); }
-          [att.Hadir, att.Izin, att.Sakit, att.Libur, att.Alfa, att.persen + '%'].forEach((val, idx) => {
-            const cx = pad + wK + idx * wCell;
-            drawCell(cx, y, wCell, 38, idx === 5);
-            ctx.textAlign = 'center'; ctx.fillText(String(val), cx + wCell / 2, y + 25); ctx.textAlign = 'left';
+        y += 42;
+        d.attRows.forEach(ar => {
+          if (d.hasKajianAtt) {
+            drawCellRtl(W - pad - wK, y, wK, 42, true);
+            ctx.textAlign = 'right'; ctx.fillText(ar.arName, W - pad - 12, y + 28);
+          }
+          [ar.att.Hadir, ar.att.Izin, ar.att.Sakit, ar.att.Libur, ar.att.Alfa, ar.att.persen + '%'].forEach((val, idx) => {
+            const cx = W - pad - wK - (idx + 1) * wCell;
+            drawCellRtl(cx, y, wCell, 42, idx === 5);
+            ctx.textAlign = 'center'; ctx.fillText(toArabicDigits(val), cx + wCell / 2, y + 28);
           });
-          y += 38;
-        };
-        drawAttRow('Halaqah (Al-Qur’an)', info.kehadiran);
-        if (hasKajianAtt) drawAttRow('Kajian', info.talimAbsen);
+          y += 42;
+        });
       }
 
-      // Bagian C
+      // Section C RTL
       y += 30;
-      ctx.font = '700 20px Arial, sans-serif';
-      ctx.fillText(`${info.kehadiran ? 'C' : 'B'}. Akhlaq, Catatan Pembimbing & Rekomendasi`, pad, y);
+      ctx.textAlign = 'right';
+      ctx.font = `700 22px ${fontAr}`;
+      ctx.fillText(`${d.attRows.length ? 'ثالثًا' : 'ثانيًا'}: السلوك وملاحظات المشرف والتوصيات`, W - pad, y);
       y += 14;
-      const wLabel = 245, wVal = innerW - wLabel;
-      drawCell(pad, y, wLabel, 40, true); ctx.fillText('Akhlaq & Kedisiplinan', pad + 10, y + 26);
-      drawCell(pad + wLabel, y, wVal, 40, false); ctx.fillText(info.sikap || '-', pad + wLabel + 10, y + 26);
-      y += 40;
-      const hCat = Math.max(46, catLines.length * 24 + 18);
-      drawCell(pad, y, wLabel, hCat, true); ctx.fillText('Catatan Ustadz', pad + 10, y + 26);
-      drawCell(pad + wLabel, y, wVal, hCat, false);
-      catLines.forEach((ln, i) => canvasText(ctx, ln, pad + wLabel + 10, y + 25 + i * 24, wVal - 20));
-      y += hCat;
-      const hRek = Math.max(46, rekLines.length * 24 + 18);
-      drawCell(pad, y, wLabel, hRek, true); ctx.fillText('Rekomendasi', pad + 10, y + 26);
-      drawCell(pad + wLabel, y, wVal, hRek, false);
-      rekLines.forEach((ln, i) => canvasText(ctx, ln, pad + wLabel + 10, y + 25 + i * 24, wVal - 20));
-      y += hRek;
-
-      // Tanda tangan + Cap Lembaga
-      y += 48;
-      const kotaTtd = (cfg.kota || '').trim();
-      const tglTtd = (kotaTtd ? kotaTtd + ', ' : '') + UI.fmtDate(Store.todayStr());
-      const jabPimpinan = cfg.jabatanPimpinan || 'Mudir / Kepala Lembaga';
-      const namaPimpinan = (cfg.namaPimpinan || '').trim() || '( ________________________ )';
-      const signCols = [
-        { top: 'Mengetahui,', role: 'Orang Tua / Wali Santri', name: s.namaWali || '( .............................. )', ttd: null, cap: null },
-        { top: '', role: 'Ustadz Pembimbing', name: info.ustadzLabel !== '-' ? info.ustadzLabel : '( .............................. )', ttd: ustTtdImg, cap: null },
-        { top: tglTtd, role: jabPimpinan, name: namaPimpinan, ttd: pimTtdImg, cap: capImg }
-      ];
-      signCols.forEach((sc, idx) => {
-        const cx = pad + colW * idx + colW / 2;
-        ctx.textAlign = 'center';
-        ctx.font = '400 18px Arial, sans-serif';
-        if (sc.top) ctx.fillText(sc.top, cx, y);
-        ctx.fillText(sc.role, cx, y + 24);
-        if (sc.cap) {
-          ctx.save();
-          ctx.globalAlpha = 0.85;
-          ctx.translate(cx - 46, y + 74);
-          ctx.rotate(-0.1);
-          const cr = Math.min(120 / Math.max(1, sc.cap.naturalWidth || 120), 100 / Math.max(1, sc.cap.naturalHeight || 100), 1);
-          const cw = (sc.cap.naturalWidth || 100) * cr, ch = (sc.cap.naturalHeight || 100) * cr;
-          ctx.drawImage(sc.cap, -cw / 2, -ch / 2, cw, ch);
-          ctx.restore();
-        }
-        if (sc.ttd) {
-          const tr = Math.min(200 / Math.max(1, sc.ttd.naturalWidth || 200), 76 / Math.max(1, sc.ttd.naturalHeight || 76), 1);
-          const tw = (sc.ttd.naturalWidth || 160) * tr, th = (sc.ttd.naturalHeight || 70) * tr;
-          ctx.drawImage(sc.ttd, cx - tw / 2, y + 74 - th / 2, tw, th);
-        }
-        ctx.font = '700 18px Arial, sans-serif';
-        const nameLines = wrapCanvasLines(ctx, sc.name, colW - 24);
-        nameLines.forEach((ln, li) => {
-          const ly = y + 132 + li * 22;
-          ctx.fillText(ln, cx, ly);
-          const lw = Math.min(colW - 24, ctx.measureText(ln).width);
-          ctx.beginPath(); ctx.moveTo(cx - lw / 2, ly + 4); ctx.lineTo(cx + lw / 2, ly + 4); ctx.stroke();
-        });
+      calcClosing.forEach(item => {
+        drawCellRtl(W - pad - wLabel, y, wLabel, item.h, true);
+        ctx.textAlign = 'right';
+        ctx.fillText(item.cr.arLabel, W - pad - 12, y + 30);
+        drawCellRtl(pad, y, wVal, item.h, false);
+        ctx.textAlign = 'right';
+        item.valLines.forEach((ln, i) => canvasText(ctx, ln, W - pad - wLabel - 12, y + 28 + i * 26, wVal - 24));
+        y += item.h;
       });
-      ctx.textAlign = 'left';
 
-      return { canvas, linkName: `Raport_${safeFilename(s.nama)}_${safeFilename(state.semester)}.jpg` };
+      y += 48;
+      drawSignBlock(ctx, d.signs.map((sc, i) => ({
+        top: sc.arTop, role: sc.arRole, name: sc.name,
+        ttd: i === 1 ? ustTtdImg : (i === 2 ? pimTtdImg : null),
+        cap: i === 2 ? capImg : null
+      })), y, colW, true);
+
+      return { canvas, linkName };
     }
 
     async function downloadRaportJpg(info) {
@@ -2425,6 +3658,7 @@ function exportLaporanExcel(filters) {
       try {
         const entries = [];
         const usedNames = new Set();
+        const fileSuffix = raportFileSuffix(state.model);
         for (let i = 0; i < infos.length; i++) {
           if (zipAllBtn) zipAllBtn.textContent = `Menyiapkan ${i + 1}/${infos.length}...`;
           const { canvas } = await buildRaportCanvas(infos[i]);
@@ -2436,7 +3670,7 @@ function exportLaporanExcel(filters) {
           });
           if (!jpgBytes) continue;
           const prefix = String(i + 1).padStart(2, '0');
-          const base = `${prefix}_${safeFilename(infos[i].s.nama)}_${safeFilename(state.semester)}`;
+          const base = `${prefix}_${safeFilename(infos[i].s.nama)}_${safeFilename(state.semester)}${fileSuffix}`;
           let fileName = `${base}.jpg`;
           let suffix = 2;
           while (usedNames.has(fileName)) fileName = `${base}_${suffix++}.jpg`;
@@ -2447,7 +3681,7 @@ function exportLaporanExcel(filters) {
           UI.toast('Gagal membuat file ZIP raport', 'error');
           return;
         }
-        const zipName = `Raport_${bulkScopeSlug()}_${safeFilename(state.tahunAjaran)}_${safeFilename(state.semester)}.zip`;
+        const zipName = `Raport_${bulkScopeSlug()}_${safeFilename(state.tahunAjaran)}_${safeFilename(state.semester)}${fileSuffix}.zip`;
         const blob = new Blob([xlsxZip(entries)], { type: 'application/zip' });
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement('a');
@@ -2468,6 +3702,7 @@ function exportLaporanExcel(filters) {
       const initialPhone = Store.waNomorWali(info.s.id) || '';
       const initialMsg = buildRaportWaText(info);
       const canBridge = Store.hasFeature('whatsapp') && Store.waReady();
+      const fileSuffix = raportFileSuffix(state.model);
       UI.openModal({
         title: `Kirim Raport ke WhatsApp — ${info.s.nama}`,
         sub: `Wali: ${info.s.namaWali || '-'}`,
@@ -2508,11 +3743,12 @@ function exportLaporanExcel(filters) {
       const dlJpgBtn = waModal.querySelector('#rp-wa-dl-jpg');
       if (dlJpgBtn) dlJpgBtn.onclick = () => downloadRaportJpg(info);
       const dlPdfBtn = waModal.querySelector('#rp-wa-dl-pdf');
-      if (dlPdfBtn) dlPdfBtn.onclick = () => printRaportSheets(buildRaportSheetHtml(info, state), `Raport_${info.s.nama.replace(/\s+/g, '_')}_${state.semester}`);
+      if (dlPdfBtn) dlPdfBtn.onclick = () => printRaportSheets(buildRaportSheetHtml(info, state), `Raport_${info.s.nama.replace(/\s+/g, '_')}_${state.semester}${fileSuffix}`);
     }
 
     function openPreviewModal(info) {
       const sheet = buildRaportSheetHtml(info, state);
+      const fileSuffix = raportFileSuffix(state.model);
       UI.openModal({
         title: `Pratinjau Raport — ${info.s.nama}`,
         sub: `${state.tahunAjaran} · Semester ${state.semester}`,
@@ -2522,7 +3758,7 @@ function exportLaporanExcel(filters) {
           { label: 'Tutup', cls: 'ghost', onClick: (m, c) => c() },
           { label: 'Unduh JPG', cls: 'ghost', onClick: () => downloadRaportJpg(info) },
           ...(!isWali ? [{ label: 'Kirim WA', cls: 'secondary', onClick: () => openWaRaportModal(info) }] : []),
-          { label: 'Cetak / Simpan PDF', cls: 'primary', onClick: () => printRaportSheets(sheet, `Raport_${info.s.nama.replace(/\s+/g, '_')}_${state.semester}`) }
+          { label: 'Cetak / Simpan PDF', cls: 'primary', onClick: () => printRaportSheets(sheet, `Raport_${info.s.nama.replace(/\s+/g, '_')}_${state.semester}${fileSuffix}`) }
         ]
       });
     }
@@ -2562,7 +3798,7 @@ function exportLaporanExcel(filters) {
             ${sheet}
           </div>`;
         bodyEl.querySelector('#rp-wali-jpg').onclick = () => downloadRaportJpg(info);
-        bodyEl.querySelector('#rp-wali-print').onclick = () => printRaportSheets(sheet, `Raport_${info.s.nama.replace(/\s+/g, '_')}_${state.semester}`);
+        bodyEl.querySelector('#rp-wali-print').onclick = () => printRaportSheets(sheet, `Raport_${info.s.nama.replace(/\s+/g, '_')}_${state.semester}${raportFileSuffix(state.model)}`);
         return;
       }
 
@@ -2633,6 +3869,7 @@ function exportLaporanExcel(filters) {
     semEl.onchange = onSemesterChange;
     dariEl.onchange = () => { state.dari = dariEl.value; paint(); };
     sampaiEl.onchange = () => { state.sampai = sampaiEl.value; paint(); };
+    if (modelEl) modelEl.onchange = () => { state.model = normalizeRaportModel(modelEl.value); paint(); };
     if (ustEl) ustEl.onchange = () => {
       state.ustadzId = ustEl.value;
       const allowedHalaqahs = visibleHalaqahOpts();
@@ -2646,7 +3883,7 @@ function exportLaporanExcel(filters) {
     if (cariEl) bindSearchInput(cariEl, () => { state.cari = cariEl.value; paint(); });
     if (printAllBtn) printAllBtn.onclick = () => {
       const sheets = filteredSantri().map(s => buildRaportSheetHtml(buildRaportInfo(s, state), state)).join('');
-      printRaportSheets(sheets, `Raport_${bulkScopeSlug()}_${safeFilename(state.tahunAjaran)}_${safeFilename(state.semester)}`);
+      printRaportSheets(sheets, `Raport_${bulkScopeSlug()}_${safeFilename(state.tahunAjaran)}_${safeFilename(state.semester)}${raportFileSuffix(state.model)}`);
     };
     if (zipAllBtn) zipAllBtn.onclick = () => {
       const infos = filteredSantri().map(s => buildRaportInfo(s, state));

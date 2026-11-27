@@ -609,15 +609,21 @@ function getSettings(): array {
     $merged['features'] = normalizeFeatureFlags($merged['features'] ?? []);
     $merged['subscription'] = normalizeSubscription($merged['subscription'] ?? []);
     $merged['sesiHalaqah'] = normalizeSesiHalaqah($merged['sesiHalaqah'] ?? []);
+    $merged['raportModel'] = normalizeRaportModel($merged['raportModel'] ?? 'model1');
     return $merged;
 }
 function saveSettings(array $s) {
     $s['features'] = normalizeFeatureFlags($s['features'] ?? []);
     $s['subscription'] = normalizeSubscription($s['subscription'] ?? []);
     $s['sesiHalaqah'] = normalizeSesiHalaqah($s['sesiHalaqah'] ?? []);
+    $s['raportModel'] = normalizeRaportModel($s['raportModel'] ?? 'model1');
     $data = json_encode($s, JSON_UNESCAPED_UNICODE);
     $stmt = pdo()->prepare(upsertSQL('settings', ['id', 'data']));
     $stmt->execute([1, $data]);
+}
+function normalizeRaportModel($raw): string {
+    $v = is_string($raw) ? trim($raw) : '';
+    return in_array($v, ['model1', 'model2', 'model3'], true) ? $v : 'model1';
 }
 function defaultSettings(): array {
     return [
@@ -626,12 +632,18 @@ function defaultSettings(): array {
         'sppNominal' => 100000,
         'sppJatuhTempo' => 10,
         'namaLembaga' => 'Rumah Tahfidz Al-Hikmah',
+        'namaLembagaArab' => '',
         'alamat' => 'Jl. Pendidikan No. 10, Jakarta',
+        'alamatArab' => '',
         'kota' => '',
+        'kotaArab' => '',
         'jabatanPimpinan' => 'Mudir / Kepala Lembaga',
+        'jabatanPimpinanArab' => '',
         'namaPimpinan' => '',
+        'namaPimpinanArab' => '',
         'ttdPimpinan' => '',
         'capLembaga' => '',
+        'raportModel' => 'model1',
         'tahunAjaran' => '2025/2026',
         'semester' => 'Ganjil',
         'standarPenilaian' => 'A (90-100), B (80-89), C (70-79), D (<70)',

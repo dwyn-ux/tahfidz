@@ -175,8 +175,8 @@ const Store = (() => {
   function defaultDB() {
     return {
       settings: {
-        namaLembaga: 'Rumah Tahfidz Al-Hikmah', alamat: 'Jl. Pendidikan No. 10, Jakarta',
-        kota: '', jabatanPimpinan: 'Mudir / Kepala Lembaga', namaPimpinan: '',
+        namaLembaga: 'Rumah Tahfidz Al-Hikmah', namaLembagaArab: '', alamat: 'Jl. Pendidikan No. 10, Jakarta', alamatArab: '',
+        kota: '', kotaArab: '', jabatanPimpinan: 'Mudir / Kepala Lembaga', jabatanPimpinanArab: '', namaPimpinan: '', namaPimpinanArab: '', raportModel: 'model1',
         tahunAjaran: '2025/2026', semester: 'Ganjil',
         standarPenilaian: 'A (90-100), B (80-89), C (70-79), D (<70)',
         jamBelajar: '07:00 - 09:00', sesiHalaqah: DEFAULT_SESI_HALAQAH.map(x => Object.assign({}, x)), tema: 'Claymorphism',
@@ -891,6 +891,7 @@ const Store = (() => {
       note: String(rawSub.note || '')
     };
     settings.sesiHalaqah = normalizeSesiHalaqah(settings.sesiHalaqah);
+    settings.raportModel = ['model1', 'model2', 'model3'].includes(settings.raportModel) ? settings.raportModel : 'model1';
     return settings;
   }
 
