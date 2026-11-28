@@ -1653,6 +1653,19 @@ function exportLaporanExcel(filters) {
       if (!kajianByMapel.has(key)) kajianByMapel.set(key, []);
       kajianByMapel.get(key).push(j);
     });
+    // Sertakan juga mapel yang ditugaskan untuk kelas santri ini walau belum ada jurnal pada periode raport
+    if (Store.hasFeature('talim')) {
+      const santriClassKey = Store.talimClassKey(Store.tingkatForSantri(s), Store.kelasForSantri(s));
+      if (santriClassKey && santriClassKey !== '|') {
+        (db.ustadz || []).forEach(u => {
+          Store.talimAssignmentsForUstadz(u).forEach(a => {
+            if (a.mapel && a.mapel.id && a.kelasKeys.includes(santriClassKey) && !kajianByMapel.has(a.mapel.id)) {
+              kajianByMapel.set(a.mapel.id, []);
+            }
+          });
+        });
+      }
+    }
     // Include any saved Materi Kajian subjects even if journals were cleared/moved
     Object.keys(savedKajian).forEach(key => {
       if (!kajianByMapel.has(key)) kajianByMapel.set(key, []);
