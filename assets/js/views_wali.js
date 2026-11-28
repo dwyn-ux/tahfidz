@@ -144,15 +144,17 @@ const Wali = (() => {
   function renderNotifWali(userId) {
     const list = Store.notifFor(userId);
     if (!list.length) return '';
-    const items = list.slice(0, 10).map(n => `
-      <div class="notif-item ${n.tipe === 'wali' ? 'notif-warn' : ''}" style="padding:8px 0;border-bottom:1px solid rgba(0,0,0,.06)">
-        <div>${UI.esc(n.pesan)}</div>
-        <div class="muted" style="font-size:11px;margin-top:2px">${UI.fmtDateTime(n.tanggal || n.waktu || n.createdAt || '')}</div>
-      </div>`).join('');
+    const items = list.slice(0, 10).map(n => Shared.renderNotifItemHtml
+      ? Shared.renderNotifItemHtml(n)
+      : `<div class="notif-item ${n.tipe === 'wali' ? 'notif-warn' : ''}" style="padding:8px 0;border-bottom:1px solid rgba(0,0,0,.06)">
+          <div>${UI.esc(n.pesan)}</div>
+          <div class="muted" style="font-size:11px;margin-top:2px">${UI.fmtDateTime(n.tanggal || n.waktu || n.createdAt || '')}</div>
+        </div>`
+    ).join('');
     return `
       <div class="clay-card mt">
         <div class="section-title">Notifikasi</div>
-        ${items}
+        <div class="notif-list">${items}</div>
       </div>`;
   }
 

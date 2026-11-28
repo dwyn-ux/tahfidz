@@ -2624,6 +2624,8 @@ const Admin = (() => {
     Shared.shell('admin', nav('admin_laporan'), '');
     Shared.setHeader('Laporan', 'Filter & export');
     const db = Store.get();
+    const isAdmin = Store.getSession()?.role === 'admin';
+    const showAtt = db.settings?.laporanSertakanKehadiran !== false;
     const range = Shared.rekapSetoranRange();
     document.getElementById('view-content').innerHTML = `
       <div class="clay-card mb">
@@ -2637,15 +2639,22 @@ const Admin = (() => {
           <div style="flex:1">${UI.field('Kelas', `<select class="clay-select" id="f-kelas" disabled><option value="">Pilih tingkat dahulu</option></select>`)}</div>
           <div style="flex:1">${UI.field('Status', `<select class="clay-select" id="f-status"><option value="">Semua</option><option>Aktif</option><option>Nonaktif</option></select>`)}</div>
         </div>
-        <div class="row mt">
-          <button class="clay-btn ghost" data-lap-preset="week">7 Hari</button>
-          <button class="clay-btn ghost" data-lap-preset="thisweek">Minggu Ini</button>
-          <button class="clay-btn ghost" data-lap-preset="month">Bulan Ini</button>
-          <button class="clay-btn ghost" data-lap-preset="lastmonth">Bulan Lalu</button>
+        <div class="row mt" style="align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <div class="row" style="gap:8px;flex-wrap:wrap">
+            <button class="clay-btn ghost" data-lap-preset="week">7 Hari</button>
+            <button class="clay-btn ghost" data-lap-preset="thisweek">Minggu Ini</button>
+            <button class="clay-btn ghost" data-lap-preset="month">Bulan Ini</button>
+            <button class="clay-btn ghost" data-lap-preset="lastmonth">Bulan Lalu</button>
+          </div>
+          ${isAdmin ? `<label class="row center" style="gap:6px;cursor:pointer;font-size:13px;user-select:none">
+            <input type="checkbox" id="f-sertakan-kehadiran" ${showAtt ? 'checked' : ''}>
+            <span>Sertakan Kehadiran</span>
+          </label>` : ''}
         </div>
       </div>
       <div id="laporan-content"></div>`;
     const apply = () => {
+      const attEl = document.getElementById('f-sertakan-kehadiran');
       const f = {
         dari: document.getElementById('f-dari').value,
         sampai: document.getElementById('f-sampai').value,
@@ -2654,10 +2663,19 @@ const Admin = (() => {
         tingkat: document.getElementById('f-tingkat').value,
         kelas: document.getElementById('f-kelas').value,
         status: document.getElementById('f-status').value,
-        bulan: (document.getElementById('f-dari').value || '').slice(0, 7)
+        bulan: (document.getElementById('f-dari').value || '').slice(0, 7),
+        includeAttendance: attEl ? attEl.checked : (Store.getSettings().laporanSertakanKehadiran !== false)
       };
       Shared.setRekapSetoranRange(f.dari, f.sampai);
       Shared.loadLaporan(document.getElementById('laporan-content'), f);
+    };
+    const attCheck = document.getElementById('f-sertakan-kehadiran');
+    if (attCheck) attCheck.onchange = () => {
+      const curDb = Store.get();
+      if (!curDb.settings || typeof curDb.settings !== 'object') curDb.settings = {};
+      curDb.settings.laporanSertakanKehadiran = !!attCheck.checked;
+      Store.save();
+      apply();
     };
     document.querySelectorAll('[data-lap-preset]').forEach(button => button.onclick = () => {
       const today = Store.todayStr();
@@ -3437,11 +3455,11 @@ const Admin = (() => {
     document.getElementById('view-content').innerHTML = Shared.renderNotifikasi(session.userId);
     const clearBtn = document.getElementById('clear-notif');
     if (clearBtn) clearBtn.onclick = () => {
-      if (confirm('Hapus semua notifikasi?')) {
+      UI.confirmDialog('Hapus Semua Notifikasi', 'Semua riwayat notifikasi di akun ini akan dihapus.', () => {
         Store.clearNotifs(session.userId);
-        document.getElementById('view-content').innerHTML = '<div class="empty">Notifikasi dikosongkan.</div>';
+        document.getElementById('view-content').innerHTML = Shared.renderNotifikasi(session.userId);
         UI.toast('Notifikasi dihapus', 'success');
-      }
+      });
     };
   }
 
@@ -4007,6 +4025,20 @@ const Admin = (() => {
             <span id="s-setoran-label" style="font-size:13px">${s.setoranMulti ? 'Berkali-kali per hari' : 'Sekali sehari'}</span>
           </label>
         </div>
+        <div class="row">
+          <label class="field-label" style="flex:1">Kehadiran di Laporan</label>
+          <label style="flex:1;display:flex;align-items:center;gap:8px;margin-top:12px">
+            <button class="clay-toggle ${s.laporanSertakanKehadiran !== false ? 'on' : ''}" id="s-laporan-kehadiran" type="button"></button>
+            <span id="s-laporan-kehadiran-label" style="font-size:13px">${s.laporanSertakanKehadiran !== false ? 'Sertakan Kehadiran' : 'Sembunyikan Kehadiran'}</span>
+          </label>
+        </div>
+        <div class="row">
+          <label class="field-label" style="flex:1">Kehadiran di Raport</label>
+          <label style="flex:1;display:flex;align-items:center;gap:8px;margin-top:12px">
+            <button class="clay-toggle ${s.raportSertakanKehadiran !== false ? 'on' : ''}" id="s-raport-kehadiran" type="button"></button>
+            <span id="s-raport-kehadiran-label" style="font-size:13px">${s.raportSertakanKehadiran !== false ? 'Sertakan Kehadiran' : 'Sembunyikan Kehadiran'}</span>
+          </label>
+        </div>
       </div>
       <div class="clay-card mb" style="margin-top:16px">
         <div class="row center" style="justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">
@@ -4370,6 +4402,16 @@ const Admin = (() => {
     };
     renderKelasTingkat();
 
+    ['s-laporan-kehadiran', 's-raport-kehadiran'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.onclick = function() {
+        this.classList.toggle('on');
+        const on = this.classList.contains('on');
+        const label = document.getElementById(id + '-label');
+        if (label) label.textContent = on ? 'Sertakan Kehadiran' : 'Sembunyikan Kehadiran';
+      };
+    });
+
     document.getElementById('s-wa-auto').onclick = function() {
       this.classList.toggle('on');
       const on = this.classList.contains('on');
@@ -4687,6 +4729,10 @@ const Admin = (() => {
       db.settings.jamBelajar = document.getElementById('s-jam').value.trim();
       db.settings.defaultPasswordFormat = document.getElementById('s-pass').value.trim() || '12345678';
       db.settings.setoranMulti = document.getElementById('s-setoran-multi').classList.contains('on');
+      const lapAttEl = document.getElementById('s-laporan-kehadiran');
+      if (lapAttEl) db.settings.laporanSertakanKehadiran = lapAttEl.classList.contains('on');
+      const rapAttEl = document.getElementById('s-raport-kehadiran');
+      if (rapAttEl) db.settings.raportSertakanKehadiran = rapAttEl.classList.contains('on');
       db.settings.notifActive = document.getElementById('s-notif-active').classList.contains('on');
       db.settings.notifWali = document.getElementById('s-notif-wali').classList.contains('on');
       db.settings.notifUstadz = document.getElementById('s-notif-ustadz').classList.contains('on');

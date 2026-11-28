@@ -81,7 +81,7 @@ switch ($action) {
             }
         }
         $targetRoles = determineUpdateTargetRoles($commitMsg);
-        send(['hash' => $commitHash, 'message' => $commitMsg, 'targetRoles' => $targetRoles]);
+        send(['hash' => $commitHash, 'message' => formatUpdateMessageIndo($commitMsg), 'targetRoles' => $targetRoles]);
         break;
 
     /* ---------------- BOOTSTRAP (all data, role-filtered) ---------------- */

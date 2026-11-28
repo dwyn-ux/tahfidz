@@ -701,7 +701,13 @@ const _laporanRequests = new WeakMap();
     </div>`;
   }
 
-  function renderLaporanRows(rows) {
+  function laporanIncludeAttendance(filters) {
+    const f = filters || {};
+    if (typeof f.includeAttendance === 'boolean') return f.includeAttendance;
+    return Store.getSettings().laporanSertakanKehadiran !== false;
+  }
+
+  function renderLaporanRows(rows, showAtt = true) {
     const sesiList = Store.sesiList();
     return rows.map(r => {
       const hp = r.hadirPerSesi || {};
@@ -719,17 +725,19 @@ const _laporanRequests = new WeakMap();
         <td class="center">${r.setoranAkhir ? UI.esc(formatSetoranLabel(r.setoranAkhir)) : '-'}</td>
         <td class="center">${r.hafalan ? r.hafalan.pages + ' hlm' + (r.juzLabel ? '<br><span style="font-size:11px">' + UI.esc(r.juzLabel) + '</span>' : '') : '-'}</td>
         <td class="center">${r.nilai ? r.nilai : '-'}</td>
-        <td class="center" style="font-size:12px" title="${UI.esc('Hadir ' + titleParts)}">${numParts}</td>
-        <td class="center">${r.hadir}/${r.totalK} (${r.pct}%)</td>
+        ${showAtt ? `<td class="center" style="font-size:12px" title="${UI.esc('Hadir ' + titleParts)}">${numParts}</td>
+        <td class="center">${r.hadir}/${r.totalK} (${r.pct}%)</td>` : ''}
       </tr>`;
     }).join('');
   }
 
   function applyLaporanTableSort(container) {
+    const showAtt = laporanIncludeAttendance(_laporanFilters);
+    const colCount = showAtt ? 13 : 11;
     const rows = sortLaporanRows(_laporanBaseRows);
     const tbody = container.querySelector('#laporan-table tbody');
     if (!tbody) return;
-    tbody.innerHTML = renderLaporanRows(rows) || '<tr><td colspan="13"><div class="empty">Tidak ada data yang cocok.</div></td></tr>';
+    tbody.innerHTML = renderLaporanRows(rows, showAtt) || `<tr><td colspan="${colCount}"><div class="empty">Tidak ada data yang cocok.</div></td></tr>`;
     const count = container.querySelector('[data-laporan-result-count]');
     if (count) count.textContent = `Menampilkan ${rows.length} dari ${_laporanBaseRows.length} santri`;
     container.querySelectorAll('[data-laporan-sort]').forEach(button => {
@@ -783,12 +791,14 @@ const _laporanRequests = new WeakMap();
     _laporanFilters = filters || {};
     _laporanData = reportData;
     _laporanBaseRows = buildLaporanRows(_laporanFilters, _laporanData);
+    const showAtt = laporanIncludeAttendance(_laporanFilters);
+    const colCount = showAtt ? 13 : 11;
     const rows = sortLaporanRows(_laporanBaseRows);
     const bulan = _laporanFilters.bulan || Store.todayStr().slice(0, 7);
     const periode = (_laporanFilters.dari && _laporanFilters.sampai)
       ? UI.fmtDate(_laporanFilters.dari) + ' – ' + UI.fmtDate(_laporanFilters.sampai)
       : bulanLabel(bulan);
-    const body = renderLaporanRows(rows);
+    const body = renderLaporanRows(rows, showAtt);
     return `<div class="clay-card">
       <div class="section-title">Laporan Santri — ${UI.esc(periode)}</div>
       ${laporanMobileSortControls()}
@@ -798,10 +808,10 @@ const _laporanRequests = new WeakMap();
             <th class="center">No</th>${laporanSortHeader('Santri', 'nama')}<th>NIS</th>${laporanSortHeader('Tingkat &amp; Kelas', 'kelas')}${laporanSortHeader('Halaqah', 'halaqah')}<th>Level</th>
             <th class="center">JK</th><th class="center">Setoran Awal</th><th class="center">Setoran Akhir</th>
             <th class="center">Total Hafalan</th><th class="center">Rata Nilai</th>
-            <th class="center" title="${UI.esc('Rincian Sesi Hadir: ' + Store.sesiList().join(' · '))}">Hadir per Sesi<br><span style="font-weight:400;font-size:10px">${UI.esc(Store.sesiList().map(s => s.slice(0, 3)).join(' · '))}</span></th>
-            <th class="center">Kehadiran (${UI.esc(periode)})</th>
+            ${showAtt ? `<th class="center" title="${UI.esc('Rincian Sesi Hadir: ' + Store.sesiList().join(' · '))}">Hadir per Sesi<br><span style="font-weight:400;font-size:10px">${UI.esc(Store.sesiList().map(s => s.slice(0, 3)).join(' · '))}</span></th>
+            <th class="center">Kehadiran (${UI.esc(periode)})</th>` : ''}
           </tr></thead>
-          <tbody>${body || `<tr><td colspan="13"><div class="empty">Tidak ada data.</div></td></tr>`}</tbody>
+          <tbody>${body || `<tr><td colspan="${colCount}"><div class="empty">Tidak ada data.</div></td></tr>`}</tbody>
         </table>
       </div>
       <div class="muted laporan-result-count" data-laporan-result-count>Menampilkan ${rows.length} dari ${_laporanBaseRows.length} santri</div>
@@ -1136,6 +1146,7 @@ if (typeof document !== 'undefined' && !document._setoranDetailBound) {
 function exportLaporanExcel(filters) {
     const db = Store.get();
     const f = filters || {};
+    const showAtt = laporanIncludeAttendance(f);
     const bulan = f.bulan || Store.todayStr().slice(0, 7);
     const periode = (f.dari && f.sampai)
       ? UI.fmtDate(f.dari) + ' – ' + UI.fmtDate(f.sampai)
@@ -1155,10 +1166,10 @@ function exportLaporanExcel(filters) {
       <td class="center">${r.setoranAkhir ? UI.esc(formatSetoranLabel(r.setoranAkhir)) : '-'}</td>
       <td class="center">${r.hafalan ? r.hafalan.pages + (r.juzLabel ? '<br><span style="font-size:10px">' + UI.esc(r.juzLabel) + '</span>' : '') : '-'}</td>
       <td class="center">${r.nilai || 0}</td>
-      ${sesiList.map(sesi => `<td class="center">${(r.hadirPerSesi && r.hadirPerSesi[sesi]) || 0}</td>`).join('')}
+      ${showAtt ? `${sesiList.map(sesi => `<td class="center">${(r.hadirPerSesi && r.hadirPerSesi[sesi]) || 0}</td>`).join('')}
       <td class="center">${r.hadir}</td>
       <td class="center">${r.totalK}</td>
-      <td class="center">${r.pct}%</td>
+      <td class="center">${r.pct}%</td>` : ''}
       <td>${UI.esc(r.s.status)}</td>
     </tr>`).join('');
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
@@ -1179,8 +1190,8 @@ function exportLaporanExcel(filters) {
       <th class="center">No</th><th>Santri</th><th>NIS</th><th>Tingkat &amp; Kelas</th><th>Halaqah</th><th>Level</th><th class="center">JK</th>
       <th class="center">Setoran Awal</th><th class="center">Setoran Akhir</th>
       <th class="center">Total Hafalan</th><th class="center">Rata Nilai</th>
-      ${sesiList.map(sesi => `<th class="center">${UI.esc(sesi)}</th>`).join('')}
-      <th class="center">Total Hadir</th><th class="center">Total Kehadiran</th><th class="center">%</th><th>Status</th>
+      ${showAtt ? `${sesiList.map(sesi => `<th class="center">${UI.esc(sesi)}</th>`).join('')}
+      <th class="center">Total Hadir</th><th class="center">Total Kehadiran</th><th class="center">%</th>` : ''}<th>Status</th>
     </tr></thead>
     <tbody>${rowsHtml}</tbody>
   </table>
@@ -1610,6 +1621,11 @@ function exportLaporanExcel(filters) {
       : { dari: `${curYear}-01-01`, sampai: today };
   }
 
+  function raportIncludeAttendance(state) {
+    if (state && typeof state.includeAttendance === 'boolean') return state.includeAttendance;
+    return Store.getSettings().raportSertakanKehadiran !== false;
+  }
+
   function buildRaportInfo(s, state) {
     const db = Store.get();
     const dari = state.dari;
@@ -1639,10 +1655,11 @@ function exportLaporanExcel(filters) {
     };
     const totalH = Store.hasFeature('ziyadah') || Store.hasFeature('mutqin') ? Store.totalHafalanSantri(s.id) : null;
     const juzLabel = totalH ? Store.juzHafalanDisplay(s.id) : null;
+    const includeAtt = raportIncludeAttendance(state);
     const today = Store.todayStr();
     const absSampai = (sampai && sampai > today) ? today : sampai;
-    const kehadiran = Store.hasFeature('presensi') ? Store.rekapKehadiranSantri(s.id, dari, absSampai).total : null;
-    const talimAbsen = (Store.hasFeature('talim') && Store.hasFeature('presensi'))
+    const kehadiran = (includeAtt && Store.hasFeature('presensi')) ? Store.rekapKehadiranSantri(s.id, dari, absSampai).total : null;
+    const talimAbsen = (includeAtt && Store.hasFeature('talim') && Store.hasFeature('presensi'))
       ? Store.rekapKehadiranSantri(s.id, dari, absSampai, Store.TALIM_SESI_ALIASES).total
       : null;
     const saved = Store.raportFor(s.id, state.tahunAjaran, state.semester);
@@ -2399,6 +2416,7 @@ function exportLaporanExcel(filters) {
     const cfg = db.settings || {};
     const opt = options || {};
     const isWali = opt.mode === 'wali';
+    const isAdmin = Store.getSession()?.role === 'admin';
     const canEdit = !!opt.canEdit;
     const allSantri = (opt.santriList || []).filter(s => s && s.status !== 'Nonaktif');
     const tahunOpts = [...new Set([...(db.tahunAjaran || ['2024/2025', '2025/2026', '2026/2027']), cfg.tahunAjaran].filter(Boolean))];
@@ -2414,7 +2432,8 @@ function exportLaporanExcel(filters) {
       model: normalizeRaportModel(cfg.raportModel),
       ustadzId: opt.isUstadzScope ? '' : (opt.ustadzId || ''),
       halaqahId: opt.halaqahId || '',
-      cari: ''
+      cari: '',
+      includeAttendance: cfg.raportSertakanKehadiran !== false
     };
 
     const previewStyle = `
@@ -2489,7 +2508,11 @@ function exportLaporanExcel(filters) {
         </div>
         ${!isWali ? `<div class="row center" style="justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:8px">
           <div style="flex:1;min-width:220px"><input class="clay-input" id="rp-cari" type="search" placeholder="Cari nama atau NIS santri..." autocomplete="off"></div>
-          <div class="row" style="gap:8px;flex-wrap:wrap">
+          <div class="row center" style="gap:10px;flex-wrap:wrap">
+            ${isAdmin ? `<label class="row center" style="gap:6px;cursor:pointer;font-size:13px;user-select:none">
+              <input type="checkbox" id="rp-sertakan-kehadiran" ${state.includeAttendance ? 'checked' : ''}>
+              <span>Sertakan Kehadiran</span>
+            </label>` : ''}
             <button class="clay-btn secondary" type="button" id="rp-download-zip">⬇ Unduh JPG (ZIP)</button>
             <button class="clay-btn primary" type="button" id="rp-print-all">Cetak / PDF Semua</button>
           </div>
@@ -2505,6 +2528,7 @@ function exportLaporanExcel(filters) {
     const ustEl = container.querySelector('#rp-ust');
     const halEl = container.querySelector('#rp-hal');
     const cariEl = container.querySelector('#rp-cari');
+    const attEl = container.querySelector('#rp-sertakan-kehadiran');
     const bodyEl = container.querySelector('#rp-body');
     const printAllBtn = container.querySelector('#rp-print-all');
     const zipAllBtn = container.querySelector('#rp-download-zip');
@@ -3894,6 +3918,15 @@ function exportLaporanExcel(filters) {
     };
     if (halEl) halEl.onchange = () => { state.halaqahId = halEl.value; paint(); };
     if (cariEl) bindSearchInput(cariEl, () => { state.cari = cariEl.value; paint(); });
+    if (attEl) attEl.onchange = () => {
+      const on = !!attEl.checked;
+      state.includeAttendance = on;
+      const curDb = Store.get();
+      if (!curDb.settings || typeof curDb.settings !== 'object') curDb.settings = {};
+      curDb.settings.raportSertakanKehadiran = on;
+      Store.save();
+      paint();
+    };
     if (printAllBtn) printAllBtn.onclick = () => {
       const sheets = filteredSantri().map(s => buildRaportSheetHtml(buildRaportInfo(s, state), state)).join('');
       printRaportSheets(sheets, `Raport_${bulkScopeSlug()}_${safeFilename(state.tahunAjaran)}_${safeFilename(state.semester)}${raportFileSuffix(state.model)}`);
@@ -4331,9 +4364,130 @@ function exportLaporanExcel(filters) {
   }
 
   /* ---------- Notifikasi (shared) ---------- */
+  const UPDATE_COMMIT_INDO_MAP = {
+    'harden admin dashboard against null mysql rows and shared hosting exec restrictions': 'Peningkatan stabilitas dasbor admin untuk data MySQL kosong dan batasan server hosting',
+    'add 3 raport models (indo, indo-arab, full arab), arabic data inputs, and bottom popup menu': 'Penambahan 3 model raport (Indonesia, Indonesia-Arab, Full Arab), input data Arab, dan menu bawah',
+    'declare sesiaktif and recselfustadz before absenustadzcard in ustadz.dashboard': 'Perbaikan urutan tampilan kartu absensi ustadz pada dasbor ustadz',
+    'lock repeated ustadz attendance per session and align juz 12-30 page boundaries to mushaf madinah': 'Penguncian absensi ulang ustadz per sesi dan penyesuaian batas halaman Juz 12–30 ke Mushaf Madinah',
+    'repair empty superuser role truncated by legacy mysql enum': 'Perbaikan peran superuser kosong pada kolom ENUM MySQL lama',
+    'widen legacy mysql users.role enum to varchar(32) so superuser can be seeded': 'Perluasan tipe kolom peran pengguna MySQL agar akun superuser dapat dibuat otomatis',
+    'remove demo quick-login box from login page for production': 'Menghapus kotak login demo dari halaman masuk',
+    'deduplicate legacy attendance rows during migration instead of aborting': 'Penanganan otomatis duplikasi data absensi lama saat migrasi database',
+    'normalize empty/invalid date strings to null for mysql strict mode': 'Normalisasi tanggal kosong/tidak valid agar sesuai mode ketat MySQL',
+    'add missing mysql columns and drop obsolete index before indexing in sqlite_to_mysql': 'Penambahan kolom MySQL yang belum ada saat migrasi data',
+    'raport bulk halaqah, spp, monochrome notif icon, and sqlite to mysql migrator': 'Penambahan cetak raport per halaqah, modul SPP, ikon notifikasi, dan alat migrasi SQLite ke MySQL',
+    'include murojaah in bootstrapdata and bump cache version': 'Penyertaan data murojaah saat memuat aplikasi dan pembaruan cache',
+    'retain active tab on refresh and fix murojaah setoran persistence': 'Mempertahankan tab aktif saat halaman dimuat ulang dan perbaikan penyimpanan setoran murojaah'
+  };
+
+  function translateUpdateTextToIndo(raw) {
+    let txt = String(raw || '').trim();
+    txt = txt.replace(/^(feat|fix|refactor|perf|chore|docs|style)(\([^)]+\))?:\s*/i, '').trim();
+    const mapped = UPDATE_COMMIT_INDO_MAP[txt.toLowerCase()];
+    if (mapped) return mapped;
+    // Terjemahkan kata/frasa Inggris umum ke bahasa Indonesia bila berasal dari log commit lama
+    if (/\b(add|fix|update|remove|include|retain|harden|align|lock|repair|widen|normalize|drop|bump|dashboard|attendance|guardian|settings|report)\b/i.test(txt)) {
+      const rules = [
+        [/\badd\b/gi, 'Penambahan'], [/\bfix\b/gi, 'Perbaikan'], [/\bupdate\b/gi, 'Pembaruan'],
+        [/\bremove\b/gi, 'Penghapusan'], [/\binclude\b/gi, 'Penyertaan'], [/\bretain\b/gi, 'Mempertahankan'],
+        [/\bimprove\b/gi, 'Peningkatan'], [/\bharden\b/gi, 'Penguatan'], [/\bhide\b/gi, 'Sembunyikan'],
+        [/\bshow\b/gi, 'Tampilkan'], [/\ballow\b/gi, 'Izinkan'], [/\boption\b/gi, 'opsi'],
+        [/\band\b/gi, 'dan'], [/\bin\b/gi, 'pada'], [/\bfor\b/gi, 'untuk'], [/\bfrom\b/gi, 'dari'],
+        [/\bto\b/gi, 'ke'], [/\bwith\b/gi, 'dengan'], [/\bwithout\b/gi, 'tanpa'], [/\bon\b/gi, 'saat'],
+        [/\battendance\b/gi, 'kehadiran'], [/\breport\b/gi, 'laporan'], [/\bsettings\b/gi, 'pengaturan'],
+        [/\bdashboard\b/gi, 'dasbor'], [/\bguardian\b/gi, 'wali'], [/\bstudent\b/gi, 'santri'],
+        [/\bteacher\b/gi, 'ustadz'], [/\bcache version\b/gi, 'versi cache'], [/\bactive tab\b/gi, 'tab aktif'],
+        [/\brefresh\b/gi, 'muat ulang'], [/\bpersistence\b/gi, 'penyimpanan'], [/\bempty\b/gi, 'kosong'],
+        [/\blogin page\b/gi, 'halaman masuk'], [/\bbottom popup menu\b/gi, 'menu bawah']
+      ];
+      rules.forEach(([re, rep]) => { txt = txt.replace(re, rep); });
+    }
+    return txt ? txt.charAt(0).toUpperCase() + txt.slice(1) : 'Pembaruan sistem aplikasi telah diterapkan.';
+  }
+
+  function formatNotifParts(n) {
+    let raw = String((n && n.pesan) || '').trim();
+    // Bersihkan karakter '?' atau emoji rusak akibat penyimpanan tabel utf8 lama
+    raw = raw.replace(/^(?:[?\uFFFD\u26A0\uFE0F]+|\uD83D[\uDE80\uDCB3\uDCCB]|\s)+/g, '').trim();
+    raw = raw.replace(/\bdisuspend otomatis\b/gi, 'dinonaktifkan sementara secara otomatis')
+      .replace(/\bsebelum suspend\b/gi, 'sebelum penonaktifan')
+      .replace(/\bsuspend\b/gi, 'penonaktifan');
+
+    let category = 'Informasi';
+    let tone = 'info';
+    let icoName = 'bell';
+    let version = (n && n.commitHash) ? String(n.commitHash) : '';
+
+    const updMatch = raw.match(/^(?:Update Aplikasi|Update Baru|Pembaruan Aplikasi|Pembaruan Sistem)\s*(?:\((?:v\.?)?([a-z0-9]+)\))?\s*:\s*(.*)$/i);
+    if (updMatch || (n && n.kategori === 'update') || (n && n.tipe === 'update')) {
+      category = 'Pembaruan Aplikasi';
+      tone = 'pembaruan';
+      icoName = 'award';
+      if (updMatch) {
+        if (!version && updMatch[1]) version = updMatch[1];
+        raw = translateUpdateTextToIndo(updMatch[2]);
+      } else {
+        raw = translateUpdateTextToIndo(raw);
+      }
+    } else if ((n && n.kategori === 'layanan_billing') || /^(?:Masa tenggang|Tagihan layanan)/i.test(raw)) {
+      category = 'Tagihan & Layanan';
+      tone = 'tagihan';
+      icoName = 'settings';
+    } else if ((n && n.kategori === 'absensi') || /^(?:Rekap (?:absensi|presensi)|Libur Lembaga)/i.test(raw)) {
+      category = 'Kehadiran & Jadwal';
+      tone = 'absensi';
+      icoName = 'calendar';
+      raw = raw.replace(/^Rekap absensi\b/i, 'Rekap presensi');
+    } else if (/(?:Setoran|Tahsin|Mutqin|Murojaah|Murajaah|belum setoran)/i.test(raw)) {
+      category = 'Setoran & Hafalan';
+      tone = 'setoran';
+      icoName = 'setoran';
+    } else if (n && n.tipe === 'ustadz') {
+      category = 'Info Ustadz';
+      tone = 'info';
+      icoName = 'teacher';
+    } else if (n && n.tipe === 'wali') {
+      category = 'Info Wali Santri';
+      tone = 'setoran';
+      icoName = 'users';
+    } else if (n && n.tipe === 'admin') {
+      category = 'Info Admin';
+      tone = 'info';
+      icoName = 'settings';
+    }
+
+    return {
+      category,
+      tone,
+      icoName,
+      version: version ? (version.startsWith('v.') ? version : 'v.' + version) : '',
+      text: raw || 'Tidak ada detail informasi.'
+    };
+  }
+
+  function renderNotifItemHtml(n) {
+    const parts = formatNotifParts(n);
+    const ts = n.tanggal || n.waktu || n.createdAt || '';
+    const msgHtml = (n && n.html) ? n.pesan : UI.esc(parts.text);
+    return `
+      <div class="notif-item-card ${n && !n.read ? 'unread' : ''}">
+        <div class="notif-item-main">
+          <span class="notif-ico-wrap notif-tone-${parts.tone}">${icon(parts.icoName)}</span>
+          <div class="notif-body">
+            <div class="notif-meta">
+              <span class="notif-cat notif-tone-${parts.tone}">${UI.esc(parts.category)}</span>
+              ${parts.version ? `<span class="notif-ver">${UI.esc(parts.version)}</span>` : ''}
+            </div>
+            <div class="notif-text">${msgHtml}</div>
+            ${ts ? `<div class="notif-time">${UI.fmtDateTime(ts)}</div>` : ''}
+          </div>
+        </div>
+        ${n && !n.read ? '<span class="notif-badge-new">Baru</span>' : ''}
+      </div>`;
+  }
+
   function renderNotifikasi(userId) {
     const list = Store.notifFor(userId).slice().sort((a, b) => (b.tanggal || '').localeCompare(a.tanggal || ''));
-    const notifIconMap = { wali: icon('users'), ustadz: icon('teacher'), admin: icon('settings'), pengawas: icon('monitor'), update: icon('award') };
     const perm = typeof PWA !== 'undefined' ? PWA.getNotificationPermission() : 'default';
 
     // Tandai notifikasi sebagai sudah dibaca
@@ -4353,11 +4507,11 @@ function exportLaporanExcel(filters) {
         <div style="display:flex;align-items:center;gap:10px">
           <span style="display:inline-flex;color:var(--text);padding:8px;background:var(--slate-100);border-radius:8px">${icon('bell')}</span>
           <div>
-            <b>Notifikasi Perangkat (PWA &amp; Device)</b>
+            <b>Notifikasi Perangkat (PWA &amp; Perangkat)</b>
             <div class="muted" style="font-size:12px" id="pwa-notif-status-text">
               ${perm === 'granted'
                 ? 'Status: <span style="color:#16a34a;font-weight:600">Aktif</span> — Anda menerima notifikasi langsung di layar HP/Laptop.'
-                : 'Status: <span style="color:#ca8a04;font-weight:600">Belum Aktif</span> — Izinkan notifikasi agar update setoran &amp; absensi muncul langsung.'}
+                : 'Status: <span style="color:#ca8a04;font-weight:600">Belum Aktif</span> — Izinkan notifikasi agar pembaruan setoran &amp; absensi muncul langsung.'}
             </div>
           </div>
         </div>
@@ -4372,7 +4526,7 @@ function exportLaporanExcel(filters) {
     if (!list.length) {
       return `
         ${pwaBanner}
-        <div class="empty">Belum ada notifikasi.</div>
+        <div class="clay-card"><div class="empty">Belum ada notifikasi.</div></div>
       `;
     }
 
@@ -4380,15 +4534,12 @@ function exportLaporanExcel(filters) {
       ${pwaBanner}
       <div class="clay-card" id="notif-card">
         <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:12px">
-          <div class="section-title" style="margin:0">Notifikasi</div>
+          <div class="section-title" style="margin:0">Daftar Notifikasi (${list.length})</div>
           <button class="clay-btn sm ghost" id="clear-notif" style="color:var(--danger)">Hapus Semua</button>
         </div>
-        ${list.map(n =>
-        `<div class="row center" style="justify-content:space-between;padding:12px 0;border-bottom:1px solid #eee">
-          <div class="row center" style="gap:10px"><span style="display:inline-flex;color:var(--text-soft);padding:6px;background:var(--bg-subtle);border-radius:6px">${(notifIconMap[n.tipe] || icon('bell'))}</span>
-          <div><div>${n.html ? n.pesan : UI.esc(n.pesan)}</div><div class="muted" style="font-size:12px">${UI.fmtDateTime(n.tanggal)}</div></div></div>
-          ${n.read ? '' : '<span class="badge blue">Baru</span>'}
-        </div>`).join('')}
+        <div class="notif-list">
+          ${list.map(n => renderNotifItemHtml(n)).join('')}
+        </div>
       </div>`;
   }
 
@@ -4412,7 +4563,7 @@ function exportLaporanExcel(filters) {
     }
   });
 
-  return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, renderLaporanMurojaah, renderRaportPage, loadLaporan, bindLaporanExport, exportLaporanExcel, htmlTableToSheet, downloadExcel, downloadXlsx, downloadTemplateExcel, bulanLabel, mondayOf, rekapSetoranRange, setRekapSetoranRange, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, kirimRekapOtomatis, ICONS, icon, hafalanMapHTML };
+  return { shell, setHeader, setActions, bindSearchInput, gantiPassModal, statCard, barChart, progressCircle, renderRiwayat, renderPerHalaqahRiwayat, renderLaporan, renderLaporanMurojaah, renderRaportPage, loadLaporan, bindLaporanExport, exportLaporanExcel, htmlTableToSheet, downloadExcel, downloadXlsx, downloadTemplateExcel, bulanLabel, mondayOf, rekapSetoranRange, setRekapSetoranRange, renderRekapSetoranMingguan, bindRekapSetoranBayar, bindRekapSetoranJpgDownload, renderNotifikasi, formatNotifParts, renderNotifItemHtml, kirimRekapOtomatis, ICONS, icon, hafalanMapHTML };
 })();
 
 // Detail info saat centang setoran di-hover (desktop) atau di-tap/hold (HP)

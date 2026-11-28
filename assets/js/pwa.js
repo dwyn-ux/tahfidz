@@ -157,10 +157,10 @@ const PWA = (() => {
       const permission = await Notification.requestPermission();
       if (permission === 'granted') {
         if (typeof UI !== 'undefined' && UI.toast) {
-          UI.toast('Notifikasi aktif! Anda akan menerima update penting.', 'success');
+          UI.toast('Notifikasi aktif! Anda akan menerima pembaruan penting.', 'success');
         }
         sendNotification('Tahfidzku Aktif', {
-          body: 'Notifikasi sistem berhasil diaktifkan. Anda akan menerima update setoran dan absensi.',
+          body: 'Notifikasi sistem berhasil diaktifkan. Anda akan menerima pembaruan setoran dan absensi.',
           tag: 'tahfidzku-welcome'
         });
       } else if (permission === 'denied') {
@@ -271,8 +271,11 @@ const PWA = (() => {
 
     unread.slice(0, 3).forEach(n => {
       markNotifSent(n.id);
+      const bodyText = (typeof Shared !== 'undefined' && Shared.formatNotifParts)
+        ? Shared.formatNotifParts(n).text
+        : String(n.pesan || 'Ada aktivitas terbaru di Tahfidzku').replace(/^[\s?\uFFFD\u26A0\uFE0F\uD83D\uDE80\uD83D\uDCB3\uD83D\uDCCB]+/, '');
       sendNotification('Tahfidzku', {
-        body: n.pesan || 'Ada aktivitas terbaru di Tahfidzku',
+        body: bodyText || 'Ada aktivitas terbaru di Tahfidzku',
         tag: 'notif-' + n.id,
         data: './index.html#admin_notif'
       });

@@ -194,7 +194,7 @@ const App = (() => {
           const isTargetRole = !v.targetRoles || v.targetRoles.includes(role);
 
           if (isTargetRole && lastHash && lastHash !== v.hash) {
-            const msg = `Update Baru (v.${v.hash}): ${cleanMsg || v.hash}`;
+            const msg = `Pembaruan Aplikasi (v.${v.hash}): ${cleanMsg || ('Versi ' + v.hash)}`;
             UI.toast(msg, 'info', 6000);
             if (typeof PWA !== 'undefined' && PWA.sendNotification) {
               PWA.sendNotification('Tahfidzku Diperbarui', {

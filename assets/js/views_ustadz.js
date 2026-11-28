@@ -2755,11 +2755,11 @@ Demikian Laporan Tahfidz Al-Qur'an kami sampaikan semoga menjadi Investasi Akhir
     document.getElementById('view-content').innerHTML = Shared.renderNotifikasi(session.userId);
     const clearBtn = document.getElementById('clear-notif');
     if (clearBtn) clearBtn.onclick = () => {
-      if (confirm('Hapus semua notifikasi?')) {
+      UI.confirmDialog('Hapus Semua Notifikasi', 'Semua riwayat notifikasi di akun ini akan dihapus.', () => {
         Store.clearNotifs(session.userId);
-        document.getElementById('view-content').innerHTML = '<div class="empty">Notifikasi dikosongkan.</div>';
+        document.getElementById('view-content').innerHTML = Shared.renderNotifikasi(session.userId);
         UI.toast('Notifikasi dihapus', 'success');
-      }
+      });
     };
   }
 

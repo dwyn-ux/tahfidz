@@ -177,6 +177,7 @@ const Store = (() => {
       settings: {
         namaLembaga: 'Rumah Tahfidz Al-Hikmah', namaLembagaArab: '', alamat: 'Jl. Pendidikan No. 10, Jakarta', alamatArab: '',
         kota: '', kotaArab: '', jabatanPimpinan: 'Mudir / Kepala Lembaga', jabatanPimpinanArab: '', namaPimpinan: '', namaPimpinanArab: '', raportModel: 'model1',
+        laporanSertakanKehadiran: true, raportSertakanKehadiran: true,
         tahunAjaran: '2025/2026', semester: 'Ganjil',
         standarPenilaian: 'A (90-100), B (80-89), C (70-79), D (<70)',
         jamBelajar: '07:00 - 09:00', sesiHalaqah: DEFAULT_SESI_HALAQAH.map(x => Object.assign({}, x)), tema: 'Claymorphism',
@@ -931,6 +932,9 @@ const Store = (() => {
     };
     settings.sesiHalaqah = normalizeSesiHalaqah(settings.sesiHalaqah);
     settings.raportModel = ['model1', 'model2', 'model3'].includes(settings.raportModel) ? settings.raportModel : 'model1';
+    const normBool = (val, def = true) => (val === undefined || val === null ? def : (val === true || val === 1 || val === '1' || val === 'true'));
+    settings.laporanSertakanKehadiran = normBool(settings.laporanSertakanKehadiran, true);
+    settings.raportSertakanKehadiran = normBool(settings.raportSertakanKehadiran, true);
     return settings;
   }
 

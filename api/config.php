@@ -543,9 +543,12 @@ function syncSubscriptionNotifications(array $settings): void {
     $phase = ($today > $sub['validUntil']) ? 'tenggang' : 'tagihan';
     $nominalStr = $sub['nominal'] > 0 ? ' sebesar Rp ' . number_format($sub['nominal'], 0, ',', '.') : '';
     $noteStr = $sub['note'] !== '' ? ' Catatan: ' . $sub['note'] : '';
+    $validTxt = formatTanggalIndo($sub['validUntil'], true);
+    $billTxt = formatTanggalIndo($billingDate, true);
+    $suspTxt = formatTanggalIndo($suspendDate, true);
     $msg = $phase === 'tenggang'
-        ? "⚠️ Masa tenggang layanan aplikasi{$nominalStr}! Jatuh tempo {$sub['validUntil']}. Layanan akan disuspend otomatis pada {$suspendDate} jika belum dibayar.{$noteStr}"
-        : "💳 Tagihan layanan aplikasi{$nominalStr} aktif sejak {$billingDate} (jatuh tempo {$sub['validUntil']}, batas akhir sebelum suspend {$suspendDate}).{$noteStr}";
+        ? "Masa tenggang layanan aplikasi{$nominalStr}. Jatuh tempo {$validTxt}. Layanan akan dinonaktifkan sementara pada {$suspTxt} jika belum dibayar.{$noteStr}"
+        : "Tagihan layanan aplikasi{$nominalStr} aktif sejak {$billTxt} (jatuh tempo {$validTxt}, batas akhir sebelum penonaktifan {$suspTxt}).{$noteStr}";
 
     $stmt = pdo()->query("SELECT id FROM users WHERE role = 'admin'");
     foreach ($stmt->fetchAll() as $admin) {
@@ -600,6 +603,11 @@ function sesiNames(array $settings): array {
     return array_values(array_map(fn($s) => $s['nama'], normalizeSesiHalaqah($settings['sesiHalaqah'] ?? [])));
 }
 
+function normalizeBoolSetting($val, bool $default = true): bool {
+    if ($val === null) return $default;
+    return $val === true || $val === 1 || $val === '1' || $val === 'true';
+}
+
 /* ---------------- Settings ---------------- */
 function getSettings(): array {
     $stmt = pdo()->prepare('SELECT data FROM settings WHERE id = 1');
@@ -611,6 +619,8 @@ function getSettings(): array {
     $merged['subscription'] = normalizeSubscription($merged['subscription'] ?? []);
     $merged['sesiHalaqah'] = normalizeSesiHalaqah($merged['sesiHalaqah'] ?? []);
     $merged['raportModel'] = normalizeRaportModel($merged['raportModel'] ?? 'model1');
+    $merged['laporanSertakanKehadiran'] = normalizeBoolSetting($merged['laporanSertakanKehadiran'] ?? null, true);
+    $merged['raportSertakanKehadiran'] = normalizeBoolSetting($merged['raportSertakanKehadiran'] ?? null, true);
     return $merged;
 }
 function saveSettings(array $s) {
@@ -618,6 +628,8 @@ function saveSettings(array $s) {
     $s['subscription'] = normalizeSubscription($s['subscription'] ?? []);
     $s['sesiHalaqah'] = normalizeSesiHalaqah($s['sesiHalaqah'] ?? []);
     $s['raportModel'] = normalizeRaportModel($s['raportModel'] ?? 'model1');
+    $s['laporanSertakanKehadiran'] = normalizeBoolSetting($s['laporanSertakanKehadiran'] ?? null, true);
+    $s['raportSertakanKehadiran'] = normalizeBoolSetting($s['raportSertakanKehadiran'] ?? null, true);
     $data = json_encode($s, JSON_UNESCAPED_UNICODE);
     $stmt = pdo()->prepare(upsertSQL('settings', ['id', 'data']));
     $stmt->execute([1, $data]);
@@ -645,6 +657,8 @@ function defaultSettings(): array {
         'ttdPimpinan' => '',
         'capLembaga' => '',
         'raportModel' => 'model1',
+        'laporanSertakanKehadiran' => true,
+        'raportSertakanKehadiran' => true,
         'tahunAjaran' => '2025/2026',
         'semester' => 'Ganjil',
         'standarPenilaian' => 'A (90-100), B (80-89), C (70-79), D (<70)',
@@ -723,17 +737,30 @@ function attendanceEffectiveRecords(array $records): array {
     return array_values($latest);
 }
 
+function formatTanggalIndo(string $dateStr, bool $shortMonth = false, bool $includeYear = true): string {
+    $dt = DateTimeImmutable::createFromFormat('!Y-m-d', substr($dateStr, 0, 10));
+    if (!$dt) return $dateStr;
+    $bulanFull = [1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    $bulanShort = [1 => 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    $m = (int)$dt->format('n');
+    $namaBln = $shortMonth ? ($bulanShort[$m] ?? $dt->format('M')) : ($bulanFull[$m] ?? $dt->format('F'));
+    return $dt->format('j') . ' ' . $namaBln . ($includeYear ? ' ' . $dt->format('Y') : '');
+}
+
 function attendancePeriodInfo(string $mode, string $date, string $halaqah = ''): array {
     $dt = DateTimeImmutable::createFromFormat('!Y-m-d', $date);
     if (!$dt) return [$date, $date];
     if ($mode === 'mingguan') {
         $start = $dt->modify('monday this week');
         $end = $start->modify('+6 days');
-        return [$start->format('Y-m-d'), $start->format('d M') . ' - ' . $end->format('d M Y')];
+        return [$start->format('Y-m-d'), formatTanggalIndo($start->format('Y-m-d'), true, false) . ' – ' . formatTanggalIndo($end->format('Y-m-d'), true, true)];
     }
-    if ($mode === 'bulanan') return [$dt->format('Y-m'), $dt->format('F Y')];
-    if ($mode === 'halaqah') return [$date . '|' . $halaqah, $date];
-    return [$date, $date];
+    if ($mode === 'bulanan') {
+        $bulanFull = [1 => 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+        return [$dt->format('Y-m'), ($bulanFull[(int)$dt->format('n')] ?? $dt->format('F')) . ' ' . $dt->format('Y')];
+    }
+    if ($mode === 'halaqah') return [$date . '|' . $halaqah, formatTanggalIndo($date, true, true)];
+    return [$date, formatTanggalIndo($date, true, true)];
 }
 
 function attendanceSummaryMessage(array $santri, array $records, string $mode, string $periodLabel, string $halaqah): string {
@@ -745,9 +772,9 @@ function attendanceSummaryMessage(array $santri, array $records, string $mode, s
     $ringkas = 'Hadir ' . $count['Hadir'] . ', Izin ' . $count['Izin'] . ', Sakit ' . $count['Sakit'] . ', Alfa ' . $count['Alfa'];
     if ($count['Libur'] > 0) $ringkas .= ', Libur ' . $count['Libur'];
     $judul = $mode === 'halaqah'
-        ? 'Rekap absensi Halaqah ' . ($halaqah ?: '-')
-        : 'Rekap absensi ' . $mode;
-    return '📋 ' . $judul . ' ' . $santri['nama'] . ' (' . $periodLabel . '): ' . $ringkas . '.';
+        ? 'Rekap presensi Halaqah ' . ($halaqah ?: '-')
+        : 'Rekap presensi ' . $mode;
+    return $judul . ' ' . $santri['nama'] . ' (' . $periodLabel . '): ' . $ringkas . '.';
 }
 
 /**
@@ -884,6 +911,45 @@ function determineUpdateTargetRoles(string $commitMsg): array {
     return array_values(array_unique($roles));
 }
 
+function formatUpdateMessageIndo(string $rawMsg): string {
+    $clean = preg_replace('/^(feat|fix|refactor|perf|chore|docs|style)(\([^)]+\))?:\s*/i', '', trim($rawMsg));
+    $clean = trim((string)$clean);
+    $map = [
+        'harden admin dashboard against null mysql rows and shared hosting exec restrictions' => 'Peningkatan stabilitas dasbor admin untuk data MySQL kosong dan batasan server hosting',
+        'add 3 raport models (indo, indo-arab, full arab), arabic data inputs, and bottom popup menu' => 'Penambahan 3 model raport (Indonesia, Indonesia-Arab, Full Arab), input data Arab, dan menu bawah',
+        'declare sesiaktif and recselfustadz before absenustadzcard in ustadz.dashboard' => 'Perbaikan urutan tampilan kartu absensi ustadz pada dasbor ustadz',
+        'lock repeated ustadz attendance per session and align juz 12-30 page boundaries to mushaf madinah' => 'Penguncian absensi ulang ustadz per sesi dan penyesuaian batas halaman Juz 12–30 ke Mushaf Madinah',
+        'repair empty superuser role truncated by legacy mysql enum' => 'Perbaikan peran superuser kosong pada kolom ENUM MySQL lama',
+        'widen legacy mysql users.role enum to varchar(32) so superuser can be seeded' => 'Perluasan tipe kolom peran pengguna MySQL agar akun superuser dapat dibuat otomatis',
+        'remove demo quick-login box from login page for production' => 'Menghapus kotak login demo dari halaman masuk',
+        'deduplicate legacy attendance rows during migration instead of aborting' => 'Penanganan otomatis duplikasi data absensi lama saat migrasi database',
+        'normalize empty/invalid date strings to null for mysql strict mode' => 'Normalisasi tanggal kosong/tidak valid agar sesuai mode ketat MySQL',
+        'add missing mysql columns and drop obsolete index before indexing in sqlite_to_mysql' => 'Penambahan kolom MySQL yang belum ada saat migrasi data',
+        'raport bulk halaqah, spp, monochrome notif icon, and sqlite to mysql migrator' => 'Penambahan cetak raport per halaqah, modul SPP, ikon notifikasi, dan alat migrasi SQLite ke MySQL',
+        'include murojaah in bootstrapdata and bump cache version' => 'Penyertaan data murojaah saat memuat aplikasi dan pembaruan cache',
+        'retain active tab on refresh and fix murojaah setoran persistence' => 'Mempertahankan tab aktif saat halaman dimuat ulang dan perbaikan penyimpanan setoran murojaah',
+    ];
+    $lower = strtolower($clean);
+    if (isset($map[$lower])) return $map[$lower];
+    if (preg_match('/\b(add|fix|update|remove|include|retain|harden|align|lock|repair|widen|normalize|drop|bump|dashboard|attendance|guardian|settings|report)\b/i', $clean)) {
+        $rules = [
+            '/\badd\b/i' => 'Penambahan', '/\bfix\b/i' => 'Perbaikan', '/\bupdate\b/i' => 'Pembaruan',
+            '/\bremove\b/i' => 'Penghapusan', '/\binclude\b/i' => 'Penyertaan', '/\bretain\b/i' => 'Mempertahankan',
+            '/\bimprove\b/i' => 'Peningkatan', '/\bharden\b/i' => 'Penguatan', '/\bhide\b/i' => 'Sembunyikan',
+            '/\bshow\b/i' => 'Tampilkan', '/\ballow\b/i' => 'Izinkan', '/\boption\b/i' => 'opsi',
+            '/\band\b/i' => 'dan', '/\bin\b/i' => 'pada', '/\bfor\b/i' => 'untuk', '/\bfrom\b/i' => 'dari',
+            '/\bto\b/i' => 'ke', '/\bwith\b/i' => 'dengan', '/\bwithout\b/i' => 'tanpa', '/\bon\b/i' => 'saat',
+            '/\battendance\b/i' => 'kehadiran', '/\breport\b/i' => 'laporan', '/\bsettings\b/i' => 'pengaturan',
+            '/\bdashboard\b/i' => 'dasbor', '/\bguardian\b/i' => 'wali', '/\bstudent\b/i' => 'santri',
+            '/\bteacher\b/i' => 'ustadz', '/\bcache version\b/i' => 'versi cache', '/\bactive tab\b/i' => 'tab aktif',
+            '/\brefresh\b/i' => 'muat ulang', '/\bpersistence\b/i' => 'penyimpanan', '/\bempty\b/i' => 'kosong',
+            '/\blogin page\b/i' => 'halaman masuk',
+        ];
+        $clean = preg_replace(array_keys($rules), array_values($rules), $clean);
+    }
+    return $clean !== '' ? ucfirst($clean) : 'Pembaruan sistem aplikasi telah diterapkan.';
+}
+
 function syncGitUpdateNotifications(): void {
     static $alreadyRun = false;
     if ($alreadyRun) return;
@@ -952,8 +1018,7 @@ function syncGitUpdateNotifications(): void {
         $targetRoles = determineUpdateTargetRoles($msg);
         $targetUsers = array_filter($allUsers, fn($u) => in_array($u['role'], $targetRoles, true));
 
-        $cleanMsg = preg_replace('/^(feat|fix|refactor|perf|chore|docs|style)(\([^)]+\))?:\s*/i', '', $msg);
-        $cleanMsg = ucfirst(trim($cleanMsg));
+        $cleanMsg = formatUpdateMessageIndo($msg);
 
         foreach ($targetUsers as $user) {
             $notifId = 'notif_git_' . $hash . '_' . $user['id'];
@@ -964,7 +1029,7 @@ function syncGitUpdateNotifications(): void {
                     'userId' => $user['id'],
                     'tipe' => $user['role'],
                     'kategori' => 'update',
-                    'pesan' => "🚀 Update Aplikasi (v.{$hash}): {$cleanMsg}",
+                    'pesan' => "Pembaruan Aplikasi (v.{$hash}): {$cleanMsg}",
                     'commitHash' => $hash,
                     'tanggal' => date('c'),
                     'updatedAt' => date('c'),
